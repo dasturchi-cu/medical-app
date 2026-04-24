@@ -20,6 +20,7 @@ class NeuroscienceApp extends ConsumerWidget {
       title: 'Neuroscience',
       theme: AppTheme.light(),
       routerConfig: router,
+        // a
     );
   }
 }
