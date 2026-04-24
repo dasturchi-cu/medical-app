@@ -1,0 +1,185 @@
+import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
+
+import '../../../../core/di/providers.dart';
+import '../../../../core/router/app_routes.dart';
+import '../../../../core/state/app_state_providers.dart';
+import '../../../../core/state/progress_controller.dart';
+
+class CourseDetailPage extends ConsumerWidget {
+  const CourseDetailPage({super.key, required this.courseId});
+
+  final String courseId;
+
+  @override
+  Widget build(BuildContext context, WidgetRef ref) {
+    final repo = ref.watch(courseRepositoryProvider);
+    final course = repo.getCourseById(courseId);
+
+    if (course == null) {
+      return Scaffold(
+        appBar: AppBar(title: const Text('Kurs')),
+        body: const Center(child: Text('Kurs topilmadi')),
+      );
+    }
+
+    return Scaffold(
+      appBar: AppBar(
+        title: Text(course.titleUz),
+        leading: IconButton(
+          icon: const Icon(Icons.arrow_back),
+          onPressed: () => context.pop(),
+        ),
+      ),
+      body: ListView(
+        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        children: [
+          Card(
+            margin: EdgeInsets.zero,
+            child: Container(
+              height: 170,
+              decoration: BoxDecoration(
+                borderRadius: BorderRadius.circular(16),
+                gradient: const LinearGradient(
+                  colors: [Color(0xFF111827), Color(0xFF0B1220)],
+                  begin: Alignment.topLeft,
+                  end: Alignment.bottomRight,
+                ),
+              ),
+              child: Stack(
+                children: [
+                  Positioned(
+                    left: 16,
+                    bottom: 16,
+                    child: Container(
+                      width: 56,
+                      height: 56,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFE9F0FF),
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                      child: const Icon(
+                        Icons.psychology,
+                        color: Color(0xFF1E6BB8),
+                        size: 30,
+                      ),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+          ),
+          const SizedBox(height: 14),
+          Text(
+            course.titleUz,
+            style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                  fontWeight: FontWeight.w900,
+                ),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            course.descriptionUz,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                  color: Colors.black54,
+                  height: 1.35,
+                ),
+          ),
+          const SizedBox(height: 14),
+          ...course.sections.map((s) {
+            return Padding(
+              padding: const EdgeInsets.only(bottom: 10),
+              child: Card(
+                margin: EdgeInsets.zero,
+                child: ExpansionTile(
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  collapsedShape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(16),
+                  ),
+                  title: Text(
+                    s.titleUz,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: FontWeight.w800,
+                        ),
+                  ),
+                  subtitle: Text(
+                    s.durationUz,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Colors.black54,
+                        ),
+                  ),
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
+                      child: Row(
+                        children: [
+                          Expanded(
+                            child: Text(
+                              '${s.lessons.length} ta dars',
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                    fontWeight: FontWeight.w600,
+                                    color: Colors.black87,
+                                  ),
+                            ),
+                          ),
+                          SizedBox(
+                            height: 36,
+                            child: FilledButton(
+                              style: FilledButton.styleFrom(
+                                shape: RoundedRectangleBorder(
+                                  borderRadius: BorderRadius.circular(999),
+                                ),
+                              ),
+                              onPressed: () {
+                                ref.read(selectedCourseIdProvider.notifier).state =
+                                    course.id;
+                                ref
+                                    .read(progressControllerProvider.notifier)
+                                    .enroll(course.id);
+                                context.push(
+                                  '${AppRoutes.lessonList}?courseId=${course.id}&sectionId=${s.id}',
+                                );
+                              },
+                              child: const Text(
+                                'Darslar',
+                                style: TextStyle(fontWeight: FontWeight.w800),
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            );
+          }),
+          const SizedBox(height: 8),
+          SizedBox(
+            height: 48,
+            child: FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: const Color(0xFF1E6BB8),
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(14),
+                ),
+              ),
+              onPressed: () {
+                ref.read(selectedCourseIdProvider.notifier).state = course.id;
+                ref.read(progressControllerProvider.notifier).enroll(course.id);
+                context.push('${AppRoutes.quiz}?id=quiz_1');
+              },
+              child: const Text(
+                'Testni boshlash',
+                style: TextStyle(fontWeight: FontWeight.w900),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
