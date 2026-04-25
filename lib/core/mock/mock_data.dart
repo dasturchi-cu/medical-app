@@ -36,8 +36,7 @@ class MockData {
               transcriptUz:
                   'Miya — asab tizimining markaziy qismi bo‘lib, u fikrlash, xotira va harakatlarni boshqaradi.',
               slides: const ['Miya', 'Neyron', 'Sinaps', 'Plastiklik'],
-              videoUrl:
-                  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/BigBuckBunny.mp4',
+              videoUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
             ),
             Lesson(
               id: 'l2',
@@ -48,8 +47,7 @@ class MockData {
               transcriptUz:
                   'Neyronlar o‘zaro sinapslar orqali axborot uzatadi. Ushbu jarayon elektr va kimyoviy signallarga tayangan.',
               slides: const ['Elektr impuls', 'Kimyoviy signal', 'Retseptor', 'Tarmoq'],
-              videoUrl:
-                  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/ElephantsDream.mp4',
+              videoUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
             ),
           ],
         ),
@@ -67,8 +65,7 @@ class MockData {
               transcriptUz:
                   'Plastiklik — miyaning moslashuvchanligi. Tajriba va o‘rganish miyada ulanishlarni o‘zgartiradi.',
               slides: const ['O‘rganish', 'Moslashuv', 'Takror', 'Mustahkamlash'],
-              videoUrl:
-                  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/Sintel.mp4',
+              videoUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
             ),
           ],
         ),
@@ -99,8 +96,7 @@ class MockData {
               transcriptUz:
                   'Diqqat resurslari cheklangan. Chalg‘ituvchi omillarni boshqarish — samaradorlik kaliti.',
               slides: const ['Fokus', 'Chalg‘ish', 'Muqobil', 'Amaliyot'],
-              videoUrl:
-                  'https://commondatastorage.googleapis.com/gtv-videos-bucket/sample/TearsOfSteel.mp4',
+              videoUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
             ),
           ],
         ),

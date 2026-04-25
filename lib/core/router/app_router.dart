@@ -18,104 +18,113 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.home,
     routes: [
-      StatefulShellRoute.indexedStack(
-        builder: (context, state, navigationShell) {
-          return ScaffoldWithBottomNav(navigationShell: navigationShell);
+      ShellRoute(
+        builder: (context, state, child) {
+          return ShellScaffold(location: state.uri.toString(), child: child);
         },
-        branches: [
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.home,
-                builder: (context, state) => const HomePage(),
-              ),
-            ],
+        routes: [
+          GoRoute(
+            path: AppRoutes.home,
+            builder: (context, state) => const HomePage(),
           ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.myCourses,
-                builder: (context, state) => const MyCoursesPage(),
-              ),
-            ],
+          GoRoute(
+            path: AppRoutes.myCourses,
+            builder: (context, state) => const MyCoursesPage(),
           ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.search,
-                builder: (context, state) => const SearchPage(),
-              ),
-            ],
+          GoRoute(
+            path: AppRoutes.search,
+            builder: (context, state) => const SearchPage(),
           ),
-          StatefulShellBranch(
-            routes: [
-              GoRoute(
-                path: AppRoutes.profile,
-                builder: (context, state) => const ProfilePage(),
-              ),
-            ],
+          GoRoute(
+            path: AppRoutes.profile,
+            builder: (context, state) => const ProfilePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.courseDetail,
+            builder: (context, state) {
+              final courseId = state.uri.queryParameters['id'] ?? '';
+              return CourseDetailPage(courseId: courseId);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.lessonList,
+            builder: (context, state) {
+              final courseId = state.uri.queryParameters['courseId'] ?? '';
+              final sectionId = state.uri.queryParameters['sectionId'] ?? '';
+              return LessonListPage(courseId: courseId, sectionId: sectionId);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.lesson,
+            builder: (context, state) {
+              final lessonId = state.uri.queryParameters['id'] ?? '';
+              return LessonViewPage(lessonId: lessonId);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.quiz,
+            builder: (context, state) {
+              final quizId = state.uri.queryParameters['id'] ?? '';
+              return QuizPage(quizId: quizId);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.result,
+            builder: (context, state) {
+              final score = int.tryParse(state.uri.queryParameters['score'] ?? '') ?? 0;
+              final total = int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0;
+              return ResultPage(score: score, total: total);
+            },
           ),
         ],
-      ),
-      GoRoute(
-        path: AppRoutes.courseDetail,
-        builder: (context, state) {
-          final courseId = state.uri.queryParameters['id'] ?? '';
-          return CourseDetailPage(courseId: courseId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.lessonList,
-        builder: (context, state) {
-          final courseId = state.uri.queryParameters['courseId'] ?? '';
-          final sectionId = state.uri.queryParameters['sectionId'] ?? '';
-          return LessonListPage(courseId: courseId, sectionId: sectionId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.lesson,
-        builder: (context, state) {
-          final lessonId = state.uri.queryParameters['id'] ?? '';
-          return LessonViewPage(lessonId: lessonId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.quiz,
-        builder: (context, state) {
-          final quizId = state.uri.queryParameters['id'] ?? '';
-          return QuizPage(quizId: quizId);
-        },
-      ),
-      GoRoute(
-        path: AppRoutes.result,
-        builder: (context, state) {
-          final score = int.tryParse(state.uri.queryParameters['score'] ?? '') ?? 0;
-          final total = int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0;
-          return ResultPage(score: score, total: total);
-        },
       ),
     ],
   );
 });
 
-// Bottom navigation shell scaffold
-class ScaffoldWithBottomNav extends StatelessWidget {
-  const ScaffoldWithBottomNav({super.key, required this.navigationShell});
+class ShellScaffold extends StatelessWidget {
+  const ShellScaffold({
+    super.key,
+    required this.location,
+    required this.child,
+  });
 
-  final StatefulNavigationShell navigationShell;
+  final String location;
+  final Widget child;
 
-  void _onTap(int index) => navigationShell.goBranch(
-        index,
-        initialLocation: index == navigationShell.currentIndex,
-      );
+  int _indexForLocation() {
+    if (location.startsWith(AppRoutes.myCourses)) return 1;
+    if (location.startsWith(AppRoutes.search)) return 2;
+    if (location.startsWith(AppRoutes.profile)) return 3;
+    // For detail pages keep Home tab selected
+    return 0;
+  }
+
+  void _goTab(BuildContext context, int index) {
+    switch (index) {
+      case 0:
+        context.go(AppRoutes.home);
+        return;
+      case 1:
+        context.go(AppRoutes.myCourses);
+        return;
+      case 2:
+        context.go(AppRoutes.search);
+        return;
+      case 3:
+        context.go(AppRoutes.profile);
+        return;
+    }
+  }
 
   @override
   Widget build(BuildContext context) {
+    final idx = _indexForLocation();
     return Scaffold(
-      body: navigationShell,
+      body: child,
       bottomNavigationBar: AppBottomNav(
-        currentIndex: navigationShell.currentIndex,
-        onTap: _onTap,
+        currentIndex: idx,
+        onTap: (i) => _goTab(context, i),
       ),
     );
   }
