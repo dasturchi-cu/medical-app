@@ -7,9 +7,9 @@ import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/home/presentation/pages/my_courses_page.dart';
 import '../../features/home/presentation/pages/profile_page.dart';
 import '../../features/home/presentation/pages/ranking_page.dart';
-import '../../features/home/presentation/pages/search_page.dart';
 import '../../features/lesson/presentation/pages/lesson_list_page.dart';
 import '../../features/lesson/presentation/pages/lesson_view_page.dart';
+import '../../features/pomodoro/presentation/pages/pomodoro_screen.dart';
 import '../../features/quiz/presentation/pages/quiz_page.dart';
 import '../../features/quiz/presentation/pages/result_page.dart';
 import '../../widgets/app_bottom_nav.dart';
@@ -31,10 +31,6 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.myCourses,
             builder: (context, state) => const MyCoursesPage(),
-          ),
-          GoRoute(
-            path: AppRoutes.search,
-            builder: (context, state) => const SearchPage(),
           ),
           GoRoute(
             path: AppRoutes.profile,
@@ -76,10 +72,16 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.result,
             builder: (context, state) {
-              final score = int.tryParse(state.uri.queryParameters['score'] ?? '') ?? 0;
-              final total = int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0;
+              final score =
+                  int.tryParse(state.uri.queryParameters['score'] ?? '') ?? 0;
+              final total =
+                  int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0;
               return ResultPage(score: score, total: total);
             },
+          ),
+          GoRoute(
+            path: AppRoutes.pomodoro,
+            builder: (context, state) => const PomodoroScreen(),
           ),
         ],
       ),
@@ -88,18 +90,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
 });
 
 class ShellScaffold extends StatelessWidget {
-  const ShellScaffold({
-    super.key,
-    required this.location,
-    required this.child,
-  });
+  const ShellScaffold({super.key, required this.location, required this.child});
 
   final String location;
   final Widget child;
 
   int _indexForLocation() {
     if (location.startsWith(AppRoutes.myCourses)) return 1;
-    if (location.startsWith(AppRoutes.search)) return 2;
+    if (location.startsWith(AppRoutes.pomodoro)) return 2;
     if (location.startsWith(AppRoutes.ranking)) return 3;
     if (location.startsWith(AppRoutes.profile)) return 4;
     // For detail pages keep Home tab selected
@@ -115,7 +113,7 @@ class ShellScaffold extends StatelessWidget {
         context.go(AppRoutes.myCourses);
         return;
       case 2:
-        context.go(AppRoutes.search);
+        context.go(AppRoutes.pomodoro);
         return;
       case 3:
         context.go(AppRoutes.ranking);
@@ -129,6 +127,7 @@ class ShellScaffold extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final idx = _indexForLocation();
+
     return Scaffold(
       body: child,
       bottomNavigationBar: AppBottomNav(
@@ -138,4 +137,3 @@ class ShellScaffold extends StatelessWidget {
     );
   }
 }
-

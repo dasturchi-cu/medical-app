@@ -5,40 +5,59 @@ class RankingItem extends StatelessWidget {
     super.key,
     required this.rank,
     required this.name,
-    required this.studyMinutes,
+    required this.timeLabel,
     required this.isCurrentUser,
     this.prefixLabel,
   });
 
   final int rank;
   final String name;
-  final int studyMinutes;
+  final String timeLabel;
   final bool isCurrentUser;
   final String? prefixLabel;
 
   Color _rankColor() {
+    // Required: 1 Yellow, 2 Blue, 3 Green
     if (rank == 1) return const Color(0xFFFFC107);
-    if (rank == 2) return const Color(0xFFB0BEC5);
-    if (rank == 3) return const Color(0xFFCD7F32);
+    if (rank == 2) return const Color(0xFF1E6BB8);
+    if (rank == 3) return const Color(0xFF2E7D32);
     return const Color(0xFF1E6BB8);
   }
 
   @override
   Widget build(BuildContext context) {
     final bg = isCurrentUser ? const Color(0xFFEAF2FF) : Colors.white;
-    final hour = studyMinutes ~/ 60;
-    final minute = studyMinutes % 60;
-    final timeText = '$hour soat $minute minut';
+    final top = rank <= 3;
+    final cardColor = top ? _rankColor().withValues(alpha: 0.08) : bg;
 
     return Card(
       margin: EdgeInsets.zero,
-      color: bg,
+      color: cardColor,
       child: Padding(
-        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 10),
+        padding: EdgeInsets.symmetric(
+          horizontal: 12,
+          vertical: top ? 12 : 10,
+        ),
         child: Row(
           children: [
             SizedBox(
-              width: 92,
+              width: 34,
+              child: Text(
+                '$rank',
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                      fontWeight: FontWeight.w900,
+                      color: _rankColor(),
+                    ),
+              ),
+            ),
+            const SizedBox(width: 6),
+            CircleAvatar(
+              radius: top ? 20 : 18,
+              backgroundColor: _rankColor().withValues(alpha: 0.15),
+              child: Icon(Icons.person, color: _rankColor()),
+            ),
+            const SizedBox(width: 8),
+            Expanded(
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
@@ -51,37 +70,21 @@ class RankingItem extends StatelessWidget {
                           ),
                     ),
                   Text(
-                    '$rank',
-                    style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                          fontWeight: FontWeight.w900,
-                          color: _rankColor(),
+                    name,
+                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                          fontWeight: top ? FontWeight.w900 : FontWeight.w800,
                         ),
                   ),
                 ],
               ),
             ),
-            const SizedBox(width: 8),
-            CircleAvatar(
-              radius: 18,
-              backgroundColor: _rankColor().withValues(alpha: 0.15),
-              child: Icon(Icons.person, color: _rankColor()),
-            ),
-            const SizedBox(width: 10),
-            Expanded(
-              child: Text(
-                name,
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-              ),
-            ),
             SizedBox(
               width: 110,
               child: Text(
-                timeText,
+                timeLabel,
                 textAlign: TextAlign.right,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
+                      fontWeight: top ? FontWeight.w900 : FontWeight.w800,
                       color: const Color(0xFF1E6BB8),
                     ),
               ),

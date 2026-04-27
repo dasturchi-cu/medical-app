@@ -9,8 +9,8 @@ class AppRoutes {
   static const search = '/search';
   static const profile = '/profile';
   static const ranking = '/ranking';
+  static const pomodoro = '/pomodoro';
 
   // Extra (for lesson list screen from the UI image)
   static const lessonList = '/lesson-list';
 }
-

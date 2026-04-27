@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../../../../core/localization/language_provider.dart';
 import '../../../../widgets/ranking_item.dart';
 
 class RankingPage extends StatefulWidget {
@@ -11,15 +12,13 @@ class RankingPage extends StatefulWidget {
 
 class _RankingPageState extends State<RankingPage> with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  late final List<List<_RankingUser>> _datasets;
-
-  static const _tabTitles = ['Kunlik', 'Haftalik', 'Oylik', 'Yillik', 'Umumiy'];
+ late final List<List<_RankingUser>> _datasets;
 
   @override
   void initState() {
     super.initState();
-    _tabs = TabController(length: _tabTitles.length, vsync: this);
-    _datasets = List.generate(_tabTitles.length, _buildUsersForTab);
+    _tabs = TabController(length: 2, vsync: this);
+    _datasets = List.generate(2, _buildUsersForTab);
   }
 
   @override
@@ -30,33 +29,24 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
 
   @override
   Widget build(BuildContext context) {
+    final tabTitles = [context.tr('tab_daily'), context.tr('tab_overall')];
     return Scaffold(
       appBar: AppBar(
-        title: const Text('Reyting'),
+        title: Text(context.tr('ranking')),
         actions: [
           IconButton(
-            tooltip: 'Reyting haqida',
+            tooltip: context.tr('ranking_info_title'),
             onPressed: () {
               showDialog<void>(
                 context: context,
                 builder: (ctx) {
                   return AlertDialog(
-                    title: const Text('Reyting qanday ishlaydi?'),
-                    content: const Text(
-                      'Reyting darslarni o‘qishga sarflangan vaqt bo‘yicha hisoblanadi.\n\n'
-                      '• Kunlik: bugungi umumiy vaqt\n'
-                      '• Haftalik: so‘nggi 7 kun\n'
-                      '• Oylik: so‘nggi 30 kun\n'
-                      '• Yillik: so‘nggi 365 kun\n'
-                      '• Umumiy: barcha davrlar\n\n'
-                      'Ro‘yxatda Top 10 ko‘rinadi. Agar siz Top 10 ichida bo‘lmasangiz, '
-                      'pastda “Sizning o‘rningiz” alohida ko‘rsatiladi.\n\n'
-                      'Natija: soat va minut formatida chiqadi.',
-                    ),
+                    title: Text(ctx.tr('ranking_info_title')),
+                    content: Text(ctx.tr('ranking_info_body')),
                     actions: [
                       FilledButton(
                         onPressed: () => Navigator.of(ctx).pop(),
-                        child: const Text('Tushunarli'),
+                        child: Text(ctx.tr('btn_understood')),
                       ),
                     ],
                   );
@@ -69,15 +59,15 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
         bottom: TabBar(
           controller: _tabs,
           isScrollable: true,
-          tabs: _tabTitles.map((e) => Tab(text: e)).toList(),
+          tabs: tabTitles.map((e) => Tab(text: e)).toList(),
         ),
       ),
       body: TabBarView(
         controller: _tabs,
         children: List.generate(
-          _tabTitles.length,
+          tabTitles.length,
           (i) => _RankingList(
-            titleUz: _tabTitles[i],
+            titleUz: tabTitles[i],
             users: _datasets[i],
           ),
         ),
@@ -134,12 +124,17 @@ class _RankingListState extends State<_RankingList>
           final topEnd = topStart + top10.length;
           if (index >= topStart && index < topEnd) {
             final u = top10[index - topStart];
+            final h = u.studyMinutes ~/ 60;
+            final m = u.studyMinutes % 60;
             return Padding(
               padding: const EdgeInsets.only(bottom: 10),
               child: RankingItem(
                 rank: u.rank,
                 name: u.name,
-                studyMinutes: u.studyMinutes,
+                timeLabel: context.tr(
+                  'time_hm',
+                  params: {'h': '$h', 'm': '$m'},
+                ),
                 isCurrentUser: u.me,
               ),
             );
@@ -149,7 +144,7 @@ class _RankingListState extends State<_RankingList>
             final local = index - topEnd;
             if (local == 0) {
               return Text(
-                'Sizning o‘rningiz',
+                context.tr('your_place'),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
                       fontWeight: FontWeight.w900,
                       color: Colors.black54,
@@ -160,9 +155,12 @@ class _RankingListState extends State<_RankingList>
             return RankingItem(
               rank: me.rank,
               name: me.name,
-              studyMinutes: me.studyMinutes,
+              timeLabel: context.tr(
+                'time_hm',
+                params: {'h': '${me.studyMinutes ~/ 60}', 'm': '${me.studyMinutes % 60}'},
+              ),
               isCurrentUser: true,
-              prefixLabel: 'Siz',
+              prefixLabel: context.tr('nav_profile'),
             );
           }
           return const SizedBox.shrink();

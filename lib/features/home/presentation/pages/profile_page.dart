@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/progress_controller.dart';
@@ -23,7 +24,7 @@ class ProfilePage extends ConsumerWidget {
         padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
         children: [
           Text(
-            'Profil',
+            context.tr('profile'),
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   fontWeight: FontWeight.w900,
                 ),
@@ -77,18 +78,62 @@ class ProfilePage extends ConsumerWidget {
               children: [
                 ListTile(
                   leading: const Icon(Icons.menu_book_outlined),
-                  title: const Text('Kurslarim'),
+                  title: Text(context.tr('nav_my_courses')),
                   trailing: const Icon(Icons.chevron_right),
                   onTap: () => context.go(AppRoutes.myCourses),
                 ),
                 const Divider(height: 1),
                 ListTile(
+                  leading: const Icon(Icons.language_outlined),
+                  title: Text(context.tr('language')),
+                  trailing: DropdownButtonHideUnderline(
+                    child: DropdownButton<AppLang>(
+                      value: (ref.watch(localizationProvider).valueOrNull?.langCode ?? 'uz') ==
+                              'ru'
+                          ? AppLang.ru
+                          : (ref
+                                      .watch(localizationProvider)
+                                      .valueOrNull
+                                      ?.langCode ??
+                                  'uz') ==
+                              'en'
+                              ? AppLang.en
+                              : AppLang.uz,
+                      items: [
+                        DropdownMenuItem(
+                          value: AppLang.uz,
+                          child: Text(context.tr('lang_uz')),
+                        ),
+                        DropdownMenuItem(
+                          value: AppLang.ru,
+                          child: Text(context.tr('lang_ru')),
+                        ),
+                        DropdownMenuItem(
+                          value: AppLang.en,
+                          child: Text(context.tr('lang_en')),
+                        ),
+                      ],
+                      onChanged: (v) {
+                        if (v == null) return;
+                        ref.read(localizationProvider.notifier).setLang(
+                              v == AppLang.ru
+                                  ? 'ru'
+                                  : v == AppLang.en
+                                      ? 'en'
+                                      : 'uz',
+                            );
+                      },
+                    ),
+                  ),
+                ),
+                const Divider(height: 1),
+                ListTile(
                   leading: const Icon(Icons.settings_outlined),
-                  title: const Text('Sozlamalar'),
-                  subtitle: const Text('Dummy'),
+                  title: Text(context.tr('settings')),
+                  subtitle: Text(context.tr('dummy')),
                   onTap: () {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      const SnackBar(content: Text('Sozlamalar: tez orada')),
+                      SnackBar(content: Text(context.tr('soon'))),
                     );
                   },
                 ),

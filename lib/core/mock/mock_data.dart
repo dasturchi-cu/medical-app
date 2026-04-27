@@ -3,12 +3,8 @@ import '../models/quiz_models.dart';
 
 class MockData {
   static const categories = <Category>[
-    Category(id: 'c_all', titleUz: 'Barchasi', iconKey: 'all'),
-    Category(id: 'c_brain', titleUz: 'Miya', iconKey: 'brain'),
-    Category(id: 'c_eeg', titleUz: 'EEG', iconKey: 'wave'),
-    Category(id: 'c_epilepsy', titleUz: 'Epileptologiya', iconKey: 'medical'),
-    Category(id: 'c_enmg', titleUz: 'ENMG', iconKey: 'bolt'),
-    Category(id: 'c_general', titleUz: 'Nevrologiya', iconKey: 'book'),
+    Category(id: 'cat_online', titleUz: 'Onlayn kurs', iconKey: 'online'),
+    Category(id: 'cat_books', titleUz: 'Kitoblar', iconKey: 'books'),
   ];
 
   static const _testVideo =
@@ -54,8 +50,8 @@ class MockData {
   static final courses = <Course>[
     Course(
       id: 'course_general_bachelor',
-      categoryId: 'c_general',
-      titleUz: 'Umumiy Nevrologiya (Bakalavr)',
+      categoryId: 'cat_online',
+      titleUz: 'Umumiy Nevrologiya (Bakalavr uchun)',
       authorUz: 'Neuroscience',
       progress: 0.1,
       rating: 4.7,
@@ -64,19 +60,19 @@ class MockData {
       sections: _singleSection('course_general_bachelor', 'Nevrologiya kirish', 12),
     ),
     Course(
-      id: 'course_general',
-      categoryId: 'c_general',
-      titleUz: 'Umumiy Nevrologiya',
+      id: 'course_private_bachelor',
+      categoryId: 'cat_online',
+      titleUz: 'Xususiy Nevrologiya (Bakalavr uchun)',
       authorUz: 'Neuroscience',
       progress: 0.0,
       rating: 4.6,
       isPaid: true,
-      descriptionUz: 'Klinik nevrologiya asoslari. 1-dars bepul, qolganlari obuna bilan.',
-      sections: _singleSection('course_general', 'Klinik asoslar', 10),
+      descriptionUz: 'Bakalavr uchun xususiy nevrologiya bo‘limlari.',
+      sections: _singleSection('course_private_bachelor', 'Xususiy mavzular', 12),
     ),
     Course(
       id: 'course_eeg',
-      categoryId: 'c_eeg',
+      categoryId: 'cat_online',
       titleUz: 'EEG',
       authorUz: 'Neuroscience',
       progress: 0.0,
@@ -87,7 +83,7 @@ class MockData {
     ),
     Course(
       id: 'course_epilepsy',
-      categoryId: 'c_epilepsy',
+      categoryId: 'cat_online',
       titleUz: 'Epileptologiya',
       authorUz: 'Neuroscience',
       progress: 0.0,
@@ -98,7 +94,7 @@ class MockData {
     ),
     Course(
       id: 'course_enmg',
-      categoryId: 'c_enmg',
+      categoryId: 'cat_online',
       titleUz: 'ENMG',
       authorUz: 'Neuroscience',
       progress: 0.0,
@@ -109,7 +105,7 @@ class MockData {
     ),
     Course(
       id: 'course_private_neuro',
-      categoryId: 'c_brain',
+      categoryId: 'cat_online',
       titleUz: 'Xususiy Nevrologiya',
       authorUz: 'Neuroscience',
       progress: 0.0,

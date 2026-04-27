@@ -3,10 +3,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/progress_controller.dart';
-import '../../../../core/utils/category_icons.dart';
 import '../../../../widgets/course_card.dart';
 import '../../../../widgets/course_stats_comments_sheet.dart';
 
@@ -32,9 +30,9 @@ class MyCoursesPage extends ConsumerWidget {
               padding: const EdgeInsets.fromLTRB(16, 12, 16, 10),
               child: Text(
                 'Kurslarim',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                    ),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
               ),
             ),
           ),
@@ -45,9 +43,9 @@ class MyCoursesPage extends ConsumerWidget {
                 child: Text(
                   'Hali kursga yozilmagansiz',
                   style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w700,
-                      ),
+                    color: Colors.black54,
+                    fontWeight: FontWeight.w700,
+                  ),
                 ),
               ),
             )
@@ -65,12 +63,14 @@ class MyCoursesPage extends ConsumerWidget {
                 final buttonText = 'Davom etish';
 
                 return CourseCard(
-                  icon: iconForCategoryKey(
-                    MockData.categories
-                        .firstWhere((x) => x.id == c.categoryId,
-                            orElse: () => MockData.categories.first)
-                        .iconKey,
-                  ),
+                  animationDelayMs: (index % 8) * 55,
+                  visualKind: c.titleUz == 'EEG'
+                      ? 'eeg'
+                      : c.titleUz == 'Epileptologiya'
+                      ? 'medical'
+                      : c.titleUz == 'ENMG'
+                      ? 'enmg'
+                      : 'brain',
                   title: c.titleUz,
                   author: c.authorUz,
                   progress: progressValue,
@@ -110,4 +110,3 @@ class MyCoursesPage extends ConsumerWidget {
     );
   }
 }
-

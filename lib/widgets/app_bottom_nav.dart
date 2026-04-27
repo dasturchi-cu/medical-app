@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/localization/language_provider.dart';
+
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({
     super.key,
@@ -15,34 +17,33 @@ class AppBottomNav extends StatelessWidget {
     return NavigationBar(
       selectedIndex: currentIndex,
       onDestinationSelected: onTap,
-      destinations: const [
+      destinations: [
         NavigationDestination(
-          icon: Icon(Icons.home_outlined),
-          selectedIcon: Icon(Icons.home),
-          label: 'Bosh sahifa',
+          icon: const Icon(Icons.home_outlined),
+          selectedIcon: const Icon(Icons.home),
+          label: context.tr('nav_menu'),
         ),
         NavigationDestination(
-          icon: Icon(Icons.menu_book_outlined),
-          selectedIcon: Icon(Icons.menu_book),
-          label: 'Kurslarim',
+          icon: const Icon(Icons.menu_book_outlined),
+          selectedIcon: const Icon(Icons.menu_book),
+          label: context.tr('nav_my_courses'),
         ),
         NavigationDestination(
-          icon: Icon(Icons.search_outlined),
-          selectedIcon: Icon(Icons.search),
-          label: 'Qidiruv',
+          icon: const Icon(Icons.timer_outlined),
+          selectedIcon: const Icon(Icons.timer),
+          label: context.tr('nav_focus'),
         ),
         NavigationDestination(
-          icon: Icon(Icons.leaderboard_outlined),
-          selectedIcon: Icon(Icons.leaderboard),
-          label: 'Reyting',
+          icon: const Icon(Icons.leaderboard_outlined),
+          selectedIcon: const Icon(Icons.leaderboard),
+          label: context.tr('nav_ranking'),
         ),
         NavigationDestination(
-          icon: Icon(Icons.person_outline),
-          selectedIcon: Icon(Icons.person),
-          label: 'Profil',
+          icon: const Icon(Icons.person_outline),
+          selectedIcon: const Icon(Icons.person),
+          label: context.tr('nav_profile'),
         ),
       ],
     );
   }
 }
-

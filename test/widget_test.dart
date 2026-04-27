@@ -15,6 +15,7 @@ void main() {
     await tester.pumpWidget(const ProviderScope(child: NeuroscienceApp()));
     await tester.pumpAndSettle();
 
-    expect(find.text('Kategoriyalar'), findsOneWidget);
+    // Home page section title (localized default: Uzbek)
+    expect(find.text('Kurslar'), findsOneWidget);
   });
 }
