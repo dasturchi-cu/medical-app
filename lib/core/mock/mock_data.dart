@@ -3,114 +3,130 @@ import '../models/quiz_models.dart';
 
 class MockData {
   static const categories = <Category>[
-    Category(id: 'c1', titleUz: 'Barchasi'),
-    Category(id: 'c2', titleUz: 'Miya'),
-    Category(id: 'c3', titleUz: 'Nevron'),
-    Category(id: 'c4', titleUz: 'Xotira'),
-    Category(id: 'c5', titleUz: 'Diqqat'),
+    Category(id: 'c_all', titleUz: 'Barchasi', iconKey: 'all'),
+    Category(id: 'c_brain', titleUz: 'Miya', iconKey: 'brain'),
+    Category(id: 'c_eeg', titleUz: 'EEG', iconKey: 'wave'),
+    Category(id: 'c_epilepsy', titleUz: 'Epileptologiya', iconKey: 'medical'),
+    Category(id: 'c_enmg', titleUz: 'ENMG', iconKey: 'bolt'),
+    Category(id: 'c_general', titleUz: 'Nevrologiya', iconKey: 'book'),
   ];
+
+  static const _testVideo =
+      'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4';
+
+  static List<Lesson> _makeLessons({
+    required String courseId,
+    required int count,
+    required String titlePrefixUz,
+  }) {
+    return List.generate(count, (i) {
+      final idx = i + 1;
+      return Lesson(
+        id: '${courseId}_l$idx',
+        titleUz: 'Dars $idx — $titlePrefixUz',
+        durationUz: idx < 10 ? '0$idx:30' : '$idx:30',
+        isLocked: i != 0, // only first is free
+        isCompleted: false,
+        transcriptUz:
+            'Bu test dars matni. $titlePrefixUz mavzusining asosiy tushunchalari shu yerda bo‘ladi.',
+        slides: [
+          '$titlePrefixUz — 1',
+          '$titlePrefixUz — 2',
+          '$titlePrefixUz — 3',
+          '$titlePrefixUz — 4',
+        ],
+        videoUrl: _testVideo,
+      );
+    });
+  }
+
+  static List<Section> _singleSection(String courseId, String titleUz, int lessons) {
+    return [
+      Section(
+        id: '${courseId}_s1',
+        titleUz: titleUz,
+        durationUz: '${lessons * 10} daq',
+        lessons: _makeLessons(courseId: courseId, count: lessons, titlePrefixUz: titleUz),
+      ),
+    ];
+  }
 
   static final courses = <Course>[
     Course(
-      id: 'course_1',
-      categoryId: 'c3',
-      titleUz: 'Nevrobiologiya asoslari',
-      authorUz: 'Ramin Isyimva',
-      progress: 0.9,
-      rating: 4.5,
-      isPaid: false,
-      descriptionUz:
-          'Ushbu kursda miya tuzilishi, neyronlar ishlashi va asosiy nevrofan mavzulari bilan tanishasiz.',
-      sections: [
-        Section(
-          id: 's1',
-          titleUz: 'Kirish',
-          durationUz: '1 soat 30 daq',
-          lessons: [
-            Lesson(
-              id: 'l1',
-              titleUz: 'Miya nima?',
-              durationUz: '12:30',
-              isLocked: false,
-              isCompleted: true,
-              transcriptUz:
-                  'Miya — asab tizimining markaziy qismi bo‘lib, u fikrlash, xotira va harakatlarni boshqaradi.',
-              slides: const ['Miya', 'Neyron', 'Sinaps', 'Plastiklik'],
-              videoUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
-            ),
-            Lesson(
-              id: 'l2',
-              titleUz: 'Neyronlar va sinapslar',
-              durationUz: '10:45',
-              isLocked: false,
-              isCompleted: false,
-              transcriptUz:
-                  'Neyronlar o‘zaro sinapslar orqali axborot uzatadi. Ushbu jarayon elektr va kimyoviy signallarga tayangan.',
-              slides: const ['Elektr impuls', 'Kimyoviy signal', 'Retseptor', 'Tarmoq'],
-              videoUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
-            ),
-          ],
-        ),
-        Section(
-          id: 's2',
-          titleUz: 'Asosiy tushunchalar',
-          durationUz: '1 soat 30 daq',
-          lessons: [
-            Lesson(
-              id: 'l3',
-              titleUz: 'Plastiklik',
-              durationUz: '09:20',
-              isLocked: true,
-              isCompleted: false,
-              transcriptUz:
-                  'Plastiklik — miyaning moslashuvchanligi. Tajriba va o‘rganish miyada ulanishlarni o‘zgartiradi.',
-              slides: const ['O‘rganish', 'Moslashuv', 'Takror', 'Mustahkamlash'],
-              videoUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
-            ),
-          ],
-        ),
-      ],
+      id: 'course_general_bachelor',
+      categoryId: 'c_general',
+      titleUz: 'Umumiy Nevrologiya (Bakalavr)',
+      authorUz: 'Neuroscience',
+      progress: 0.1,
+      rating: 4.7,
+      isPaid: true,
+      descriptionUz: 'Bakalavr uchun umumiy nevrologiya asoslari. 1-dars bepul.',
+      sections: _singleSection('course_general_bachelor', 'Nevrologiya kirish', 12),
     ),
     Course(
-      id: 'course_2',
-      categoryId: 'c5',
-      titleUz: 'Kognitiv fanlar',
-      authorUz: 'Ramer Rantmon',
-      progress: 0.5,
+      id: 'course_general',
+      categoryId: 'c_general',
+      titleUz: 'Umumiy Nevrologiya',
+      authorUz: 'Neuroscience',
+      progress: 0.0,
+      rating: 4.6,
+      isPaid: true,
+      descriptionUz: 'Klinik nevrologiya asoslari. 1-dars bepul, qolganlari obuna bilan.',
+      sections: _singleSection('course_general', 'Klinik asoslar', 10),
+    ),
+    Course(
+      id: 'course_eeg',
+      categoryId: 'c_eeg',
+      titleUz: 'EEG',
+      authorUz: 'Neuroscience',
+      progress: 0.0,
+      rating: 4.8,
+      isPaid: true,
+      descriptionUz: 'EEG talqini, ritmlar, artefaktlar va amaliy holatlar.',
+      sections: _singleSection('course_eeg', 'EEG asoslari', 12),
+    ),
+    Course(
+      id: 'course_epilepsy',
+      categoryId: 'c_epilepsy',
+      titleUz: 'Epileptologiya',
+      authorUz: 'Neuroscience',
+      progress: 0.0,
       rating: 4.5,
       isPaid: true,
-      descriptionUz:
-          'Diqqat, xotira va qaror qabul qilish jarayonlarini amaliy misollar bilan o‘rganing.',
-      sections: [
-        Section(
-          id: 's3',
-          titleUz: 'Diqqat',
-          durationUz: '1 soat 30 daq',
-          lessons: [
-            Lesson(
-              id: 'l4',
-              titleUz: 'Fokus va chalg‘ish',
-              durationUz: '11:10',
-              isLocked: true,
-              isCompleted: false,
-              transcriptUz:
-                  'Diqqat resurslari cheklangan. Chalg‘ituvchi omillarni boshqarish — samaradorlik kaliti.',
-              slides: const ['Fokus', 'Chalg‘ish', 'Muqobil', 'Amaliyot'],
-              videoUrl: 'https://flutter.github.io/assets-for-api-docs/assets/videos/butterfly.mp4',
-            ),
-          ],
-        ),
-      ],
+      descriptionUz: 'Tutqanoq turlari, diagnostika va davolash yondashuvlari.',
+      sections: _singleSection('course_epilepsy', 'Epilepsiya', 15),
+    ),
+    Course(
+      id: 'course_enmg',
+      categoryId: 'c_enmg',
+      titleUz: 'ENMG',
+      authorUz: 'Neuroscience',
+      progress: 0.0,
+      rating: 4.4,
+      isPaid: true,
+      descriptionUz: 'ENMG tekshiruvlari va periferik nerv shikastlanishlari.',
+      sections: _singleSection('course_enmg', 'ENMG amaliyot', 10),
+    ),
+    Course(
+      id: 'course_private_neuro',
+      categoryId: 'c_brain',
+      titleUz: 'Xususiy Nevrologiya',
+      authorUz: 'Neuroscience',
+      progress: 0.0,
+      rating: 4.3,
+      isPaid: true,
+      descriptionUz: 'Miya kasalliklari bo‘yicha chuqurlashtirilgan kurs.',
+      sections: _singleSection('course_private_neuro', 'Miya kasalliklari', 12),
     ),
   ];
 
   /// Slider items should open related courses.
   static const bannerCourseIds = <String>[
-    'course_1',
-    'course_2',
-    'course_1',
-    'course_2',
-    'course_1',
+    'course_general_bachelor',
+    'course_eeg',
+    'course_epilepsy',
+    'course_enmg',
+    'course_private_neuro',
   ];
 
   static const homeSlidesUz = <String>[

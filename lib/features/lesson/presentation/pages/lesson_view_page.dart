@@ -124,30 +124,62 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
               ),
             ),
           ),
-          const SizedBox(height: 12),
-          SizedBox(
-            height: 48,
-            child: FilledButton(
-              style: FilledButton.styleFrom(
-                backgroundColor: const Color(0xFF1E6BB8),
-                shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+          const SizedBox(height: 14),
+          Row(
+            children: [
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: OutlinedButton(
+                    style: OutlinedButton.styleFrom(
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () {
+                      if (courseId != null) {
+                        ref.read(selectedCourseIdProvider.notifier).state = courseId;
+                        ref
+                            .read(progressControllerProvider.notifier)
+                            .completeLesson(courseId: courseId, lessonId: widget.lessonId);
+                      }
+                      context.pop(); // back to lesson list
+                    },
+                    child: const Text(
+                      'Darsni yakunlash',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
                 ),
               ),
-              onPressed: () {
-                if (courseId != null) {
-                  ref.read(selectedCourseIdProvider.notifier).state = courseId;
-                  ref
-                      .read(progressControllerProvider.notifier)
-                      .completeLesson(courseId: courseId, lessonId: widget.lessonId);
-                }
-                context.push('${AppRoutes.quiz}?id=quiz_1');
-              },
-              child: const Text(
-                'Darsni yakunlash va testga o‘tish',
-                style: TextStyle(fontWeight: FontWeight.w900),
+              const SizedBox(width: 12),
+              Expanded(
+                child: SizedBox(
+                  height: 48,
+                  child: FilledButton(
+                    style: FilledButton.styleFrom(
+                      backgroundColor: const Color(0xFF1E6BB8),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    onPressed: () {
+                      if (courseId != null) {
+                        ref.read(selectedCourseIdProvider.notifier).state = courseId;
+                        ref
+                            .read(progressControllerProvider.notifier)
+                            .completeLesson(courseId: courseId, lessonId: widget.lessonId);
+                      }
+                      context.push('${AppRoutes.quiz}?id=quiz_1');
+                    },
+                    child: const Text(
+                      'Testga o‘tish',
+                      style: TextStyle(fontWeight: FontWeight.w900),
+                    ),
+                  ),
+                ),
               ),
-            ),
+            ],
           ),
         ],
       ),

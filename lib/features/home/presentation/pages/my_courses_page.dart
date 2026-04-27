@@ -3,9 +3,12 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../core/utils/category_icons.dart';
 import '../../../../widgets/course_card.dart';
+import '../../../../widgets/course_stats_comments_sheet.dart';
 
 class MyCoursesPage extends ConsumerWidget {
   const MyCoursesPage({super.key});
@@ -18,7 +21,7 @@ class MyCoursesPage extends ConsumerWidget {
     final all = repo.getCourses();
     final enrolled = all.where((c) {
       final p = progress.byCourseId[c.id];
-      return (p?.enrolled ?? false) || c.progress > 0;
+      return (p?.enrolled ?? false);
     }).toList();
 
     return SafeArea(
@@ -54,14 +57,24 @@ class MyCoursesPage extends ConsumerWidget {
               itemBuilder: (context, index) {
                 final c = enrolled[index];
                 final p = progress.byCourseId[c.id];
-                final progressValue = c.progress;
+                final totalLessons = repo.getFlattenLessons(c.id).length;
+                final completed = p?.completedLessonIds.length ?? 0;
+                final progressValue = totalLessons == 0
+                    ? 0.0
+                    : (completed / totalLessons).toDouble().clamp(0.0, 1.0);
                 final buttonText = 'Davom etish';
 
                 return CourseCard(
+                  icon: iconForCategoryKey(
+                    MockData.categories
+                        .firstWhere((x) => x.id == c.categoryId,
+                            orElse: () => MockData.categories.first)
+                        .iconKey,
+                  ),
                   title: c.titleUz,
                   author: c.authorUz,
                   progress: progressValue,
-                  ratingText: '${c.rating.toStringAsFixed(1)}/5',
+                  ratingText: c.rating.toStringAsFixed(1),
                   buttonText: buttonText,
                   buttonColor: const Color(0xFFFF7A2D),
                   onPressed: () {
@@ -76,6 +89,17 @@ class MyCoursesPage extends ConsumerWidget {
                       return;
                     }
                     context.push('${AppRoutes.courseDetail}?id=${c.id}');
+                  },
+                  onMessagePressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      showDragHandle: false,
+                      builder: (_) => CourseStatsCommentsSheet(
+                        courseId: c.id,
+                        courseTitleUz: c.titleUz,
+                      ),
+                    );
                   },
                 );
               },

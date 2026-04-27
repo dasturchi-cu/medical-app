@@ -8,5 +8,6 @@ abstract class CourseRepository {
   String? getCourseIdForLesson(String lessonId);
   String? getNextLessonId(String courseId, String lessonId);
   Lesson? getFirstUnlockedLesson(String courseId);
+  List<Lesson> getFlattenLessons(String courseId);
 }
 

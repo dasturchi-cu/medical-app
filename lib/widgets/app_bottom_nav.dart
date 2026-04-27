@@ -32,6 +32,11 @@ class AppBottomNav extends StatelessWidget {
           label: 'Qidiruv',
         ),
         NavigationDestination(
+          icon: Icon(Icons.leaderboard_outlined),
+          selectedIcon: Icon(Icons.leaderboard),
+          label: 'Reyting',
+        ),
+        NavigationDestination(
           icon: Icon(Icons.person_outline),
           selectedIcon: Icon(Icons.person),
           label: 'Profil',

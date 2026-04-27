@@ -75,5 +75,16 @@ class MockCourseRepository implements CourseRepository {
     }
     return null;
   }
+
+  @override
+  List<Lesson> getFlattenLessons(String courseId) {
+    final course = getCourseById(courseId);
+    if (course == null) return const [];
+    final flat = <Lesson>[];
+    for (final s in course.sections) {
+      flat.addAll(s.lessons);
+    }
+    return flat;
+  }
 }
 

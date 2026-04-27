@@ -1,10 +1,12 @@
 class Category {
   final String id;
   final String titleUz;
+  final String iconKey;
 
   const Category({
     required this.id,
     required this.titleUz,
+    required this.iconKey,
   });
 }
 

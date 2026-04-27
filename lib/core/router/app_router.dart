@@ -6,6 +6,7 @@ import '../../features/course/presentation/pages/course_detail_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/home/presentation/pages/my_courses_page.dart';
 import '../../features/home/presentation/pages/profile_page.dart';
+import '../../features/home/presentation/pages/ranking_page.dart';
 import '../../features/home/presentation/pages/search_page.dart';
 import '../../features/lesson/presentation/pages/lesson_list_page.dart';
 import '../../features/lesson/presentation/pages/lesson_view_page.dart';
@@ -38,6 +39,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.profile,
             builder: (context, state) => const ProfilePage(),
+          ),
+          GoRoute(
+            path: AppRoutes.ranking,
+            builder: (context, state) => const RankingPage(),
           ),
           GoRoute(
             path: AppRoutes.courseDetail,
@@ -95,7 +100,8 @@ class ShellScaffold extends StatelessWidget {
   int _indexForLocation() {
     if (location.startsWith(AppRoutes.myCourses)) return 1;
     if (location.startsWith(AppRoutes.search)) return 2;
-    if (location.startsWith(AppRoutes.profile)) return 3;
+    if (location.startsWith(AppRoutes.ranking)) return 3;
+    if (location.startsWith(AppRoutes.profile)) return 4;
     // For detail pages keep Home tab selected
     return 0;
   }
@@ -112,6 +118,9 @@ class ShellScaffold extends StatelessWidget {
         context.go(AppRoutes.search);
         return;
       case 3:
+        context.go(AppRoutes.ranking);
+        return;
+      case 4:
         context.go(AppRoutes.profile);
         return;
     }

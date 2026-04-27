@@ -10,7 +10,10 @@ import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../core/utils/category_icons.dart';
+import '../../../../widgets/category_chip.dart';
 import '../../../../widgets/course_card.dart';
+import '../../../../widgets/course_stats_comments_sheet.dart';
 import '../providers/home_providers.dart';
 
 class HomePage extends ConsumerStatefulWidget {
@@ -23,10 +26,15 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> {
   final _pageController = PageController(viewportFraction: 0.92);
   Timer? _timer;
+  Timer? _loadingTimer;
+  bool _loading = true;
 
   @override
   void initState() {
     super.initState();
+    _loadingTimer = Timer(const Duration(milliseconds: 650), () {
+      if (mounted) setState(() => _loading = false);
+    });
     _timer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!_pageController.hasClients) return;
       final next = (_pageController.page?.round() ?? 0) + 1;
@@ -42,6 +50,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void dispose() {
     _timer?.cancel();
+    _loadingTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
@@ -52,7 +61,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final repo = ref.watch(courseRepositoryProvider);
     final allCourses = repo.getCourses();
     final courses = allCourses.where((c) {
-      if (selectedCat == 'c1') return true; // Barchasi
+      if (selectedCat == 'c_all') return true; // Barchasi
       return c.categoryId == selectedCat;
     }).toList();
     final progress = ref.watch(progressControllerProvider);
@@ -244,25 +253,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                 itemBuilder: (context, i) {
                   final cat = MockData.categories[i];
                   final selected = cat.id == selectedCat;
-                  return InkWell(
-                    borderRadius: BorderRadius.circular(999),
-                    onTap: () => ref.read(selectedCategoryIdProvider.notifier).state =
-                        cat.id,
-                    child: Container(
-                      padding: const EdgeInsets.symmetric(horizontal: 14),
-                      alignment: Alignment.center,
-                      decoration: BoxDecoration(
-                        color: selected ? const Color(0xFF1E6BB8) : Colors.white,
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        cat.titleUz,
-                        style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                              fontWeight: FontWeight.w800,
-                              color: selected ? Colors.white : Colors.black87,
-                            ),
-                      ),
-                    ),
+                  return CategoryChip(
+                    label: cat.titleUz,
+                    selected: selected,
+                    onTap: () => ref.read(selectedCategoryIdProvider.notifier).state = cat.id,
                   );
                 },
                 separatorBuilder: (_, index) => const SizedBox(width: 10),
@@ -285,15 +279,38 @@ class _HomePageState extends ConsumerState<HomePage> {
             itemCount: courses.length,
             itemBuilder: (context, index) {
               final c = courses[index];
-              final buttonText = c.progress > 0 ? 'Davom etish' : 'Boshlash';
-              final buttonColor =
-                  c.progress > 0 ? const Color(0xFFFF7A2D) : const Color(0xFF1E6BB8);
+              final p = progress.byCourseId[c.id];
+              final totalLessons = repo.getFlattenLessons(c.id).length;
+              final completed = p?.completedLessonIds.length ?? 0;
+              final progressValue = totalLessons == 0
+                  ? 0.0
+                  : (completed / totalLessons).toDouble().clamp(0.0, 1.0);
+
+              final buttonText = (p?.enrolled ?? false) || progressValue > 0
+                  ? 'Davom etish'
+                  : 'Boshlash';
+              final buttonColor = buttonText == 'Davom etish'
+                  ? const Color(0xFFFF7A2D)
+                  : const Color(0xFF1E6BB8);
+
+              if (_loading) {
+                return Card(
+                  margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                  child: const SizedBox(height: 116),
+                );
+              }
 
               return CourseCard(
+                icon: iconForCategoryKey(
+                  MockData.categories
+                      .firstWhere((x) => x.id == c.categoryId,
+                          orElse: () => MockData.categories.first)
+                      .iconKey,
+                ),
                 title: c.titleUz,
                 author: c.authorUz,
-                progress: c.progress,
-                ratingText: '${c.rating.toStringAsFixed(1)}/5',
+                progress: progressValue,
+                ratingText: c.rating.toStringAsFixed(1),
                 buttonText: buttonText,
                 buttonColor: buttonColor,
                 onPressed: () {
@@ -314,6 +331,17 @@ class _HomePageState extends ConsumerState<HomePage> {
                   }
 
                   context.push('${AppRoutes.courseDetail}?id=${c.id}');
+                },
+                onMessagePressed: () {
+                  showModalBottomSheet(
+                    context: context,
+                    isScrollControlled: true,
+                    showDragHandle: false,
+                    builder: (_) => CourseStatsCommentsSheet(
+                      courseId: c.id,
+                      courseTitleUz: c.titleUz,
+                    ),
+                  );
                 },
               );
             },

@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 class CourseCard extends StatelessWidget {
   const CourseCard({
     super.key,
+    required this.icon,
     required this.title,
     required this.author,
     required this.progress,
@@ -10,8 +11,10 @@ class CourseCard extends StatelessWidget {
     required this.buttonText,
     required this.buttonColor,
     required this.onPressed,
+    required this.onMessagePressed,
   });
 
+  final IconData icon;
   final String title;
   final String author;
   final double progress;
@@ -19,11 +22,10 @@ class CourseCard extends StatelessWidget {
   final String buttonText;
   final Color buttonColor;
   final VoidCallback onPressed;
+  final VoidCallback onMessagePressed;
 
   @override
   Widget build(BuildContext context) {
-    final cs = Theme.of(context).colorScheme;
-
     return Card(
       margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
       child: Padding(
@@ -38,7 +40,7 @@ class CourseCard extends StatelessWidget {
                 color: const Color(0xFFE9F0FF),
                 borderRadius: BorderRadius.circular(16),
               ),
-              child: const Icon(Icons.psychology, color: Color(0xFF1E6BB8)),
+              child: Icon(icon, color: const Color(0xFF1E6BB8)),
             ),
             const SizedBox(width: 12),
             Expanded(
@@ -97,6 +99,13 @@ class CourseCard extends StatelessWidget {
                               color: Colors.black87,
                             ),
                       ),
+                      const SizedBox(width: 8),
+                      IconButton(
+                        visualDensity: VisualDensity.compact,
+                        onPressed: onMessagePressed,
+                        icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                        tooltip: 'Izohlar',
+                      ),
                       const Spacer(),
                       SizedBox(
                         height: 34,
@@ -121,8 +130,6 @@ class CourseCard extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(width: 4),
-            Icon(Icons.more_vert, color: cs.onSurfaceVariant),
           ],
         ),
       ),

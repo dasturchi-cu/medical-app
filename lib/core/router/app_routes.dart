@@ -8,6 +8,7 @@ class AppRoutes {
   static const myCourses = '/my-courses';
   static const search = '/search';
   static const profile = '/profile';
+  static const ranking = '/ranking';
 
   // Extra (for lesson list screen from the UI image)
   static const lessonList = '/lesson-list';

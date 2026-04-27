@@ -3,7 +3,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/utils/category_icons.dart';
 
 final searchQueryProvider = StateProvider<String>((ref) => '');
 
@@ -58,7 +60,15 @@ class SearchPage extends ConsumerWidget {
                           color: const Color(0xFFE9F0FF),
                           borderRadius: BorderRadius.circular(14),
                         ),
-                        child: const Icon(Icons.psychology, color: Color(0xFF1E6BB8)),
+                        child: Icon(
+                          iconForCategoryKey(
+                            MockData.categories
+                                .firstWhere((x) => x.id == c.categoryId,
+                                    orElse: () => MockData.categories.first)
+                                .iconKey,
+                          ),
+                          color: const Color(0xFF1E6BB8),
+                        ),
                       ),
                       title: Text(
                         c.titleUz,
