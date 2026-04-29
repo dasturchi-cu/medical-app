@@ -53,6 +53,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   Widget build(BuildContext context) {
+    final authState = ref.watch(authControllerProvider);
     return Scaffold(
       appBar: AppBar(title: const Text('Kirish')),
       body: SafeArea(
@@ -66,6 +67,25 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.stretch,
                   children: [
+                    if (authState.isBlocked && (authState.blockReason ?? '').isNotEmpty) ...[
+                      Container(
+                        width: double.infinity,
+                        margin: const EdgeInsets.only(bottom: 12),
+                        padding: const EdgeInsets.all(12),
+                        decoration: BoxDecoration(
+                          color: Colors.red.withValues(alpha: 0.08),
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: Colors.red.withValues(alpha: 0.35)),
+                        ),
+                        child: Text(
+                          authState.blockReason!,
+                          style: const TextStyle(
+                            color: Colors.red,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
                     const Text(
                       'Xush kelibsiz',
                       style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),

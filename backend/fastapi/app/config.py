@@ -11,6 +11,8 @@ class Settings(BaseSettings):
     supabase_url: str = ""
     supabase_service_role_key: str = ""
     admin_api_key: str = ""
+    admin_user_id: str = ""
+    admin_contact_telegram: str = "Neuroscienceadmin"
 
     model_config = SettingsConfigDict(
         env_file=".env",

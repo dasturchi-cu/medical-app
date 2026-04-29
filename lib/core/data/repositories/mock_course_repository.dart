@@ -1,14 +1,14 @@
-import '../../mock/mock_data.dart';
 import '../../models/course_models.dart';
+import '../../services/catalog_service.dart';
 import 'course_repository.dart';
 
 class MockCourseRepository implements CourseRepository {
   @override
-  List<Course> getCourses() => MockData.courses;
+  List<Course> getCourses() => CatalogService.courses;
 
   @override
   Course? getCourseById(String id) {
-    for (final c in MockData.courses) {
+    for (final c in CatalogService.courses) {
       if (c.id == id) return c;
     }
     return null;
@@ -16,7 +16,7 @@ class MockCourseRepository implements CourseRepository {
 
   @override
   Lesson? getLessonById(String lessonId) {
-    for (final c in MockData.courses) {
+    for (final c in CatalogService.courses) {
       for (final s in c.sections) {
         for (final l in s.lessons) {
           if (l.id == lessonId) return l;
@@ -28,7 +28,7 @@ class MockCourseRepository implements CourseRepository {
 
   @override
   String? getCourseIdForLesson(String lessonId) {
-    for (final c in MockData.courses) {
+    for (final c in CatalogService.courses) {
       for (final s in c.sections) {
         for (final l in s.lessons) {
           if (l.id == lessonId) return c.id;

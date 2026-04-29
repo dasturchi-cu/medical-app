@@ -1,6 +1,6 @@
 "use client";
 
-import { CheckCircle2 } from "lucide-react";
+import { AlertCircle, CheckCircle2 } from "lucide-react";
 import { useEffect, useState } from "react";
 import { subscribeNotify, type NotifyPayload } from "@/lib/notify";
 
@@ -29,9 +29,17 @@ export function NotifyToaster() {
       {items.map((item) => (
         <div
           key={item.id}
-          className="flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 shadow-sm"
+          className={
+            item.type === "error"
+              ? "flex items-start gap-2 rounded-xl border border-rose-200 bg-rose-50 px-3 py-2 text-sm text-rose-800 shadow-sm"
+              : "flex items-start gap-2 rounded-xl border border-emerald-200 bg-emerald-50 px-3 py-2 text-sm text-emerald-800 shadow-sm"
+          }
         >
-          <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          {item.type === "error" ? (
+            <AlertCircle className="mt-0.5 size-4 shrink-0" />
+          ) : (
+            <CheckCircle2 className="mt-0.5 size-4 shrink-0" />
+          )}
           <p className="leading-5">{item.message}</p>
         </div>
       ))}

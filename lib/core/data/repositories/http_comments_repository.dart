@@ -13,6 +13,7 @@ class HttpCommentsRepository implements CommentsRepository {
   final http.Client? client;
 
   http.Client get _client => client ?? http.Client();
+  static const _timeout = Duration(seconds: 8);
 
   @override
   Future<List<AppCommentItem>> fetchComments({
@@ -23,12 +24,18 @@ class HttpCommentsRepository implements CommentsRepository {
     final uri = Uri.parse(
       '$baseUrl/api/v1/comments?course_key=$courseKey&user_id=$userId',
     );
-    final response = await _client.get(uri);
-    if (response.statusCode < 200 || response.statusCode >= 300) return const [];
+    final response = await _client.get(uri).timeout(_timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Izohlarni olishda xatolik (${response.statusCode}).');
+    }
     final body = jsonDecode(response.body);
-    if (body is! Map<String, dynamic>) return const [];
+    if (body is! Map<String, dynamic>) {
+      throw Exception("Izohlar javobi noto'g'ri.");
+    }
     final raw = body['items'];
-    if (raw is! List) return const [];
+    if (raw is! List) {
+      throw Exception("Izohlar ro'yxati topilmadi.");
+    }
     return raw
         .whereType<Map<String, dynamic>>()
         .map(AppCommentItem.fromJson)
@@ -44,7 +51,8 @@ class HttpCommentsRepository implements CommentsRepository {
   }) async {
     if (baseUrl.isEmpty || courseKey.isEmpty || userId.isEmpty) return;
     final uri = Uri.parse('$baseUrl/api/v1/comments');
-    await _client.post(
+    final response = await _client
+        .post(
       uri,
       headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({
@@ -53,7 +61,11 @@ class HttpCommentsRepository implements CommentsRepository {
         'author_name': authorName,
         'text': text,
       }),
-    );
+    )
+        .timeout(_timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Izoh yuborilmadi (${response.statusCode}).');
+    }
   }
 
   @override
@@ -63,11 +75,16 @@ class HttpCommentsRepository implements CommentsRepository {
   }) async {
     if (baseUrl.isEmpty || commentId.isEmpty || userId.isEmpty) return;
     final uri = Uri.parse('$baseUrl/api/v1/comments/$commentId/like');
-    await _client.post(
+    final response = await _client
+        .post(
       uri,
       headers: const {'Content-Type': 'application/json'},
       body: jsonEncode({'user_id': userId}),
-    );
+    )
+        .timeout(_timeout);
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception('Like amalida xatolik (${response.statusCode}).');
+    }
   }
 
   @override
@@ -76,9 +93,20 @@ class HttpCommentsRepository implements CommentsRepository {
     required String userId,
     Duration pollInterval = const Duration(seconds: 6),
   }) async* {
-    yield await fetchComments(courseKey: courseKey, userId: userId);
-    yield* Stream.periodic(
-      pollInterval,
-    ).asyncMap((_) => fetchComments(courseKey: courseKey, userId: userId));
+    List<AppCommentItem> last = const [];
+    try {
+      last = await fetchComments(courseKey: courseKey, userId: userId);
+    } catch (_) {}
+    yield last;
+
+    await for (final _ in Stream.periodic(pollInterval)) {
+      try {
+        last = await fetchComments(courseKey: courseKey, userId: userId);
+        yield last;
+      } catch (_) {
+        // Keep previously rendered comments instead of flashing empty list.
+        yield last;
+      }
+    }
   }
 }

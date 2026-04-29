@@ -11,14 +11,26 @@ import { PageSkeleton } from "@/components/page-skeleton";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
-import { adminActions, type Course, useAdminStore } from "@/lib/admin-store";
-import { notifySuccess } from "@/lib/notify";
+import { createCourse, fetchCourses, removeCourse, updateCourse } from "@/lib/api/courses";
+import { notifyError, notifySuccess } from "@/lib/notify";
 
 interface CourseFormValues {
   title: string;
   price: string;
   admin_telegram: string;
   image: string;
+}
+
+interface CourseRow {
+  id: string;
+  title_uz: string;
+  title_ru: string;
+  title_en: string;
+  price_uzs: number;
+  admin_telegram: string;
+  image_url: string;
+  views: number;
+  sales: number;
 }
 
 const emptyCourseForm: CourseFormValues = {
@@ -29,16 +41,32 @@ const emptyCourseForm: CourseFormValues = {
 };
 
 export default function CoursesPage() {
-  const { courses: courseList } = useAdminStore((state) => state);
+  const [courseList, setCourseList] = useState<CourseRow[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editCourse, setEditCourse] = useState<Course | null>(null);
+  const [editCourse, setEditCourse] = useState<CourseRow | null>(null);
   const [deleteCourseId, setDeleteCourseId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<CourseFormValues>(emptyCourseForm);
   const [editValues, setEditValues] = useState<CourseFormValues>(emptyCourseForm);
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    let mounted = true;
+    const load = async () => {
+      try {
+        const items = await fetchCourses();
+        if (!mounted) return;
+        setCourseList(items);
+      } catch (error) {
+        if (!mounted) return;
+        setCourseList([]);
+        notifyError(error instanceof Error ? error.message : "Kurslarni olishda xatolik.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const analytics = useMemo(() => {
@@ -53,11 +81,11 @@ export default function CoursesPage() {
       {
         key: "preview",
         label: "Rasm",
-        render: (item: Course) =>
-          item.image ? (
+        render: (item: CourseRow) =>
+          item.image_url ? (
             <div
               className="h-12 w-20 rounded-xl bg-cover bg-center"
-              style={{ backgroundImage: `url(${item.image})` }}
+              style={{ backgroundImage: `url(${item.image_url})` }}
             />
           ) : (
             <BlueBanner />
@@ -66,23 +94,24 @@ export default function CoursesPage() {
       {
         key: "title",
         label: "Nomi",
-        render: (item: Course) => (
+        render: (item: CourseRow) => (
           <p className="font-medium text-slate-800">{item.title_uz}</p>
         ),
       },
       {
         key: "price",
         label: "Narx",
+        render: (item: CourseRow) => formatPrice(item.price_uzs),
       },
       {
         key: "admin_telegram",
         label: "Admin",
-        render: (item: Course) => `@${item.admin_telegram}`,
+        render: (item: CourseRow) => `@${item.admin_telegram}`,
       },
       {
         key: "actions",
         label: "Amallar",
-        render: (item: Course) => (
+        render: (item: CourseRow) => (
           <div className="flex flex-wrap items-center gap-2">
             <Link
               href={`/courses/${item.id}`}
@@ -97,9 +126,9 @@ export default function CoursesPage() {
                 setEditCourse(item);
                 setEditValues({
                   title: item.title_uz,
-                  price: item.price,
+                  price: formatPrice(item.price_uzs),
                   admin_telegram: item.admin_telegram,
-                  image: item.image,
+                  image: item.image_url,
                 });
               }}
             >
@@ -119,19 +148,51 @@ export default function CoursesPage() {
     [],
   );
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    adminActions.addCourse({ ...formValues, has_modules: false, modules: [] });
-    notifySuccess("Kurs muvaffaqiyatli qo'shildi.");
-    setFormValues(emptyCourseForm);
+    try {
+      const title = formValues.title.trim();
+      if (!title) {
+        notifyError("Kurs nomini kiriting.");
+        return;
+      }
+      const translated = autoTranslateTitle(title);
+      const created = await createCourse({
+        ...translated,
+        price_uzs: parsePrice(formValues.price),
+        admin_telegram: normalizeTelegram(formValues.admin_telegram),
+        image_url: formValues.image.trim(),
+      });
+      setCourseList((prev) => [created, ...prev]);
+      notifySuccess("Kurs muvaffaqiyatli qo'shildi.");
+      setFormValues(emptyCourseForm);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Kurs qo'shilmadi.");
+    }
   };
 
-  const onEditSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editCourse) return;
-    adminActions.updateCourse(editCourse.id, { ...editValues, has_modules: false, modules: [] });
-    notifySuccess("Kurs muvaffaqiyatli yangilandi.");
-    setEditCourse(null);
+    try {
+      const title = editValues.title.trim();
+      if (!title) {
+        notifyError("Kurs nomini kiriting.");
+        return;
+      }
+      const translated = autoTranslateTitle(title);
+      const updated = await updateCourse(editCourse.id, {
+        ...translated,
+        price_uzs: parsePrice(editValues.price),
+        admin_telegram: normalizeTelegram(editValues.admin_telegram),
+        image_url: editValues.image.trim(),
+      });
+      setCourseList((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      notifySuccess("Kurs muvaffaqiyatli yangilandi.");
+      setEditCourse(null);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Kurs yangilanmadi.");
+    }
   };
 
   if (loading) return <PageSkeleton />;
@@ -181,11 +242,16 @@ export default function CoursesPage() {
         description="Rostdan ham ushbu kursni o&apos;chirmoqchimisiz? Kursga bog&apos;liq darslar ham o&apos;chadi."
         confirmText="Ha, o&apos;chirish"
         onCancel={() => setDeleteCourseId(null)}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!deleteCourseId) return;
-          adminActions.deleteCourse(deleteCourseId);
-          notifySuccess("Kurs muvaffaqiyatli o'chirildi.");
-          setDeleteCourseId(null);
+          try {
+            await removeCourse(deleteCourseId);
+            setCourseList((prev) => prev.filter((course) => course.id !== deleteCourseId));
+            notifySuccess("Kurs muvaffaqiyatli o'chirildi.");
+            setDeleteCourseId(null);
+          } catch (error) {
+            notifyError(error instanceof Error ? error.message : "Kurs o'chirilmadi.");
+          }
         }}
       />
     </section>
@@ -245,8 +311,8 @@ function AnalyticsCard({ title, items }: AnalyticsCardProps) {
       <h4 className="mb-2 text-sm font-semibold text-slate-700">{title}</h4>
       {items.length > 0 ? (
         <ul className="space-y-1">
-          {items.map((item) => (
-            <li key={item} className="text-sm text-slate-600">
+          {items.map((item, index) => (
+            <li key={`${item}-${index}`} className="text-sm text-slate-600">
               {item}
             </li>
           ))}
@@ -256,5 +322,29 @@ function AnalyticsCard({ title, items }: AnalyticsCardProps) {
       )}
     </div>
   );
+}
+
+function autoTranslateTitle(title: string) {
+  const trimmed = title.trim();
+  return {
+    title_uz: trimmed,
+    title_ru: `${trimmed} (RU)`,
+    title_en: `${trimmed} (EN)`,
+  };
+}
+
+function parsePrice(value: string) {
+  const normalized = value.replace(/[^\d.]/g, "");
+  const parsed = Number.parseFloat(normalized);
+  if (!Number.isFinite(parsed) || parsed < 0) return 0;
+  return parsed;
+}
+
+function formatPrice(value: number) {
+  return `${Math.round(value).toLocaleString("ru-RU")} so'm`;
+}
+
+function normalizeTelegram(value: string) {
+  return value.replace(/^@/, "").trim() || "Neuroscienceadmin";
 }
 

@@ -11,40 +11,60 @@ import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { adminActions, type HomeBanner, useAdminStore } from "@/lib/admin-store";
-import { notifySuccess } from "@/lib/notify";
+import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
+import { fetchCourses, type CourseItem } from "@/lib/api/courses";
+import { createSlide, deleteSlide, fetchSlides, type SlideItem, updateSlide } from "@/lib/api/slides";
+import { notifyError, notifySuccess } from "@/lib/notify";
 
 export default function HomeBannersPage() {
-  const { courses, homeBanners } = useAdminStore((state) => state);
+  const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [homeBanners, setHomeBanners] = useState<SlideItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [editBanner, setEditBanner] = useState<HomeBanner | null>(null);
+  const [editBanner, setEditBanner] = useState<SlideItem | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState({
     title: "",
     button_text: "Boshlash",
     image: "",
-    course_id: courses[0]?.id ?? "",
+    course_id: "",
   });
   const [editValues, setEditValues] = useState({
     title: "",
     button_text: "Boshlash",
     image: "",
-    course_id: courses[0]?.id ?? "",
+    course_id: "",
   });
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [courseItems, slideItems] = await Promise.all([fetchCourses(), fetchSlides()]);
+        if (!mounted) return;
+        setCourses(courseItems);
+        setHomeBanners(slideItems);
+        setFormValues((prev) => ({ ...prev, course_id: prev.course_id || courseItems[0]?.id || "" }));
+      } catch (error) {
+        if (!mounted) return;
+        notifyError(error instanceof Error ? error.message : "Home reklamalarni olishda xatolik.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const columns = useMemo(
     () => [
       {
         key: "preview",
-        label: "Ko&apos;rinish",
-        render: (item: HomeBanner) =>
-          item.image ? (
-            <div className="h-12 w-20 rounded-xl bg-cover bg-center" style={{ backgroundImage: `url(${item.image})` }} />
+        label: "Ko'rinish",
+        render: (item: SlideItem) =>
+          item.image_url ? (
+            <div className="h-12 w-20 rounded-xl bg-cover bg-center" style={{ backgroundImage: `url(${item.image_url})` }} />
           ) : (
             <BlueBanner />
           ),
@@ -54,12 +74,12 @@ export default function HomeBannersPage() {
       {
         key: "courseId",
         label: "Kurs",
-        render: (item: HomeBanner) => courses.find((course) => course.id === item.courseId)?.title_uz ?? item.courseId,
+        render: (item: SlideItem) => courses.find((course) => course.id === item.course_id)?.title_uz ?? "—",
       },
       {
         key: "actions",
         label: "Amallar",
-        render: (item: HomeBanner) => (
+        render: (item: SlideItem) => (
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
@@ -69,8 +89,8 @@ export default function HomeBannersPage() {
                 setEditValues({
                   title: item.title,
                   button_text: item.button_text,
-                  image: item.image,
-                  course_id: item.courseId,
+                  image: item.image_url,
+                  course_id: item.course_id ?? "",
                 });
               }}
             >
@@ -86,34 +106,54 @@ export default function HomeBannersPage() {
     [courses],
   );
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    adminActions.addHomeBanner({
-      title: formValues.title.trim(),
-      button_text: formValues.button_text.trim() || "Boshlash",
-      image: formValues.image,
-      courseId: formValues.course_id,
-    });
-    notifySuccess("Home reklama muvaffaqiyatli qo'shildi.");
-    setFormValues({
-      title: "",
-      button_text: "Boshlash",
-      image: "",
-      course_id: courses[0]?.id ?? "",
-    });
+    if (!formValues.course_id) {
+      notifyError("Qaysi kursga o'tishini tanlang.");
+      return;
+    }
+    try {
+      const created = await createSlide({
+        title: formValues.title.trim(),
+        subtitle: "",
+        image_url: formValues.image.trim(),
+        button_text: formValues.button_text.trim() || "Boshlash",
+        course_id: formValues.course_id || null,
+        order_no: homeBanners.length + 1,
+      });
+      setHomeBanners((prev) => [...prev, created]);
+      notifySuccess("Home reklama muvaffaqiyatli qo'shildi.");
+      setFormValues({
+        title: "",
+        button_text: "Boshlash",
+        image: "",
+        course_id: "",
+      });
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Home reklama qo'shilmadi.");
+    }
   };
 
-  const onEditSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editBanner) return;
-    adminActions.updateHomeBanner(editBanner.id, {
-      title: editValues.title.trim(),
-      button_text: editValues.button_text.trim() || "Boshlash",
-      image: editValues.image,
-      courseId: editValues.course_id,
-    });
-    notifySuccess("Home reklama muvaffaqiyatli yangilandi.");
-    setEditBanner(null);
+    if (!editValues.course_id) {
+      notifyError("Qaysi kursga o'tishini tanlang.");
+      return;
+    }
+    try {
+      const updated = await updateSlide(editBanner.id, {
+        title: editValues.title.trim(),
+        image_url: editValues.image.trim(),
+        button_text: editValues.button_text.trim() || "Boshlash",
+        course_id: editValues.course_id || null,
+      });
+      setHomeBanners((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      notifySuccess("Home reklama muvaffaqiyatli yangilandi.");
+      setEditBanner(null);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Home reklama yangilanmadi.");
+    }
   };
 
   if (loading) return <PageSkeleton />;
@@ -147,6 +187,23 @@ export default function HomeBannersPage() {
           helperText="Rasm qo&apos;yilmasa, default ko&apos;k uslub ishlatiladi."
           onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
         />
+        <div className="grid gap-2">
+          <Label htmlFor="home_course_id">Boshlash bosilganda qaysi kursga o&apos;tsin?</Label>
+          <Select value={formValues.course_id} onValueChange={(value) => setFormValues((prev) => ({ ...prev, course_id: value ?? "" }))}>
+            <SelectTrigger id="home_course_id" className="h-11 rounded-xl border-slate-200">
+              <SelectValue placeholder="Kursni tanlang">
+                {courses.find((course) => course.id === formValues.course_id)?.title_uz ?? "Kursni tanlang"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {courses.map((course) => (
+                <SelectItem key={course.id} value={course.id}>
+                  {course.title_uz}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
       </AppForm>
 
       <AppTable columns={columns} data={homeBanners} emptyText="Hali home reklamalar qo&apos;shilmagan." />
@@ -182,6 +239,23 @@ export default function HomeBannersPage() {
             helperText="Rasm qo&apos;yilmasa, default ko&apos;k uslub ishlatiladi."
             onChange={(value) => setEditValues((prev) => ({ ...prev, image: value }))}
           />
+          <div className="grid gap-2">
+            <Label htmlFor="edit_home_course_id">Boshlash bosilganda qaysi kursga o&apos;tsin?</Label>
+            <Select value={editValues.course_id} onValueChange={(value) => setEditValues  ((prev) => ({ ...prev, course_id: value ?? "" }))}>
+              <SelectTrigger id="edit_home_course_id" className="h-11 rounded-xl border-slate-200">
+                <SelectValue placeholder="Kursni tanlang">
+                  {courses.find((course) => course.id === editValues.course_id)?.title_uz ?? "Kursni tanlang"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {courses.map((course) => (
+                  <SelectItem key={course.id} value={course.id}>
+                    {course.title_uz}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
         </AppForm>
       </AppModal>
 
@@ -191,11 +265,16 @@ export default function HomeBannersPage() {
         description="Rostdan ham ushbu reklamani o&apos;chirmoqchimisiz?"
         confirmText="Ha, o&apos;chirish"
         onCancel={() => setDeleteId(null)}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!deleteId) return;
-          adminActions.deleteHomeBanner(deleteId);
-          notifySuccess("Home reklama muvaffaqiyatli o'chirildi.");
-          setDeleteId(null);
+          try {
+            await deleteSlide(deleteId);
+            setHomeBanners((prev) => prev.filter((item) => item.id !== deleteId));
+            notifySuccess("Home reklama muvaffaqiyatli o'chirildi.");
+            setDeleteId(null);
+          } catch (error) {
+            notifyError(error instanceof Error ? error.message : "Home reklama o'chirilmadi.");
+          }
         }}
       />
     </section>

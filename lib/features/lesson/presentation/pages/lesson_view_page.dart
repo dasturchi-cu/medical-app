@@ -64,11 +64,19 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     }
 
     final remoteSlides = lessonSlidesAsync.valueOrNull ?? const [];
-    final slideTexts = remoteSlides.isNotEmpty
+    final renderedSlides = remoteSlides.isNotEmpty
         ? remoteSlides
-            .map((item) => item.body.trim().isEmpty ? item.title : '${item.title}\n${item.body}')
+            .map(
+              (item) => _RenderedSlide(
+                title: item.title,
+                body: item.body,
+                imageUrl: item.imageUrl,
+              ),
+            )
             .toList(growable: false)
-        : lesson.slides;
+        : lesson.slides
+            .map((text) => _RenderedSlide(title: text, body: '', imageUrl: ''))
+            .toList(growable: false);
 
     return Scaffold(
       appBar: AppBar(
@@ -106,7 +114,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                 return VideoPlayerBox(url: lesson.videoUrl, height: mediaHeight);
               }
               return _SlideViewer(
-                slides: slideTexts,
+                slides: renderedSlides,
                 controller: _slidesController,
                 height: mediaHeight,
               );
@@ -203,7 +211,7 @@ class _SlideViewer extends StatefulWidget {
     required this.height,
   });
 
-  final List<String> slides;
+  final List<_RenderedSlide> slides;
   final PageController controller;
   final double height;
 
@@ -243,6 +251,7 @@ class _SlideViewerState extends State<_SlideViewer> {
   }
 
   Future<void> _openFullscreen() async {
+    if (widget.slides.isEmpty) return;
     await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(
         builder: (_) => _FullscreenSlidePage(
@@ -257,6 +266,21 @@ class _SlideViewerState extends State<_SlideViewer> {
   Widget build(BuildContext context) {
     final slides = widget.slides;
     final controller = widget.controller;
+    if (slides.isEmpty) {
+      return Container(
+        height: widget.height,
+        width: double.infinity,
+        decoration: BoxDecoration(
+          color: const Color(0xFF1E6BB8),
+          borderRadius: BorderRadius.circular(16),
+        ),
+        alignment: Alignment.center,
+        child: const Text(
+          'Slaydlar hali qo\'shilmagan',
+          style: TextStyle(color: Colors.white, fontWeight: FontWeight.w700),
+        ),
+      );
+    }
 
     return Column(
       children: [
@@ -270,7 +294,7 @@ class _SlideViewerState extends State<_SlideViewer> {
                   controller: controller,
                   itemCount: slides.length,
                   itemBuilder: (context, index) {
-                    final slideTitle = slides[index];
+                    final slide = slides[index];
                     return Container(
                       color: const Color(0xFF1E6BB8),
                       child: Padding(
@@ -288,20 +312,43 @@ class _SlideViewerState extends State<_SlideViewer> {
                             ),
                             const SizedBox(height: 8),
                             Text(
-                              slideTitle,
+                              slide.title,
                               style: Theme.of(context).textTheme.headlineSmall?.copyWith(
                                     color: Colors.white,
                                     fontWeight: FontWeight.w900,
                                   ),
                             ),
-                            const SizedBox(height: 10),
-                            Text(
-                              'Bu test slayd kontenti. Keyin real PDF/slayd ma’lumotlari ulanadi.',
-                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                    color: Colors.white.withValues(alpha: 0.88),
-                                    height: 1.35,
+                            if (slide.body.trim().isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              Text(
+                                slide.body,
+                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                      color: Colors.white.withValues(alpha: 0.88),
+                                      height: 1.35,
+                                    ),
+                              ),
+                            ],
+                            if (slide.imageUrl.trim().isNotEmpty) ...[
+                              const SizedBox(height: 12),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(12),
+                                child: Image.network(
+                                  slide.imageUrl,
+                                  fit: BoxFit.cover,
+                                  width: double.infinity,
+                                  height: widget.height * 0.38,
+                                  errorBuilder: (context, error, stackTrace) => Container(
+                                    height: widget.height * 0.28,
+                                    alignment: Alignment.center,
+                                    color: Colors.white.withValues(alpha: 0.16),
+                                    child: const Text(
+                                      'Rasmni yuklab bo\'lmadi',
+                                      style: TextStyle(color: Colors.white),
+                                    ),
                                   ),
-                            ),
+                                ),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -326,16 +373,17 @@ class _SlideViewerState extends State<_SlideViewer> {
           ),
         ),
         const SizedBox(height: 10),
-        SmoothPageIndicator(
-          controller: controller,
-          count: slides.length,
-          effect: WormEffect(
-            dotWidth: 8,
-            dotHeight: 8,
-            activeDotColor: const Color(0xFF1E6BB8),
-            dotColor: Colors.black.withValues(alpha: 0.14),
+        if (slides.length > 1)
+          SmoothPageIndicator(
+            controller: controller,
+            count: slides.length,
+            effect: WormEffect(
+              dotWidth: 8,
+              dotHeight: 8,
+              activeDotColor: const Color(0xFF1E6BB8),
+              dotColor: Colors.black.withValues(alpha: 0.14),
+            ),
           ),
-        ),
         const SizedBox(height: 8),
         Row(
           mainAxisAlignment: MainAxisAlignment.center,
@@ -375,7 +423,7 @@ class _FullscreenSlidePage extends StatefulWidget {
     required this.initialIndex,
   });
 
-  final List<String> slides;
+  final List<_RenderedSlide> slides;
   final int initialIndex;
 
   @override
@@ -389,6 +437,11 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
   @override
   void initState() {
     super.initState();
+    if (widget.slides.isEmpty) {
+      _index = 0;
+      _controller = PageController(initialPage: 0);
+      return;
+    }
     _index = widget.initialIndex.clamp(0, widget.slides.length - 1);
     _controller = PageController(initialPage: _index);
     _lockLandscape();
@@ -426,7 +479,7 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
               itemCount: widget.slides.length,
               onPageChanged: (v) => setState(() => _index = v),
               itemBuilder: (context, i) {
-                final slideTitle = widget.slides[i];
+                final slide = widget.slides[i];
                 return Container(
                   color: const Color(0xFF1E6BB8),
                   child: Padding(
@@ -444,20 +497,42 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
                         ),
                         const SizedBox(height: 10),
                         Text(
-                          slideTitle,
+                          slide.title,
                           style: Theme.of(context).textTheme.displaySmall?.copyWith(
                                 color: Colors.white,
                                 fontWeight: FontWeight.w900,
                               ),
                         ),
-                        const SizedBox(height: 12),
-                        Text(
-                          'Fullscreen test slayd ko‘rinishi.',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: Colors.white.withValues(alpha: 0.9),
-                                fontWeight: FontWeight.w600,
+                        if (slide.body.trim().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            slide.body,
+                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                                  color: Colors.white.withValues(alpha: 0.9),
+                                  fontWeight: FontWeight.w600,
+                                ),
+                          ),
+                        ],
+                        if (slide.imageUrl.trim().isNotEmpty) ...[
+                          const SizedBox(height: 14),
+                          Expanded(
+                            child: ClipRRect(
+                              borderRadius: BorderRadius.circular(14),
+                              child: Image.network(
+                                slide.imageUrl,
+                                fit: BoxFit.contain,
+                                errorBuilder: (context, error, stackTrace) => Container(
+                                  alignment: Alignment.center,
+                                  color: Colors.white.withValues(alpha: 0.16),
+                                  child: const Text(
+                                    'Rasmni yuklab bo\'lmadi',
+                                    style: TextStyle(color: Colors.white),
+                                  ),
+                                ),
                               ),
-                        ),
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -505,5 +580,17 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
       ),
     );
   }
+}
+
+class _RenderedSlide {
+  const _RenderedSlide({
+    required this.title,
+    required this.body,
+    required this.imageUrl,
+  });
+
+  final String title;
+  final String body;
+  final String imageUrl;
 }
 

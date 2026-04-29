@@ -3,7 +3,6 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
-import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/utils/category_icons.dart';
 
@@ -50,6 +49,11 @@ class SearchPage extends ConsumerWidget {
                 separatorBuilder: (_, index) => const SizedBox(height: 10),
                 itemBuilder: (context, i) {
                   final c = courses[i];
+                  final categoryKey = switch (c.categoryId) {
+                    'cat_online' => 'online',
+                    'cat_books' => 'books',
+                    _ => 'grid',
+                  };
                   return Card(
                     margin: EdgeInsets.zero,
                     child: ListTile(
@@ -61,12 +65,7 @@ class SearchPage extends ConsumerWidget {
                           borderRadius: BorderRadius.circular(14),
                         ),
                         child: Icon(
-                          iconForCategoryKey(
-                            MockData.categories
-                                .firstWhere((x) => x.id == c.categoryId,
-                                    orElse: () => MockData.categories.first)
-                                .iconKey,
-                          ),
+                          iconForCategoryKey(categoryKey),
                           color: const Color(0xFF1E6BB8),
                         ),
                       ),

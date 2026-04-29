@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
+import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
 class VideoPlayerBox extends StatefulWidget {
   const VideoPlayerBox({
@@ -18,21 +19,36 @@ class VideoPlayerBox extends StatefulWidget {
 
 class _VideoPlayerBoxState extends State<VideoPlayerBox> {
   VideoPlayerController? _controller;
+  YoutubePlayerController? _youtubeController;
+  String? _youtubeId;
   double _speed = 1.0;
 
   @override
   void initState() {
     super.initState();
-    _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
-      ..initialize().then((_) {
-        if (!mounted) return;
-        setState(() {});
-      });
+    _youtubeId = _extractYouTubeId(widget.url);
+    if (_youtubeId != null) {
+      _youtubeController = YoutubePlayerController(
+        initialVideoId: _youtubeId!,
+        flags: const YoutubePlayerFlags(
+          autoPlay: false,
+          forceHD: false,
+          enableCaption: true,
+        ),
+      );
+    } else {
+      _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
+        ..initialize().then((_) {
+          if (!mounted) return;
+          setState(() {});
+        });
+    }
   }
 
   @override
   void dispose() {
     _controller?.dispose();
+    _youtubeController?.dispose();
     super.dispose();
   }
 
@@ -67,6 +83,30 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
 
   @override
   Widget build(BuildContext context) {
+    if (_youtubeId != null && _youtubeController != null) {
+      return ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: SizedBox(
+          height: widget.height,
+          child: YoutubePlayerBuilder(
+            player: YoutubePlayer(
+              controller: _youtubeController!,
+              showVideoProgressIndicator: true,
+              progressIndicatorColor: const Color(0xFF1E6BB8),
+              progressColors: const ProgressBarColors(
+                playedColor: Color(0xFF1E6BB8),
+                handleColor: Color(0xFF1E6BB8),
+              ),
+            ),
+            builder: (context, player) => ColoredBox(
+              color: Colors.black,
+              child: Center(child: player),
+            ),
+          ),
+        ),
+      );
+    }
+
     final c = _controller;
     return ClipRRect(
       borderRadius: BorderRadius.circular(16),
@@ -146,6 +186,37 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
       ),
     );
   }
+}
+
+String? _extractYouTubeId(String input) {
+  final value = input.trim();
+  if (value.isEmpty) return null;
+  final idPattern = RegExp(r'^[a-zA-Z0-9_-]{11}$');
+  if (idPattern.hasMatch(value)) return value;
+
+  final uri = Uri.tryParse(value);
+  if (uri == null) return null;
+  if (uri.host.contains('youtu.be')) {
+    final segment = uri.pathSegments.isNotEmpty ? uri.pathSegments.first : '';
+    return idPattern.hasMatch(segment) ? segment : null;
+  }
+  if (uri.host.contains('youtube.com')) {
+    final v = uri.queryParameters['v'];
+    if (v != null && idPattern.hasMatch(v)) return v;
+    if (uri.pathSegments.length >= 2 && uri.pathSegments.first == 'embed') {
+      final embedId = uri.pathSegments[1];
+      if (idPattern.hasMatch(embedId)) return embedId;
+    }
+    if (uri.pathSegments.length >= 2 && uri.pathSegments.first == 'live') {
+      final liveId = uri.pathSegments[1];
+      if (idPattern.hasMatch(liveId)) return liveId;
+    }
+    if (uri.pathSegments.length >= 2 && uri.pathSegments.first == 'shorts') {
+      final shortsId = uri.pathSegments[1];
+      if (idPattern.hasMatch(shortsId)) return shortsId;
+    }
+  }
+  return null;
 }
 
 class _FullscreenVideoPage extends StatefulWidget {

@@ -1,4 +1,4 @@
-import { getApiConfig } from "@/lib/api/config";
+import { apiFetch, getApiConfig } from "@/lib/api/config";
 
 export interface TestItem {
   id: string;
@@ -25,11 +25,6 @@ export interface TestQuestionItem {
   order_no: number;
 }
 
-function endpoint(path: string) {
-  const { apiBaseUrl } = getApiConfig();
-  return `${apiBaseUrl}${path}`;
-}
-
 function headers() {
   const { adminApiKey } = getApiConfig();
   return {
@@ -38,9 +33,18 @@ function headers() {
   };
 }
 
+async function parseError(response: Response, fallback: string) {
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    return payload.detail?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function fetchTests() {
-  const response = await fetch(endpoint("/api/v1/tests"), { cache: "no-store" });
-  if (!response.ok) throw new Error("Testlarni olishda xatolik.");
+  const response = await apiFetch("/api/v1/tests", { cache: "no-store" });
+  if (!response.ok) throw new Error(await parseError(response, "Testlarni olishda xatolik."));
   const data = (await response.json()) as { items: TestItem[] };
   return data.items ?? [];
 }
@@ -53,26 +57,26 @@ export async function createTest(payload: {
   section_id?: string | null;
   lesson_id?: string | null;
 }) {
-  const response = await fetch(endpoint("/api/v1/tests"), {
+  const response = await apiFetch("/api/v1/tests", {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Test yaratishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Test yaratishda xatolik."));
   return (await response.json()) as TestItem;
 }
 
 export async function deleteTest(id: string) {
-  const response = await fetch(endpoint(`/api/v1/tests/${id}`), {
+  const response = await apiFetch(`/api/v1/tests/${id}`, {
     method: "DELETE",
     headers: headers(),
   });
-  if (!response.ok) throw new Error("Test o'chirishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Test o'chirishda xatolik."));
 }
 
 export async function fetchTestQuestions(quizId: string) {
-  const response = await fetch(endpoint(`/api/v1/tests/${quizId}/questions`), { cache: "no-store" });
-  if (!response.ok) throw new Error("Savollarni olishda xatolik.");
+  const response = await apiFetch(`/api/v1/tests/${quizId}/questions`, { cache: "no-store" });
+  if (!response.ok) throw new Error(await parseError(response, "Savollarni olishda xatolik."));
   const data = (await response.json()) as { items: TestQuestionItem[] };
   return data.items ?? [];
 }
@@ -89,11 +93,11 @@ export async function createTestQuestion(
     order_no: number;
   },
 ) {
-  const response = await fetch(endpoint(`/api/v1/tests/${quizId}/questions`), {
+  const response = await apiFetch(`/api/v1/tests/${quizId}/questions`, {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Savol qo'shishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Savol qo'shishda xatolik."));
   return (await response.json()) as TestQuestionItem;
 }

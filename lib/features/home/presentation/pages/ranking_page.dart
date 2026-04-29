@@ -1,26 +1,49 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
 
+import '../../../../core/di/providers.dart';
+import '../../../../core/state/auth_controller.dart';
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/ranking_item.dart';
 
-class RankingPage extends StatefulWidget {
+class RankingPage extends ConsumerStatefulWidget {
   const RankingPage({super.key});
 
   @override
-  State<RankingPage> createState() => _RankingPageState();
+  ConsumerState<RankingPage> createState() => _RankingPageState();
 }
 
-class _RankingPageState extends State<RankingPage>
+class _RankingPageState extends ConsumerState<RankingPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabs;
-  late final List<List<_RankingUser>> _datasets;
+  bool _loading = true;
+  List<_RankingUser> _users = const [];
 
   @override
   void initState() {
     super.initState();
     _tabs = TabController(length: 2, vsync: this);
-    _datasets = List.generate(2, _buildUsersForTab);
+    Future.microtask(_load);
+  }
+
+  Future<void> _load() async {
+    final currentUserId = ref.read(authControllerProvider).userId ?? "";
+    final items = await ref.read(rankingRepositoryProvider).fetchRanking(limit: 50);
+    if (!mounted) return;
+    setState(() {
+      _users = items
+          .map(
+            (item) => _RankingUser(
+              rank: item.rank,
+              name: item.fullName,
+              studyMinutes: item.quizMinutes.round(),
+              me: item.userId == currentUserId,
+            ),
+          )
+          .toList(growable: false);
+      _loading = false;
+    });
   }
 
   @override
@@ -68,30 +91,30 @@ class _RankingPageState extends State<RankingPage>
         controller: _tabs,
         children: List.generate(
           tabTitles.length,
-          (i) => _RankingList(titleUz: tabTitles[i], users: _datasets[i]),
+          (i) => _RankingList(
+            titleUz: tabTitles[i],
+            users: _users,
+            loading: _loading,
+            onRefresh: _load,
+          ),
         ),
       ),
     );
   }
-
-  List<_RankingUser> _buildUsersForTab(int seed) {
-    return List.generate(20, (i) {
-      final mins = (60 * (30 - i)) - (seed * 7);
-      return _RankingUser(
-        rank: i + 1,
-        name: i == 12 ? 'Azizbek User' : 'Foydalanuvchi ${i + 1}',
-        studyMinutes: mins,
-        me: i == 12,
-      );
-    });
-  }
 }
 
 class _RankingList extends StatefulWidget {
-  const _RankingList({required this.titleUz, required this.users});
+  const _RankingList({
+    required this.titleUz,
+    required this.users,
+    required this.loading,
+    required this.onRefresh,
+  });
 
   final String titleUz;
   final List<_RankingUser> users;
+  final bool loading;
+  final Future<void> Function() onRefresh;
 
   @override
   State<_RankingList> createState() => _RankingListState();
@@ -102,16 +125,19 @@ class _RankingListState extends State<_RankingList>
   @override
   Widget build(BuildContext context) {
     super.build(context);
+    if (widget.loading) {
+      return const Center(child: CircularProgressIndicator());
+    }
     final users = widget.users;
+    if (users.isEmpty) {
+      return const Center(child: Text('Reyting maʼlumoti yo‘q'));
+    }
     final top10 = users.take(10).toList();
-    final me = users.firstWhere((u) => u.me);
+    final me = users.firstWhere((u) => u.me, orElse: () => users.first);
     final inTop10 = top10.any((u) => u.me);
 
     return RefreshIndicator(
-      onRefresh: () async {
-        // UI-only mode: lightweight feedback refresh
-        await Future<void>.delayed(const Duration(milliseconds: 350));
-      },
+      onRefresh: widget.onRefresh,
       child: ListView.builder(
         padding: const EdgeInsets.all(AppSpacing.s16),
         itemCount: top10.length + (!inTop10 ? 3 : 0),

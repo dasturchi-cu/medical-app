@@ -232,6 +232,16 @@ class CourseDetailPage extends ConsumerWidget {
                 ),
               ),
               onPressed: () {
+                if (!purchased && !isDoctorCourse) {
+                  showPurchaseModal(
+                    context: context,
+                    courseName: course.titleUz,
+                    description: course.descriptionUz,
+                    price: course.priceUz,
+                    courseId: course.id,
+                  );
+                  return;
+                }
                 ref.read(selectedCourseIdProvider.notifier).state = course.id;
                 ref.read(progressControllerProvider.notifier).enroll(course.id);
                 final first = repo.getFirstUnlockedLesson(course.id);
@@ -239,7 +249,11 @@ class CourseDetailPage extends ConsumerWidget {
                   context.push('${AppRoutes.lesson}?id=${first.id}');
                   return;
                 }
-                context.push('${AppRoutes.quiz}?id=${course.id}_intro_quiz');
+                ScaffoldMessenger.of(context).showSnackBar(
+                  const SnackBar(
+                    content: Text('Bu kurs uchun avval dars qo\'shing.'),
+                  ),
+                );
               },
               child: const Text(
                 'Boshlash',

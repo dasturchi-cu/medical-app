@@ -5,6 +5,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 
+import '../../../../core/config/api_config.dart';
+import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../widgets/option_button.dart';
 
@@ -18,10 +20,11 @@ class QuizPage extends ConsumerStatefulWidget {
 }
 
 class _QuizPageState extends ConsumerState<QuizPage> {
-  static const _apiBaseUrl = String.fromEnvironment('API_BASE_URL', defaultValue: '');
+  final _apiBaseUrl = getApiBaseUrl();
   bool _loading = true;
   String _resolvedQuizId = "";
   String _quizTitle = "";
+  String _emptyMessage = "Test topilmadi";
   List<_QuizQuestion> _questions = const [];
   int _index = 0;
   final Map<String, int> _answers = {};
@@ -40,11 +43,18 @@ class _QuizPageState extends ConsumerState<QuizPage> {
       return;
     }
 
+    final repo = ref.read(courseRepositoryProvider);
+    final relatedCourseId = repo.getCourseIdForLesson(widget.quizId);
+
     String? quizId = await _resolveQuizIdByLesson(widget.quizId);
+    quizId ??= await _resolveQuizIdByCourse(relatedCourseId ?? "");
     quizId ??= await _resolveQuizIdDirect(widget.quizId);
     if (quizId == null || quizId.isEmpty) {
       if (!mounted) return;
-      setState(() => _loading = false);
+      setState(() {
+        _emptyMessage = "Bu dars uchun test topilmadi";
+        _loading = false;
+      });
       return;
     }
 
@@ -55,6 +65,7 @@ class _QuizPageState extends ConsumerState<QuizPage> {
       _resolvedQuizId = quizId!;
       _quizTitle = meta?.title ?? "Test sahifasi";
       _questions = questions;
+      _emptyMessage = questions.isEmpty ? "Test bor, lekin savollar qo'shilmagan" : "Test topilmadi";
       _loading = false;
     });
   }
@@ -79,6 +90,23 @@ class _QuizPageState extends ConsumerState<QuizPage> {
     final data = jsonDecode(response.body);
     if (data is! Map<String, dynamic>) return null;
     return (data['id'] ?? '').toString();
+  }
+
+  Future<String?> _resolveQuizIdByCourse(String courseId) async {
+    if (courseId.isEmpty) return null;
+    final uri = Uri.parse('$_apiBaseUrl/api/v1/tests');
+    final response = await http.get(uri);
+    if (response.statusCode < 200 || response.statusCode >= 300) return null;
+    final data = jsonDecode(response.body);
+    if (data is! Map<String, dynamic>) return null;
+    final items = data['items'];
+    if (items is! List || items.isEmpty) return null;
+    for (final item in items.whereType<Map<String, dynamic>>()) {
+      if ((item['course_id'] ?? '').toString() == courseId) {
+        return (item['id'] ?? '').toString();
+      }
+    }
+    return null;
   }
 
   Future<_QuizMeta?> _fetchQuizMeta(String id) async {
@@ -115,7 +143,7 @@ class _QuizPageState extends ConsumerState<QuizPage> {
             onPressed: () => context.pop(),
           ),
         ),
-        body: const Center(child: Text('Test topilmadi')),
+        body: Center(child: Text(_emptyMessage)),
       );
     }
 

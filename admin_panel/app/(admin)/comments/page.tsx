@@ -7,18 +7,37 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { adminActions, courseTitleByLanguage, useAdminStore } from "@/lib/admin-store";
+import { deleteAdminComment, fetchAdminComments, replyAdminComment, toggleAdminCommentHeart, type AdminCommentItem } from "@/lib/api/admin-comments";
+import { fetchCourses } from "@/lib/api/courses";
+import { notifyError, notifySuccess } from "@/lib/notify";
 
 export default function CommentsPage() {
-  const { comments, users, courses } = useAdminStore((state) => state);
+  const [comments, setComments] = useState<AdminCommentItem[]>([]);
+  const [courses, setCourses] = useState<Array<{ id: string; title_uz: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
   const [replyOpenId, setReplyOpenId] = useState<string | null>(null);
   const [replyValues, setReplyValues] = useState<Record<string, string>>({});
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [commentItems, courseItems] = await Promise.all([fetchAdminComments(), fetchCourses()]);
+        if (!mounted) return;
+        setComments(commentItems);
+        setCourses(courseItems.map((item) => ({ id: item.id, title_uz: item.title_uz })));
+      } catch (error) {
+        if (!mounted) return;
+        notifyError(error instanceof Error ? error.message : "Izohlarni olishda xatolik.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const commentThreads = useMemo(
@@ -31,61 +50,70 @@ export default function CommentsPage() {
         })),
     [comments],
   );
+
   if (loading) return <PageSkeleton />;
 
   return (
     <section className="admin-page">
       <div className="surface-card space-y-2 p-5">
         <h3 className="text-lg font-semibold text-slate-900">Izohlar va javoblar</h3>
-        <p className="text-sm text-slate-500">
-          YouTube uslubida kommentga yurakcha bosing, javob yozing va foydalanuvchi profiliga o&apos;ting.
-        </p>
+        <p className="text-sm text-slate-500">Real backenddan izohlar: yurakcha, javob yozish va o&apos;chirish shu yerda.</p>
       </div>
 
       <div className="surface-card space-y-4 p-4 sm:p-5">
         {commentThreads.length > 0 ? (
           commentThreads.map(({ root, replies }) => {
-            const rootUser = users.find((user) => user.id === root.user_id);
-            const course = courses.find((entry) => entry.id === root.course_id);
+            const courseName = courses.find((entry) => entry.id === root.course_id)?.title_uz ?? root.course_id;
             const isReplyOpen = replyOpenId === root.id;
             const replyValue = replyValues[root.id] ?? "";
             return (
               <article key={root.id} className="rounded-2xl border border-slate-100 bg-white p-4">
                 <CommentRow
-                  username={rootUser?.name ?? root.user_id}
+                  username={root.user_name}
                   userId={root.user_id}
-                  isAdmin={root.user_id === "admin"}
-                  courseName={course ? courseTitleByLanguage(course, "uz") : root.course_id}
+                  isAdmin={false}
+                  courseName={courseName}
                   text={root.text}
                   date={root.created_at}
                   hearts={root.hearts}
                   hearted={root.hearted_by_admin}
-                  onHeart={() => adminActions.toggleCommentHeart(root.id)}
+                  onHeart={async () => {
+                    try {
+                      const updated = await toggleAdminCommentHeart(root.id);
+                      setComments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+                    } catch (error) {
+                      notifyError(error instanceof Error ? error.message : "Yurakcha bosishda xatolik.");
+                    }
+                  }}
                   onReply={() => setReplyOpenId((prev) => (prev === root.id ? null : root.id))}
                   onDelete={() => setDeleteCommentId(root.id)}
                 />
 
                 {replies.length > 0 ? (
                   <div className="mt-3 space-y-3 border-l-2 border-slate-100 pl-4">
-                    {replies.map((reply) => {
-                      const replyUser = users.find((user) => user.id === reply.user_id);
-                      return (
-                        <CommentRow
-                          key={reply.id}
-                          username={reply.user_id === "admin" ? "Admin" : (replyUser?.name ?? reply.user_id)}
-                          userId={reply.user_id}
-                          isAdmin={reply.user_id === "admin"}
-                          courseName={course ? courseTitleByLanguage(course, "uz") : reply.course_id}
-                          text={reply.text}
-                          date={reply.created_at}
-                          hearts={reply.hearts}
-                          hearted={reply.hearted_by_admin}
-                          onHeart={() => adminActions.toggleCommentHeart(reply.id)}
-                          onReply={() => setReplyOpenId(root.id)}
-                          onDelete={() => setDeleteCommentId(reply.id)}
-                        />
-                      );
-                    })}
+                    {replies.map((reply) => (
+                      <CommentRow
+                        key={reply.id}
+                        username={reply.user_name}
+                        userId={reply.user_id}
+                        isAdmin={false}
+                        courseName={courseName}
+                        text={reply.text}
+                        date={reply.created_at}
+                        hearts={reply.hearts}
+                        hearted={reply.hearted_by_admin}
+                        onHeart={async () => {
+                          try {
+                            const updated = await toggleAdminCommentHeart(reply.id);
+                            setComments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+                          } catch (error) {
+                            notifyError(error instanceof Error ? error.message : "Yurakcha bosishda xatolik.");
+                          }
+                        }}
+                        onReply={() => setReplyOpenId(root.id)}
+                        onDelete={() => setDeleteCommentId(reply.id)}
+                      />
+                    ))}
                   </div>
                 ) : null}
 
@@ -93,22 +121,23 @@ export default function CommentsPage() {
                   <div className="mt-3 flex flex-wrap items-center gap-2 border-l-2 border-slate-100 pl-4">
                     <Input
                       value={replyValue}
-                      onChange={(event) =>
-                        setReplyValues((prev) => ({ ...prev, [root.id]: event.target.value }))
-                      }
+                      onChange={(event) => setReplyValues((prev) => ({ ...prev, [root.id]: event.target.value }))}
                       placeholder="Admin javobi..."
                       className="h-10 w-full flex-1 rounded-xl border-slate-200 sm:min-w-[240px]"
                     />
                     <Button
                       className="h-10 rounded-xl px-4"
-                      onClick={() => {
-                        adminActions.addCommentReply({
-                          parentId: root.id,
-                          courseId: root.course_id,
-                          text: replyValue,
-                        });
-                        setReplyValues((prev) => ({ ...prev, [root.id]: "" }));
-                        setReplyOpenId(null);
+                      onClick={async () => {
+                        if (!replyValue.trim()) return;
+                        try {
+                          const inserted = await replyAdminComment(root.id, replyValue);
+                          setComments((prev) => [inserted, ...prev]);
+                          setReplyValues((prev) => ({ ...prev, [root.id]: "" }));
+                          setReplyOpenId(null);
+                          notifySuccess("Javob yuborildi.");
+                        } catch (error) {
+                          notifyError(error instanceof Error ? error.message : "Javob yuborishda xatolik.");
+                        }
                       }}
                     >
                       Javob yuborish
@@ -130,9 +159,18 @@ export default function CommentsPage() {
         confirmText="Ha, o&apos;chirish"
         onCancel={() => setDeleteCommentId(null)}
         onConfirm={() => {
-          if (!deleteCommentId) return;
-          adminActions.deleteComment(deleteCommentId);
-          setDeleteCommentId(null);
+          const submitDelete = async () => {
+            if (!deleteCommentId) return;
+            try {
+              await deleteAdminComment(deleteCommentId);
+              setComments((prev) => prev.filter((item) => item.id !== deleteCommentId));
+              notifySuccess("Izoh o'chirildi.");
+              setDeleteCommentId(null);
+            } catch (error) {
+              notifyError(error instanceof Error ? error.message : "Izohni o'chirishda xatolik.");
+            }
+          };
+          void submitDelete();
         }}
       />
     </section>
@@ -153,19 +191,7 @@ interface CommentRowProps {
   onDelete: () => void;
 }
 
-function CommentRow({
-  username,
-  userId,
-  isAdmin,
-  courseName,
-  text,
-  date,
-  hearts,
-  hearted,
-  onHeart,
-  onReply,
-  onDelete,
-}: CommentRowProps) {
+function CommentRow({ username, userId, isAdmin, courseName, text, date, hearts, hearted, onHeart, onReply, onDelete }: CommentRowProps) {
   return (
     <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 flex-1">
@@ -181,16 +207,11 @@ function CommentRow({
             </Link>
           )}
           <span className="rounded-lg bg-slate-50 px-2 py-1 text-xs text-slate-500">{courseName}</span>
-          <span className="text-xs text-slate-400">{date}</span>
+          <span className="text-xs text-slate-400">{date.replace("T", " ").slice(0, 16)}</span>
         </div>
         <p className="text-sm leading-6 text-slate-700">{text}</p>
         <div className="mt-2 flex items-center gap-2">
-          <Button
-            variant={hearted ? "destructive" : "ghost"}
-            size="sm"
-            className="h-8 rounded-lg px-2 text-xs"
-            onClick={onHeart}
-          >
+          <Button variant={hearted ? "destructive" : "ghost"} size="sm" className="h-8 rounded-lg px-2 text-xs" onClick={onHeart}>
             <Heart className="size-3.5" />
             {hearts}
           </Button>

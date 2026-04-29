@@ -1,4 +1,4 @@
-export type NotifyType = "success";
+export type NotifyType = "success" | "error";
 
 export interface NotifyPayload {
   type: NotifyType;
@@ -12,6 +12,15 @@ export function notifySuccess(message: string) {
   window.dispatchEvent(
     new CustomEvent<NotifyPayload>(EVENT_NAME, {
       detail: { type: "success", message },
+    }),
+  );
+}
+
+export function notifyError(message: string) {
+  if (typeof window === "undefined") return;
+  window.dispatchEvent(
+    new CustomEvent<NotifyPayload>(EVENT_NAME, {
+      detail: { type: "error", message },
     }),
   );
 }

@@ -1,4 +1,27 @@
-import 'dart:math';
+import 'dart:convert';
+
+import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
+
+import '../config/api_config.dart';
+import '../utils/device_id.dart';
+
+class AuthServiceError implements Exception {
+  AuthServiceError(this.message);
+  final String message;
+}
+
+class UserAccessStatus {
+  const UserAccessStatus({
+    required this.userId,
+    required this.isBlocked,
+    required this.adminContact,
+  });
+
+  final String userId;
+  final bool isBlocked;
+  final String adminContact;
+}
 
 class LocalAuthUser {
   const LocalAuthUser({
@@ -11,42 +34,98 @@ class LocalAuthUser {
   final String email;
   final String name;
 
+  Map<String, dynamic> toJson() => {
+        'id': id,
+        'email': email,
+        'name': name,
+      };
+
+  factory LocalAuthUser.fromJson(Map<String, dynamic> json) => LocalAuthUser(
+        id: (json['id'] ?? '').toString(),
+        email: (json['email'] ?? '').toString(),
+        name: (json['name'] ?? '').toString(),
+      );
+
   LocalAuthUser copyWith({String? name}) {
     return LocalAuthUser(id: id, email: email, name: name ?? this.name);
   }
 }
 
 class AuthService {
-  static final Map<String, LocalAuthUser> _usersByPhone = <String, LocalAuthUser>{};
+  static const _prefsKey = 'auth_user_v1';
   static LocalAuthUser? _currentUser;
 
   LocalAuthUser? get currentUser => _currentUser;
+
+  static Future<void> bootstrap() async {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_prefsKey);
+    if (raw == null || raw.isEmpty) return;
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is Map<String, dynamic>) {
+        _currentUser = LocalAuthUser.fromJson(decoded);
+      }
+    } catch (_) {}
+  }
 
   Future<LocalAuthUser?> signIn({
     required String phone,
     required String password,
     String? displayName,
   }) async {
+    final baseUrl = getApiBaseUrl();
     final normalizedPhone = _normalizePhone(phone);
-    if (normalizedPhone.isEmpty) {
-      return null;
+    if (normalizedPhone.isEmpty || baseUrl.isEmpty) {
+      throw AuthServiceError("API manzili topilmadi.");
     }
 
-    final requestedName = (displayName ?? '').trim();
-    final existing = _usersByPhone[normalizedPhone];
-    if (existing != null) {
-      _currentUser = requestedName.isEmpty
-          ? existing
-          : existing.copyWith(name: requestedName);
-    } else {
-      _currentUser = LocalAuthUser(
-        id: _makeUid(),
-        email: normalizedPhone,
-        name: requestedName,
-      );
+    final deviceId = await DeviceId.getStableDeviceId();
+    final response = await http.post(
+      Uri.parse('$baseUrl/api/v1/auth/mobile-login'),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'phone': normalizedPhone,
+        'password': password,
+        'display_name': (displayName ?? '').trim(),
+        'device_id': deviceId,
+        'platform': 'android',
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map<String, dynamic> && body["detail"] != null) {
+          throw AuthServiceError(body["detail"].toString());
+        }
+      } catch (_) {}
+      throw AuthServiceError("Kirishda xatolik yuz berdi.");
     }
-    _usersByPhone[normalizedPhone] = _currentUser!;
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) return null;
+    _currentUser = LocalAuthUser(
+      id: (body['user_id'] ?? '').toString(),
+      email: (body['phone'] ?? normalizedPhone).toString(),
+      name: (body['full_name'] ?? '').toString(),
+    );
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, jsonEncode(_currentUser!.toJson()));
     return _currentUser;
+  }
+
+  Future<UserAccessStatus?> checkUserAccess(String userId) async {
+    final baseUrl = getApiBaseUrl();
+    if (baseUrl.isEmpty || userId.trim().isEmpty) return null;
+    final response = await http.get(Uri.parse('$baseUrl/api/v1/auth/user-status/$userId'));
+    if (response.statusCode < 200 || response.statusCode >= 300) return null;
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) return null;
+    return UserAccessStatus(
+      userId: (body['user_id'] ?? userId).toString(),
+      isBlocked: body['is_blocked'] == true,
+      adminContact: (body['admin_contact'] ?? 'Neuroscienceadmin').toString(),
+    );
   }
 
   Future<LocalAuthUser?> updateCurrentUserName(String name) async {
@@ -54,18 +133,15 @@ class AuthService {
     if (current == null) return null;
     final updated = current.copyWith(name: name.trim());
     _currentUser = updated;
-    _usersByPhone[current.email] = updated;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_prefsKey, jsonEncode(updated.toJson()));
     return updated;
   }
 
   Future<void> signOut() async {
     _currentUser = null;
-  }
-
-  String _makeUid() {
-    final rand = Random();
-    const chars = 'abcdefghijklmnopqrstuvwxyz0123456789';
-    return List.generate(16, (_) => chars[rand.nextInt(chars.length)]).join();
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_prefsKey);
   }
 
   String _normalizePhone(String value) {

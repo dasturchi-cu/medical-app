@@ -1,4 +1,4 @@
-import { getApiConfig } from "@/lib/api/config";
+import { apiFetch, getApiConfig } from "@/lib/api/config";
 
 export interface LessonSlideItem {
   id: string;
@@ -11,11 +11,6 @@ export interface LessonSlideItem {
   created_at: string;
 }
 
-function endpoint(path: string) {
-  const { apiBaseUrl } = getApiConfig();
-  return `${apiBaseUrl}${path}`;
-}
-
 function headers() {
   const { adminApiKey } = getApiConfig();
   return {
@@ -24,12 +19,22 @@ function headers() {
   };
 }
 
+async function parseError(response: Response, fallback: string) {
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    return payload.detail?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function fetchLessonSlides(lessonId: string) {
   if (!lessonId) return [] as LessonSlideItem[];
-  const response = await fetch(endpoint(`/api/v1/lesson-slides?lesson_id=${lessonId}&active_only=false`), {
+  const response = await apiFetch(`/api/v1/lesson-slides?lesson_id=${lessonId}&active_only=false`, {
     cache: "no-store",
+    headers: headers(),
   });
-  if (!response.ok) throw new Error("Slaydlarni olishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Slaydlarni olishda xatolik."));
   const data = (await response.json()) as { items: LessonSlideItem[] };
   return data.items ?? [];
 }
@@ -41,19 +46,19 @@ export async function createLessonSlide(payload: {
   image_url: string;
   order_no: number;
 }) {
-  const response = await fetch(endpoint("/api/v1/lesson-slides"), {
+  const response = await apiFetch("/api/v1/lesson-slides", {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Slayd qo'shishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Slayd qo'shishda xatolik."));
   return (await response.json()) as LessonSlideItem;
 }
 
 export async function deleteLessonSlide(id: string) {
-  const response = await fetch(endpoint(`/api/v1/lesson-slides/${id}`), {
+  const response = await apiFetch(`/api/v1/lesson-slides/${id}`, {
     method: "DELETE",
     headers: headers(),
   });
-  if (!response.ok) throw new Error("Slayd o'chirishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Slayd o'chirishda xatolik."));
 }

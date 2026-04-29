@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from supabase import Client
 
 from ..schemas.notifications import NotificationCreate, NotificationFeedItem, NotificationItem
+
+logger = logging.getLogger(__name__)
 
 
 def _to_notification_item(row: dict[str, Any]) -> NotificationItem:
@@ -31,39 +34,43 @@ def _to_notification_item(row: dict[str, Any]) -> NotificationItem:
 
 
 def list_notifications(client: Client, *, limit: int = 50) -> list[NotificationItem]:
-    notifications_resp = (
-        client.table("notifications")
-        .select("id,title,message,image_url,created_at")
-        .order("created_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
-    notifications = notifications_resp.data or []
-    if not notifications:
+    try:
+        notifications_resp = (
+            client.table("notifications")
+            .select("id,title,message,image_url,created_at")
+            .order("created_at", desc=True)
+            .limit(limit)
+            .execute()
+        )
+        notifications = notifications_resp.data or []
+        if not notifications:
+            return []
+
+        ids = [item["id"] for item in notifications]
+        deliveries_resp = (
+            client.table("notification_deliveries")
+            .select("notification_id,viewed_at")
+            .in_("notification_id", ids)
+            .execute()
+        )
+        deliveries = deliveries_resp.data or []
+        counts: dict[str, dict[str, int]] = {}
+        for delivery in deliveries:
+            key = str(delivery["notification_id"])
+            if key not in counts:
+                counts[key] = {"recipients_count": 0, "viewed_count": 0}
+            counts[key]["recipients_count"] += 1
+            if delivery.get("viewed_at"):
+                counts[key]["viewed_count"] += 1
+
+        merged: list[NotificationItem] = []
+        for item in notifications:
+            item_counts = counts.get(str(item["id"]), {"recipients_count": 0, "viewed_count": 0})
+            merged.append(_to_notification_item({**item, **item_counts}))
+        return merged
+    except Exception as error:
+        logger.warning("Failed to list notifications from Supabase: %s", error)
         return []
-
-    ids = [item["id"] for item in notifications]
-    deliveries_resp = (
-        client.table("notification_deliveries")
-        .select("notification_id,viewed_at")
-        .in_("notification_id", ids)
-        .execute()
-    )
-    deliveries = deliveries_resp.data or []
-    counts: dict[str, dict[str, int]] = {}
-    for delivery in deliveries:
-        key = str(delivery["notification_id"])
-        if key not in counts:
-            counts[key] = {"recipients_count": 0, "viewed_count": 0}
-        counts[key]["recipients_count"] += 1
-        if delivery.get("viewed_at"):
-            counts[key]["viewed_count"] += 1
-
-    merged: list[NotificationItem] = []
-    for item in notifications:
-        item_counts = counts.get(str(item["id"]), {"recipients_count": 0, "viewed_count": 0})
-        merged.append(_to_notification_item({**item, **item_counts}))
-    return merged
 
 
 def create_notification(client: Client, payload: NotificationCreate) -> NotificationItem:
@@ -104,39 +111,43 @@ def create_notification(client: Client, payload: NotificationCreate) -> Notifica
 
 
 def list_user_notification_feed(client: Client, *, user_id: str, limit: int = 100) -> list[NotificationFeedItem]:
-    deliveries_resp = (
-        client.table("notification_deliveries")
-        .select("viewed_at, notifications!inner(id,title,message,image_url,created_at)")
-        .eq("user_id", user_id)
-        .order("delivered_at", desc=True)
-        .limit(limit)
-        .execute()
-    )
-    deliveries = deliveries_resp.data or []
-
-    result: list[NotificationFeedItem] = []
-    for row in deliveries:
-        notification = row.get("notifications")
-        if not isinstance(notification, dict):
-            continue
-        sent_at = notification.get("created_at")
-        if isinstance(sent_at, str):
-            sent_at_dt = datetime.fromisoformat(sent_at.replace("Z", "+00:00"))
-        elif isinstance(sent_at, datetime):
-            sent_at_dt = sent_at
-        else:
-            sent_at_dt = datetime.utcnow()
-        result.append(
-            NotificationFeedItem(
-                id=str(notification.get("id") or ""),
-                title=str(notification.get("title") or ""),
-                message=str(notification.get("message") or ""),
-                image_url=str(notification.get("image_url") or ""),
-                sent_at=sent_at_dt,
-                viewed=bool(row.get("viewed_at")),
-            )
+    try:
+        deliveries_resp = (
+            client.table("notification_deliveries")
+            .select("viewed_at, notifications!inner(id,title,message,image_url,created_at)")
+            .eq("user_id", user_id)
+            .order("delivered_at", desc=True)
+            .limit(limit)
+            .execute()
         )
-    return result
+        deliveries = deliveries_resp.data or []
+
+        result: list[NotificationFeedItem] = []
+        for row in deliveries:
+            notification = row.get("notifications")
+            if not isinstance(notification, dict):
+                continue
+            sent_at = notification.get("created_at")
+            if isinstance(sent_at, str):
+                sent_at_dt = datetime.fromisoformat(sent_at.replace("Z", "+00:00"))
+            elif isinstance(sent_at, datetime):
+                sent_at_dt = sent_at
+            else:
+                sent_at_dt = datetime.utcnow()
+            result.append(
+                NotificationFeedItem(
+                    id=str(notification.get("id") or ""),
+                    title=str(notification.get("title") or ""),
+                    message=str(notification.get("message") or ""),
+                    image_url=str(notification.get("image_url") or ""),
+                    sent_at=sent_at_dt,
+                    viewed=bool(row.get("viewed_at")),
+                )
+            )
+        return result
+    except Exception as error:
+        logger.warning("Failed to list user notification feed from Supabase: %s", error)
+        return []
 
 
 def delete_notification(client: Client, notification_id: str) -> None:

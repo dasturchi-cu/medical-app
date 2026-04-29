@@ -4,9 +4,14 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import 'core/router/app_router.dart';
 import 'core/localization/language_provider.dart';
+import 'core/services/auth_service.dart';
+import 'core/services/catalog_service.dart';
 import 'core/theme/app_theme.dart';
 
-void main() {
+Future<void> main() async {
+  WidgetsFlutterBinding.ensureInitialized();
+  await AuthService.bootstrap();
+  await CatalogService.bootstrap();
   runApp(const ProviderScope(child: NeuroscienceApp()));
 }
 

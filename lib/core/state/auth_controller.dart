@@ -1,19 +1,26 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../di/providers.dart';
 import '../services/auth_service.dart';
+import 'purchase_controller.dart';
 
 class AuthState {
   final bool isLoggedIn;
   final String name;
   final String? userId;
   final String? email;
+  final bool isBlocked;
+  final String? blockReason;
 
   const AuthState({
     required this.isLoggedIn,
     required this.name,
     required this.userId,
     required this.email,
+    required this.isBlocked,
+    required this.blockReason,
   });
 
   AuthState copyWith({
@@ -21,12 +28,16 @@ class AuthState {
     String? name,
     String? userId,
     String? email,
+    bool? isBlocked,
+    String? blockReason,
   }) {
     return AuthState(
       isLoggedIn: isLoggedIn ?? this.isLoggedIn,
       name: name ?? this.name,
       userId: userId ?? this.userId,
       email: email ?? this.email,
+      isBlocked: isBlocked ?? this.isBlocked,
+      blockReason: blockReason ?? this.blockReason,
     );
   }
 }
@@ -35,18 +46,53 @@ final authControllerProvider =
     NotifierProvider<AuthController, AuthState>(AuthController.new);
 
 class AuthController extends Notifier<AuthState> {
+  Timer? _accessTimer;
+
   @override
   AuthState build() {
     final user = ref.watch(authServiceProvider).currentUser;
     if (user == null) {
+      _accessTimer?.cancel();
       return const AuthState(
         isLoggedIn: false,
         name: 'Mehmon',
         userId: null,
         email: null,
+        isBlocked: false,
+        blockReason: null,
       );
     }
+    Future.microtask(() {
+      ref.read(purchaseControllerProvider.notifier).syncFromBackend(user.id);
+      _verifyUserAccess(user.id);
+    });
+    _startAccessTimer(user.id);
     return _fromUser(user);
+  }
+
+  void _startAccessTimer(String userId) {
+    _accessTimer?.cancel();
+    _accessTimer = Timer.periodic(const Duration(seconds: 12), (_) {
+      _verifyUserAccess(userId);
+    });
+    ref.onDispose(() {
+      _accessTimer?.cancel();
+    });
+  }
+
+  Future<void> _verifyUserAccess(String userId) async {
+    final status = await ref.read(authServiceProvider).checkUserAccess(userId);
+    if (status == null || !status.isBlocked) return;
+    await ref.read(authServiceProvider).signOut();
+    ref.read(purchaseControllerProvider.notifier).clear();
+    state = AuthState(
+      isLoggedIn: false,
+      name: 'Mehmon',
+      userId: null,
+      email: null,
+      isBlocked: true,
+      blockReason: "Siz admin tomonidan bloklangansiz. Admin: @${status.adminContact}",
+    );
   }
 
   AuthState _fromUser(LocalAuthUser user) {
@@ -56,6 +102,8 @@ class AuthController extends Notifier<AuthState> {
       name: guessedName,
       userId: user.id,
       email: user.email,
+      isBlocked: false,
+      blockReason: null,
     );
   }
 
@@ -76,7 +124,20 @@ class AuthController extends Notifier<AuthState> {
         return 'Telefon raqami noto‘g‘ri';
       }
       state = _fromUser(user);
+      await ref.read(purchaseControllerProvider.notifier).syncFromBackend(user.id);
       return null;
+    } on AuthServiceError catch (error) {
+      if (error.message.toLowerCase().contains('blok')) {
+        state = const AuthState(
+          isLoggedIn: false,
+          name: 'Mehmon',
+          userId: null,
+          email: null,
+          isBlocked: true,
+          blockReason: null,
+        ).copyWith(blockReason: error.message);
+      }
+      return error.message;
     } catch (_) {
       return 'Xatolik yuz berdi. Qayta urinib ko‘ring';
     }
@@ -92,12 +153,16 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> logout() async {
+    _accessTimer?.cancel();
     await ref.read(authServiceProvider).signOut();
+    ref.read(purchaseControllerProvider.notifier).clear();
     state = const AuthState(
       isLoggedIn: false,
       name: 'Mehmon',
       userId: null,
       email: null,
+      isBlocked: false,
+      blockReason: null,
     );
   }
 }

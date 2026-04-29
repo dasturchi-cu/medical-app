@@ -17,11 +17,13 @@ import {
   type TestItem,
   type TestQuestionItem,
 } from "@/lib/api/tests";
-import { useAdminStore } from "@/lib/admin-store";
-import { notifySuccess } from "@/lib/notify";
+import { fetchCourses, type CourseItem } from "@/lib/api/courses";
+import { fetchLessons, type LessonItem } from "@/lib/api/lessons";
+import { notifyError, notifySuccess } from "@/lib/notify";
 
 export default function TestsPage() {
-  const { courses, lessons } = useAdminStore((state) => state);
+  const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [loading, setLoading] = useState(true);
   const [tests, setTests] = useState<TestItem[]>([]);
   const [selectedTestId, setSelectedTestId] = useState<string>("");
@@ -41,16 +43,20 @@ export default function TestsPage() {
     option_c: "",
     option_d: "",
     correct_option: "A" as "A" | "B" | "C" | "D",
-    order_no: "1",
   });
 
   useEffect(() => {
     let mounted = true;
-    void fetchTests()
-      .then((items) => {
+    void Promise.all([fetchTests(), fetchCourses(), fetchLessons()])
+      .then(([testsItems, courseItems, lessonItems]) => {
         if (!mounted) return;
-        setTests(items);
-        setSelectedTestId(items[0]?.id ?? "");
+        setTests(testsItems);
+        setSelectedTestId(testsItems[0]?.id ?? "");
+        setCourses(courseItems);
+        setLessons(lessonItems);
+      })
+      .catch((error) => {
+        if (mounted) notifyError(error instanceof Error ? error.message : "Test ma'lumotlarini olishda xatolik.");
       })
       .finally(() => {
         if (mounted) setLoading(false);
@@ -62,7 +68,12 @@ export default function TestsPage() {
 
   useEffect(() => {
     if (!selectedTestId) return;
-    void fetchTestQuestions(selectedTestId).then(setQuestions);
+    void fetchTestQuestions(selectedTestId)
+      .then(setQuestions)
+      .catch((error) => {
+        notifyError(error instanceof Error ? error.message : "Savollarni olishda xatolik.");
+        setQuestions([]);
+      });
   }, [selectedTestId]);
 
   const visibleQuestions = selectedTestId ? questions : [];
@@ -106,28 +117,39 @@ export default function TestsPage() {
 
   const onCreateTest = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!testValues.lesson_id) {
+      notifyError("Test userga chiqishi uchun dars tanlash majburiy.");
+      return;
+    }
     void createTest({
       title: testValues.title,
       description: testValues.description,
       estimated_minutes: Number(testValues.estimated_minutes) || 10,
       course_id: testValues.course_id || null,
       lesson_id: testValues.lesson_id || null,
-    }).then((item) => {
-      setTests((prev) => [item, ...prev]);
-      setSelectedTestId(item.id);
-      setTestValues({ title: "", description: "", estimated_minutes: "10", course_id: "", lesson_id: "" });
-      notifySuccess("Test yaratildi.");
-    });
+    })
+      .then((item) => {
+        setTests((prev) => [item, ...prev]);
+        setSelectedTestId(item.id);
+        setTestValues({ title: "", description: "", estimated_minutes: "10", course_id: "", lesson_id: "" });
+        notifySuccess("Test yaratildi.");
+      })
+      .catch((error) => {
+        notifyError(error instanceof Error ? error.message : "Test yaratilmadi.");
+      });
   };
 
   const filteredLessons = lessons.filter((item) => {
     if (!testValues.course_id) return true;
-    return item.courseId === testValues.course_id;
+    return item.course_id === testValues.course_id;
   });
 
   const onCreateQuestion = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    if (!selectedTestId) return;
+    if (!selectedTestId) {
+      notifyError("Avval test tanlang.");
+      return;
+    }
     void createTestQuestion(selectedTestId, {
       question_text: qValues.question_text,
       option_a: qValues.option_a,
@@ -135,21 +157,24 @@ export default function TestsPage() {
       option_c: qValues.option_c,
       option_d: qValues.option_d,
       correct_option: qValues.correct_option,
-      order_no: Number(qValues.order_no) || 1,
-    }).then((item) => {
-      setQuestions((prev) => [...prev, item].sort((a, b) => a.order_no - b.order_no));
-      setTests((prev) => prev.map((t) => (t.id === selectedTestId ? { ...t, question_count: t.question_count + 1 } : t)));
-      setQValues({
-        question_text: "",
-        option_a: "",
-        option_b: "",
-        option_c: "",
-        option_d: "",
-        correct_option: "A",
-        order_no: "1",
+      order_no: questions.length + 1,
+    })
+      .then((item) => {
+        setQuestions((prev) => [...prev, item].sort((a, b) => a.order_no - b.order_no));
+        setTests((prev) => prev.map((t) => (t.id === selectedTestId ? { ...t, question_count: t.question_count + 1 } : t)));
+        setQValues({
+          question_text: "",
+          option_a: "",
+          option_b: "",
+          option_c: "",
+          option_d: "",
+          correct_option: "A",
+        });
+        notifySuccess("Savol qo'shildi.");
+      })
+      .catch((error) => {
+        notifyError(error instanceof Error ? error.message : "Savol qo'shilmadi.");
       });
-      notifySuccess("Savol qo'shildi.");
-    });
   };
 
   if (loading) return <PageSkeleton />;
@@ -177,7 +202,7 @@ export default function TestsPage() {
             onChange={(e) => setTestValues((p) => ({ ...p, estimated_minutes: e.target.value }))}
           />
         </div>
-        <div className="grid gap-2 sm:grid-cols-2">
+        <div className="grid gap-2">
           <div className="grid gap-2">
             <Label htmlFor="courseSelect">Kurs tanlash</Label>
             <select
@@ -225,8 +250,20 @@ export default function TestsPage() {
         submitLabel="Savol qo'shish"
       >
         <div className="grid gap-2">
-          <Label htmlFor="selectedTest">Tanlangan test ID</Label>
-          <Input id="selectedTest" value={selectedTestId} onChange={(e) => setSelectedTestId(e.target.value)} />
+          <Label htmlFor="selectedTest">Tanlangan test</Label>
+          <select
+            id="selectedTest"
+            className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm"
+            value={selectedTestId}
+            onChange={(e) => setSelectedTestId(e.target.value)}
+          >
+            <option value="">Test tanlanmagan</option>
+            {tests.map((test) => (
+              <option key={test.id} value={test.id}>
+                {test.title}
+              </option>
+            ))}
+          </select>
         </div>
         <div className="grid gap-2">
           <Label htmlFor="questionText">Savol matni</Label>
@@ -249,7 +286,6 @@ export default function TestsPage() {
             <option value="C">To&apos;g&apos;ri javob: C</option>
             <option value="D">To&apos;g&apos;ri javob: D</option>
           </select>
-          <Input placeholder="Tartib" value={qValues.order_no} onChange={(e) => setQValues((p) => ({ ...p, order_no: e.target.value }))} />
         </div>
       </AppForm>
 
@@ -271,6 +307,8 @@ export default function TestsPage() {
             }
             setDeleteId(null);
             notifySuccess("Test o'chirildi.");
+          }).catch((error) => {
+            notifyError(error instanceof Error ? error.message : "Test o'chirilmadi.");
           });
         }}
       />

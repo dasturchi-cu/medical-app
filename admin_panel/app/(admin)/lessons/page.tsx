@@ -12,14 +12,16 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
-import { adminActions, type Lesson, useAdminStore } from "@/lib/admin-store";
-import { notifySuccess } from "@/lib/notify";
+import { fetchCourses, type CourseItem } from "@/lib/api/courses";
+import { createLesson, fetchLessons, removeLesson, updateLesson, type LessonItem } from "@/lib/api/lessons";
+import { notifyError, notifySuccess } from "@/lib/notify";
 
 export default function LessonsPage() {
-  const { courses, lessons } = useAdminStore((state) => state);
+  const [courses, setCourses] = useState<CourseItem[]>([]);
+  const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [loading, setLoading] = useState(true);
-  const [selectedCourse, setSelectedCourse] = useState(courses[0]?.id ?? "");
-  const [editLesson, setEditLesson] = useState<Lesson | null>(null);
+  const [selectedCourse, setSelectedCourse] = useState("");
+  const [editLesson, setEditLesson] = useState<LessonItem | null>(null);
   const [deleteLessonId, setDeleteLessonId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState({
     title: "",
@@ -35,8 +37,25 @@ export default function LessonsPage() {
   });
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [courseItems, lessonItems] = await Promise.all([fetchCourses(), fetchLessons()]);
+        if (!mounted) return;
+        setCourses(courseItems);
+        setLessons(lessonItems);
+        setSelectedCourse((prev) => prev || courseItems[0]?.id || "");
+      } catch (error) {
+        if (!mounted) return;
+        notifyError(error instanceof Error ? error.message : "Darslarni olishda xatolik.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const selectedCourseData = courses.find((course) => course.id === selectedCourse);
@@ -44,12 +63,12 @@ export default function LessonsPage() {
   const columns = useMemo(
     () => [
       { key: "title", label: "Nomi" },
-      { key: "videoId", label: "videoId (YouTube)" },
+      { key: "videoId", label: "YouTube link yoki video ID" },
       { key: "order", label: "Tartib" },
       {
         key: "isFree",
         label: "Kirish turi",
-        render: (item: Lesson) => (
+        render: (item: LessonRow) => (
           <Badge variant="secondary" className="rounded-lg bg-slate-100 text-slate-700">
             {item.isFree ? "Bepul" : "Pullik"}
           </Badge>
@@ -58,13 +77,15 @@ export default function LessonsPage() {
       {
         key: "actions",
         label: "Amallar",
-        render: (item: Lesson) => (
+        render: (item: LessonRow) => (
           <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               className="h-8 rounded-lg border-slate-200 px-3 text-xs"
               onClick={() => {
-                setEditLesson(item);
+                const source = lessons.find((lesson) => lesson.id === item.id);
+                if (!source) return;
+                setEditLesson(source);
                 setEditValues({
                   title: item.title,
                   videoId: item.videoId,
@@ -82,41 +103,77 @@ export default function LessonsPage() {
         ),
       },
     ],
-    [],
-  );
+    [lessons],
+    );
 
-  const filteredLessons = lessons
-    .filter((lesson) => lesson.courseId === selectedCourse)
-    .sort((a, b) => a.order - b.order);
+  const filteredLessons: LessonRow[] = lessons
+    .filter((lesson) => lesson.course_id === selectedCourse)
+    .sort((a, b) => a.order_no - b.order_no)
+    .map((item) => ({
+      id: item.id,
+      title: item.title,
+      videoId: item.video_url,
+      order: item.order_no,
+      isFree: item.is_free,
+    }));
 
-  const onSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!selectedCourse) {
+      notifyError("Avval kursni tanlang.");
+      return;
+    }
     const lessonOrder = Number(formValues.order);
-    adminActions.addLesson({
-      courseId: selectedCourse,
-      title: formValues.title,
-      videoId: formValues.videoId,
-      order: lessonOrder,
-      module_id: null,
-      isFree: formValues.isFree,
-    });
-    notifySuccess(`${lessonOrder}-chi video muvaffaqiyatli qo'shildi.`);
-    setFormValues((prev) => ({ ...prev, title: "", videoId: "", order: "1", isFree: false }));
+    if (!formValues.title.trim()) {
+      notifyError("Dars nomini kiriting.");
+      return;
+    }
+    if (!Number.isFinite(lessonOrder) || lessonOrder < 1) {
+      notifyError("Dars tartibi 1 yoki undan katta bo'lishi kerak.");
+      return;
+    }
+    try {
+      const created = await createLesson({
+        course_id: selectedCourse,
+        title: formValues.title.trim(),
+        video_url: formValues.videoId.trim(),
+        order_no: lessonOrder,
+        is_free: formValues.isFree,
+      });
+      setLessons((prev) => [...prev, created]);
+      notifySuccess(`${lessonOrder}-chi video muvaffaqiyatli qo'shildi.`);
+      setFormValues((prev) => ({ ...prev, title: "", videoId: "", order: "1", isFree: false }));
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dars qo'shilmadi.");
+    }
   };
 
-  const onEditSubmit = (event: FormEvent<HTMLFormElement>) => {
+  const onEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editLesson) return;
-    adminActions.updateLesson(editLesson.id, {
-      courseId: selectedCourse,
-      title: editValues.title,
-      videoId: editValues.videoId,
-      order: Number(editValues.order),
-      module_id: null,
-      isFree: editValues.isFree,
-    });
-    notifySuccess("Dars muvaffaqiyatli yangilandi.");
-    setEditLesson(null);
+    const lessonOrder = Number(editValues.order);
+    if (!editValues.title.trim()) {
+      notifyError("Dars nomini kiriting.");
+      return;
+    }
+    if (!Number.isFinite(lessonOrder) || lessonOrder < 1) {
+      notifyError("Dars tartibi 1 yoki undan katta bo'lishi kerak.");
+      return;
+    }
+    try {
+      const updated = await updateLesson(editLesson.id, {
+        course_id: selectedCourse || editLesson.course_id,
+        title: editValues.title.trim(),
+        video_url: editValues.videoId.trim(),
+        order_no: lessonOrder,
+        is_free: editValues.isFree,
+      });
+      setLessons((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+      notifySuccess("Dars muvaffaqiyatli yangilandi.");
+      setEditLesson(null);
+    } catch (error) {
+      notifyError(error instanceof Error ? error.message : "Dars yangilanmadi.");
+    }
   };
 
   if (loading) return <PageSkeleton />;
@@ -162,12 +219,12 @@ export default function LessonsPage() {
           </div>
 
           <div className="grid gap-2">
-            <Label htmlFor="videoId">YouTube video kodi - videoId</Label>
+            <Label htmlFor="videoId">YouTube link yoki video ID</Label>
             <Input
               id="videoId"
               value={formValues.videoId}
               onChange={(event) => setFormValues((prev) => ({ ...prev, videoId: event.target.value }))}
-              placeholder="Masalan: ab12CdE"
+              placeholder="Masalan: https://youtu.be/PmRgKMhP_ic yoki PmRgKMhP_ic"
               className="h-11 rounded-xl border-slate-200"
             />
           </div>
@@ -213,7 +270,7 @@ export default function LessonsPage() {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="edit_video">YouTube video kodi</Label>
+            <Label htmlFor="edit_video">YouTube link yoki video ID</Label>
             <Input
               id="edit_video"
               value={editValues.videoId}
@@ -251,13 +308,26 @@ export default function LessonsPage() {
         description="Rostdan ham ushbu darsni o&apos;chirmoqchimisiz?"
         confirmText="Ha, o&apos;chirish"
         onCancel={() => setDeleteLessonId(null)}
-        onConfirm={() => {
+        onConfirm={async () => {
           if (!deleteLessonId) return;
-          adminActions.deleteLesson(deleteLessonId);
-          notifySuccess("Dars muvaffaqiyatli o'chirildi.");
-          setDeleteLessonId(null);
+          try {
+            await removeLesson(deleteLessonId);
+            setLessons((prev) => prev.filter((item) => item.id !== deleteLessonId));
+            notifySuccess("Dars muvaffaqiyatli o'chirildi.");
+            setDeleteLessonId(null);
+          } catch (error) {
+            notifyError(error instanceof Error ? error.message : "Dars o'chirilmadi.");
+          }
         }}
       />
     </section>
   );
+}
+
+interface LessonRow {
+  id: string;
+  title: string;
+  videoId: string;
+  order: number;
+  isFree: boolean;
 }

@@ -1,4 +1,4 @@
-import { getApiConfig } from "@/lib/api/config";
+import { apiFetch, getApiConfig } from "@/lib/api/config";
 
 export interface SlideItem {
   id: string;
@@ -12,11 +12,6 @@ export interface SlideItem {
   created_at: string;
 }
 
-function endpoint(path: string) {
-  const { apiBaseUrl } = getApiConfig();
-  return `${apiBaseUrl}${path}`;
-}
-
 function headers() {
   const { adminApiKey } = getApiConfig();
   return {
@@ -26,7 +21,7 @@ function headers() {
 }
 
 export async function fetchSlides() {
-  const response = await fetch(endpoint("/api/v1/slides"), { cache: "no-store" });
+  const response = await apiFetch("/api/v1/slides", { cache: "no-store" });
   if (!response.ok) throw new Error("Slaydlarni olishda xatolik.");
   const data = (await response.json()) as { items: SlideItem[] };
   return data.items ?? [];
@@ -40,7 +35,7 @@ export async function createSlide(payload: {
   order_no: number;
   course_id?: string | null;
 }) {
-  const response = await fetch(endpoint("/api/v1/slides"), {
+  const response = await apiFetch("/api/v1/slides", {
     method: "POST",
     headers: headers(),
     body: JSON.stringify(payload),
@@ -50,9 +45,30 @@ export async function createSlide(payload: {
 }
 
 export async function deleteSlide(id: string) {
-  const response = await fetch(endpoint(`/api/v1/slides/${id}`), {
+  const response = await apiFetch(`/api/v1/slides/${id}`, {
     method: "DELETE",
     headers: headers(),
   });
   if (!response.ok) throw new Error("Slayd o'chirishda xatolik.");
+}
+
+export async function updateSlide(
+  id: string,
+  payload: Partial<{
+    title: string;
+    subtitle: string;
+    image_url: string;
+    button_text: string;
+    order_no: number;
+    course_id: string | null;
+    is_active: boolean;
+  }>,
+) {
+  const response = await apiFetch(`/api/v1/slides/${id}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error("Slayd yangilashda xatolik.");
+  return (await response.json()) as SlideItem;
 }

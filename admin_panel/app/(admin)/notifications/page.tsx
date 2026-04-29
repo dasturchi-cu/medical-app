@@ -9,15 +9,13 @@ import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { createNotification, fetchNotifications, removeNotification } from "@/lib/api/notifications";
-import { getApiConfig } from "@/lib/api/config";
-import { adminActions, getAdminState, type NotificationCampaign, useAdminStore } from "@/lib/admin-store";
-import { notifySuccess } from "@/lib/notify";
+import { createNotification, fetchNotifications, removeNotification, type NotificationCampaign } from "@/lib/api/notifications";
+import { fetchUsers } from "@/lib/api/users";
+import { notifyError, notifySuccess } from "@/lib/notify";
 
 export default function NotificationsPage() {
-  const store = useAdminStore((state) => state);
-  const { users } = store;
-  const [notifications, setNotifications] = useState<NotificationCampaign[]>(store.notifications);
+  const [notifications, setNotifications] = useState<NotificationCampaign[]>([]);
+  const [totalUsers, setTotalUsers] = useState(0);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState({
@@ -29,17 +27,15 @@ export default function NotificationsPage() {
   useEffect(() => {
     let mounted = true;
     const load = async () => {
-      if (!getApiConfig().isConfigured) {
-        setNotifications(getAdminState().notifications);
-        setLoading(false);
-        return;
-      }
       try {
-        const items = await fetchNotifications();
-        if (mounted) setNotifications(items);
+        const [items, users] = await Promise.all([fetchNotifications(), fetchUsers()]);
+        if (mounted) {
+          setNotifications(items);
+          setTotalUsers(users.length);
+        }
       } catch (error) {
-        console.error(error);
-        if (mounted) setNotifications(getAdminState().notifications);
+        if (mounted) setNotifications([]);
+        notifyError(error instanceof Error ? error.message : "Notificationlarni olishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -55,12 +51,12 @@ export default function NotificationsPage() {
     const totalViewed = notifications.reduce((sum, item) => sum + item.viewed_count, 0);
     const avgViewRate = totalSent > 0 ? (totalViewed / totalSent) * 100 : 0;
     return {
-      totalUsers: users.length,
+      totalUsers,
       sentCampaigns: notifications.length,
       totalSent,
       avgViewRate,
     };
-  }, [notifications, users.length]);
+  }, [notifications, totalUsers]);
 
   const columns = useMemo(
     () => [
@@ -98,25 +94,16 @@ export default function NotificationsPage() {
     event.preventDefault();
     const submit = async () => {
       try {
-        if (getApiConfig().isConfigured) {
-          const item = await createNotification({
-            title: formValues.title,
-            message: formValues.message,
-            image: formValues.image,
-          });
-          setNotifications((prev) => [item, ...prev]);
-        } else {
-          adminActions.sendNotification({
-            title: formValues.title,
-            message: formValues.message,
-            image: formValues.image,
-          });
-          setNotifications(getAdminState().notifications);
-        }
+        const item = await createNotification({
+          title: formValues.title,
+          message: formValues.message,
+          image: formValues.image,
+        });
+        setNotifications((prev) => [item, ...prev]);
         notifySuccess("Notification muvaffaqiyatli yuborildi.");
         setFormValues({ title: "", message: "", image: "" });
       } catch (error) {
-        console.error(error);
+        notifyError(error instanceof Error ? error.message : "Notification yuborilmadi.");
       }
     };
     void submit();
@@ -128,7 +115,7 @@ export default function NotificationsPage() {
     <section className="admin-page">
       <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         <StatCard label="Jami foydalanuvchi" value={String(stats.totalUsers)} />
-        <StatCard label="Yuborilgan kampaniya" value={String(stats.sentCampaigns)} />
+        <StatCard label="Yuborilgan va bor notificationlar" value={String(stats.sentCampaigns)} />
         <StatCard label="Jami yuborilgan notification" value={String(stats.totalSent)} />
         <StatCard label="O'rtacha ko'rish foizi" value={`${stats.avgViewRate.toFixed(1)}%`} />
       </div>
@@ -179,17 +166,12 @@ export default function NotificationsPage() {
           const submitDelete = async () => {
             if (!deleteId) return;
             try {
-              if (getApiConfig().isConfigured) {
-                await removeNotification(deleteId);
-                setNotifications((prev) => prev.filter((item) => item.id !== deleteId));
-              } else {
-                adminActions.deleteNotification(deleteId);
-                setNotifications(getAdminState().notifications);
-              }
+              await removeNotification(deleteId);
+              setNotifications((prev) => prev.filter((item) => item.id !== deleteId));
               notifySuccess("Notification tarixi o'chirildi.");
               setDeleteId(null);
             } catch (error) {
-              console.error(error);
+              notifyError(error instanceof Error ? error.message : "Notification o'chirilmadi.");
             }
           };
           void submitDelete();

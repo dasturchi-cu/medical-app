@@ -1,5 +1,14 @@
-import type { NotificationCampaign } from "@/lib/admin-store";
-import { getApiConfig } from "@/lib/api/config";
+import { apiFetch, getApiConfig } from "@/lib/api/config";
+
+export interface NotificationCampaign {
+  id: string;
+  title: string;
+  message: string;
+  image: string;
+  sent_at: string;
+  recipients_count: number;
+  viewed_count: number;
+}
 
 interface NotificationApiResponse {
   id: string;
@@ -31,24 +40,28 @@ function headers(): HeadersInit {
   };
 }
 
-function endpoint(path: string) {
-  const { apiBaseUrl } = getApiConfig();
-  return `${apiBaseUrl}${path}`;
+async function parseError(response: Response, fallback: string) {
+  try {
+    const payload = (await response.json()) as { detail?: string };
+    return payload.detail?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
 }
 
 export async function fetchNotifications(): Promise<NotificationCampaign[]> {
-  const response = await fetch(endpoint("/api/v1/notifications"), {
+  const response = await apiFetch("/api/v1/notifications", {
     method: "GET",
     headers: headers(),
     cache: "no-store",
   });
-  if (!response.ok) throw new Error("Notificationlarni olishda xatolik yuz berdi.");
+  if (!response.ok) throw new Error(await parseError(response, "Notificationlarni olishda xatolik yuz berdi."));
   const payload = (await response.json()) as { items: NotificationApiResponse[] };
   return (payload.items ?? []).map(toCampaign);
 }
 
 export async function createNotification(payload: { title: string; message: string; image: string }) {
-  const response = await fetch(endpoint("/api/v1/notifications"), {
+  const response = await apiFetch("/api/v1/notifications", {
     method: "POST",
     headers: headers(),
     body: JSON.stringify({
@@ -57,15 +70,15 @@ export async function createNotification(payload: { title: string; message: stri
       image_url: payload.image.trim(),
     }),
   });
-  if (!response.ok) throw new Error("Notification yuborishda xatolik yuz berdi.");
+  if (!response.ok) throw new Error(await parseError(response, "Notification yuborishda xatolik yuz berdi."));
   const data = (await response.json()) as { item: NotificationApiResponse };
   return toCampaign(data.item);
 }
 
 export async function removeNotification(id: string) {
-  const response = await fetch(endpoint(`/api/v1/notifications/${id}`), {
+  const response = await apiFetch(`/api/v1/notifications/${id}`, {
     method: "DELETE",
     headers: headers(),
   });
-  if (!response.ok) throw new Error("Notificationni o'chirishda xatolik yuz berdi.");
+  if (!response.ok) throw new Error(await parseError(response, "Notificationni o'chirishda xatolik yuz berdi."));
 }

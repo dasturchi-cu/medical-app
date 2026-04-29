@@ -5,7 +5,6 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/auth_controller.dart';
 import '../../../../core/services/telegram_service.dart';
-import '../../../../core/state/purchase_controller.dart';
 
 Future<void> showPurchaseModal({
   required BuildContext context,
@@ -141,14 +140,11 @@ class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
                             final opened = await _telegramService.openTelegram(
                               courseName: widget.courseName,
                               userId: auth.userId!,
+                              courseId: widget.courseId,
+                              userName: auth.name,
+                              userPhone: auth.email,
                             );
                             if (!context.mounted) return;
-
-                            if (opened && widget.courseId != null) {
-                              ref
-                                  .read(purchaseControllerProvider.notifier)
-                                  .purchaseCourse(widget.courseId!);
-                            }
 
                             setState(() => _loading = false);
                             Navigator.of(context).pop();
@@ -156,7 +152,7 @@ class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
                               SnackBar(
                                 content: Text(
                                   opened
-                                      ? 'Telegram chat ochildi'
+                                      ? 'So‘rov yuborildi. Kurs admin tasdiqlagandan keyin ochiladi.'
                                       : 'Telegram havolasini ochib bo‘lmadi',
                                 ),
                               ),

@@ -6,18 +6,37 @@ import { PageSkeleton } from "@/components/page-skeleton";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { adminActions, useAdminStore } from "@/lib/admin-store";
-import { notifySuccess } from "@/lib/notify";
+import { fetchCourses } from "@/lib/api/courses";
+import { blockUser, fetchUsers, grantCourse, type AdminUserItem, unblockUser } from "@/lib/api/users";
+import { notifyError, notifySuccess } from "@/lib/notify";
 
 export default function UsersPage() {
-  const { users, courses } = useAdminStore((state) => state);
+  const [users, setUsers] = useState<AdminUserItem[]>([]);
+  const [courses, setCourses] = useState<Array<{ id: string; title_uz: string }>>([]);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
-  const [selectedCourse, setSelectedCourse] = useState(courses[0]?.id ?? "");
+  const [selectedCourse, setSelectedCourse] = useState("");
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 500);
-    return () => clearTimeout(timer);
+    let mounted = true;
+    const load = async () => {
+      try {
+        const [usersItems, coursesItems] = await Promise.all([fetchUsers(), fetchCourses()]);
+        if (!mounted) return;
+        setUsers(usersItems);
+        setCourses(coursesItems.map((item) => ({ id: item.id, title_uz: item.title_uz })));
+        setSelectedCourse(coursesItems[0]?.id ?? "");
+      } catch (error) {
+        if (!mounted) return;
+        notifyError(error instanceof Error ? error.message : "Foydalanuvchilarni olishda xatolik.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const filteredUsers = useMemo(
@@ -58,9 +77,14 @@ export default function UsersPage() {
             <Button
               variant="destructive"
               className="h-8 rounded-lg px-3 text-xs"
-              onClick={() => {
-                adminActions.blockUser(user.id);
-                notifySuccess("Foydalanuvchi bloklandi.");
+              onClick={async () => {
+                try {
+                  await blockUser(user.id);
+                  setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, is_blocked: true } : u)));
+                  notifySuccess("Foydalanuvchi bloklandi.");
+                } catch (error) {
+                  notifyError(error instanceof Error ? error.message : "Bloklashda xatolik.");
+                }
               }}
               disabled={user.is_blocked}
             >
@@ -69,9 +93,14 @@ export default function UsersPage() {
             <Button
               variant="outline"
               className="h-8 rounded-lg border-slate-200 px-3 text-xs"
-              onClick={() => {
-                adminActions.unblockUser(user.id);
-                notifySuccess("Foydalanuvchi blokdan chiqarildi.");
+              onClick={async () => {
+                try {
+                  await unblockUser(user.id);
+                  setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, is_blocked: false } : u)));
+                  notifySuccess("Foydalanuvchi blokdan chiqarildi.");
+                } catch (error) {
+                  notifyError(error instanceof Error ? error.message : "Unblockda xatolik.");
+                }
               }}
               disabled={!user.is_blocked}
             >
@@ -79,13 +108,17 @@ export default function UsersPage() {
             </Button>
             <Button
               className="h-8 rounded-lg bg-primary px-3 text-xs text-white"
-              onClick={() => {
-                adminActions.grantCourse(
-                  user.id,
-                  selectedCourse,
-                  null,
-                );
-                notifySuccess("Foydalanuvchiga kurs muvaffaqiyatli berildi.");
+              onClick={async () => {
+                if (!selectedCourse) {
+                  notifyError("Avval kurs tanlang.");
+                  return;
+                }
+                try {
+                  await grantCourse(user.id, selectedCourse);
+                  notifySuccess("Foydalanuvchiga kurs muvaffaqiyatli berildi.");
+                } catch (error) {
+                  notifyError(error instanceof Error ? error.message : "Kurs berishda xatolik.");
+                }
               }}
             >
               Kurs berish

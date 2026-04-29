@@ -10,5 +10,6 @@ final courseCommentsFeedProvider = StreamProvider.family<List<AppCommentItem>, (
   return ref.read(commentsRepositoryProvider).watchComments(
     courseKey: args.courseKey,
     userId: args.userId,
+    pollInterval: const Duration(seconds: 3),
   );
 });

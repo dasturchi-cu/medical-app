@@ -1,4 +1,5 @@
 from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
+from uuid import UUID
 
 from ..config import Settings, get_settings
 from ..db import get_supabase_client
@@ -29,8 +30,9 @@ def _require_admin_key(
 
 
 @router.get("", response_model=QuizListResponse)
-def get_tests(lesson_id: str | None = Query(default=None)):
-    return QuizListResponse(items=list_quizzes(get_supabase_client(), lesson_id=lesson_id))
+def get_tests(lesson_id: UUID | None = Query(default=None)):
+    lesson_filter = str(lesson_id) if lesson_id else None
+    return QuizListResponse(items=list_quizzes(get_supabase_client(), lesson_id=lesson_filter))
 
 
 @router.get("/{quiz_id}", response_model=QuizItem)

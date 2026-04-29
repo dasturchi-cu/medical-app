@@ -16,10 +16,18 @@ import '../../features/quiz/presentation/pages/quiz_page.dart';
 import '../../features/quiz/presentation/pages/result_page.dart';
 import '../../widgets/app_bottom_nav.dart';
 import '../router/app_routes.dart';
+import '../state/auth_controller.dart';
 
 final appRouterProvider = Provider<GoRouter>((ref) {
+  final auth = ref.watch(authControllerProvider);
   return GoRouter(
     initialLocation: AppRoutes.home,
+    redirect: (context, state) {
+      if (auth.isBlocked && state.uri.path != AppRoutes.login) {
+        return AppRoutes.login;
+      }
+      return null;
+    },
     routes: [
       GoRoute(
         path: AppRoutes.login,

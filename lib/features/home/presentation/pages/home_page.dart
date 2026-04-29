@@ -1,4 +1,6 @@
 import 'dart:async';
+import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -7,9 +9,9 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
-import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
+import '../../../../core/state/banners_state.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../core/state/slides_state.dart';
 import '../../../../core/theme/design_system.dart';
@@ -66,6 +68,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     final repo = ref.watch(courseRepositoryProvider);
     final allCourses = repo.getCourses();
     final slidesAsync = ref.watch(slidesFeedProvider);
+    final bannersAsync = ref.watch(bannersFeedProvider);
     final remoteSlides = slidesAsync.valueOrNull ?? const [];
     final slideItems = remoteSlides.isNotEmpty
         ? remoteSlides
@@ -77,15 +80,20 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
             )
             .toList(growable: false)
-        : List.generate(
-            MockData.homeSlidesUz.length,
-            (index) => (
-              title: MockData.homeSlidesUz[index],
-              courseId: MockData.bannerCourseIds[index],
-              buttonText: 'Boshlash',
-            ),
-          );
-    _slideCount = slideItems.isEmpty ? 1 : slideItems.length;
+        : allCourses
+            .take(3)
+            .map(
+              (course) => (
+                title: course.titleUz,
+                courseId: course.id,
+                buttonText: 'Boshlash',
+              ),
+            )
+            .toList(growable: false);
+    final effectiveSlides = slideItems.isEmpty
+        ? [(title: "Hozircha slayd yo'q", courseId: '', buttonText: 'Kutilmoqda')]
+        : slideItems;
+    _slideCount = effectiveSlides.length;
     final courses = allCourses.where((c) {
       final matchesCategory = switch (selectedCat) {
         'cat_books' => false,
@@ -98,6 +106,52 @@ class _HomePageState extends ConsumerState<HomePage> {
       return c.titleUz.toLowerCase().contains(query) ||
           c.authorUz.toLowerCase().contains(query);
     }).toList();
+    final remoteBanners = bannersAsync.valueOrNull ?? const [];
+    final courseIdByTitle = <String, String>{
+      for (final course in allCourses) course.titleUz.trim().toLowerCase(): course.id,
+    };
+    final newsItems = remoteBanners.isNotEmpty
+        ? remoteBanners
+            .map(
+              (banner) {
+                final resolvedCourseId = (banner.courseId ?? '').trim().isNotEmpty
+                    ? (banner.courseId ?? '').trim()
+                    : (courseIdByTitle[banner.title.trim().toLowerCase()] ?? '');
+                return _NewsItem(
+                  titleUz: banner.title,
+                  summaryUz: banner.message.isEmpty
+                      ? 'Kurs bo\'yicha reklama'
+                      : banner.message,
+                  relatedCourseId: resolvedCourseId,
+                  imageUrl: banner.imageUrl.isEmpty
+                      ? 'https://picsum.photos/seed/${banner.id}/600/320'
+                      : banner.imageUrl,
+                  rating: 0,
+                  commentCount: 0,
+                  priceText: banner.priceLabel.isEmpty
+                      ? "299 000 so'm"
+                      : banner.priceLabel,
+                );
+              },
+            )
+            .toList(growable: false)
+        : allCourses
+            .where((c) => c.categoryId == 'cat_online')
+            .take(8)
+            .map(
+              (course) => _NewsItem(
+                titleUz: course.titleUz,
+                summaryUz: course.descriptionUz.isEmpty
+                    ? '${course.authorUz} kursi haqida qisqacha ma\'lumot.'
+                    : course.descriptionUz,
+                relatedCourseId: course.id,
+                imageUrl: 'https://picsum.photos/seed/${course.id}/600/320',
+                rating: course.rating,
+                commentCount: 0,
+                priceText: course.priceUz,
+              ),
+            )
+            .toList(growable: false);
     final progress = ref.watch(progressControllerProvider);
 
     return SafeArea(
@@ -159,9 +213,9 @@ class _HomePageState extends ConsumerState<HomePage> {
               height: 154,
               child: PageView.builder(
                 controller: _pageController,
-                itemCount: slideItems.length,
+                itemCount: effectiveSlides.length,
                 itemBuilder: (context, index) {
-                  final courseId = slideItems[index].courseId;
+                  final courseId = effectiveSlides[index].courseId;
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: InkWell(
@@ -217,7 +271,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                     ),
                                     const SizedBox(height: AppSpacing.s8),
                                     Text(
-                                      slideItems[index].title,
+                                      effectiveSlides[index].title,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: Theme.of(context)
@@ -261,7 +315,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                           );
                                         },
                                         child: Text(
-                                          slideItems[index].buttonText,
+                                          effectiveSlides[index].buttonText,
                                           style: TextStyle(
                                             fontWeight: FontWeight.w700,
                                           ),
@@ -281,23 +335,24 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
             ),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.only(top: 10),
-              child: Center(
-                child: SmoothPageIndicator(
-                  controller: _pageController,
-                  count: slideItems.length,
-                  effect: WormEffect(
-                    dotWidth: 8,
-                    dotHeight: 8,
-                    activeDotColor: const Color(0xFF1E6BB8),
-                    dotColor: Colors.black.withValues(alpha: 0.14),
+          if (effectiveSlides.length > 1)
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.only(top: 10),
+                child: Center(
+                  child: SmoothPageIndicator(
+                    controller: _pageController,
+                    count: effectiveSlides.length,
+                    effect: WormEffect(
+                      dotWidth: 8,
+                      dotHeight: 8,
+                      activeDotColor: const Color(0xFF1E6BB8),
+                      dotColor: Colors.black.withValues(alpha: 0.14),
+                    ),
                   ),
                 ),
               ),
             ),
-          ),
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
@@ -367,14 +422,20 @@ class _HomePageState extends ConsumerState<HomePage> {
                 child: ListView.separated(
                   scrollDirection: Axis.horizontal,
                   padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                  itemCount: MockData.newsFeed.length,
+                  itemCount: newsItems.length,
                   separatorBuilder: (_, index) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
-                    final news = MockData.newsFeed[index];
+                    final news = newsItems[index];
                     final relatedCourse = repo.getCourseById(news.relatedCourseId);
                     return _NewsCard(
                       item: news,
                       onCommentsTap: () {
+                        if (news.relatedCourseId.trim().isEmpty) {
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            const SnackBar(content: Text('Bu reklama kursga ulanmagan.')),
+                          );
+                          return;
+                        }
                         showModalBottomSheet(
                           context: context,
                           isScrollControlled: true,
@@ -390,8 +451,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                           context: context,
                           courseName: news.titleUz,
                           description: news.summaryUz,
-                          price: relatedCourse?.priceUz ?? "299 000 so'm",
-                          courseId: news.relatedCourseId,
+                          price: relatedCourse?.priceUz ?? news.priceText,
+                          courseId: news.relatedCourseId.isEmpty
+                              ? null
+                              : news.relatedCourseId,
                         );
                       },
                     );
@@ -522,7 +585,7 @@ class _NewsCard extends StatelessWidget {
     required this.onBuyTap,
   });
 
-  final NewsItem item;
+  final _NewsItem item;
   final VoidCallback onCommentsTap;
   final VoidCallback onBuyTap;
 
@@ -547,6 +610,10 @@ class _NewsCard extends StatelessWidget {
                 item.imageUrl,
                 fit: BoxFit.cover,
                 errorBuilder: (context, error, stackTrace) {
+                  final dataImage = _decodeDataImage(item.imageUrl);
+                  if (dataImage != null) {
+                    return Image.memory(dataImage, fit: BoxFit.cover);
+                  }
                   return Container(
                     color: const Color(0xFFE7EEF9),
                     child: const Center(
@@ -630,5 +697,36 @@ class _NewsCard extends StatelessWidget {
         ),
       ),
     );
+  }
+}
+
+class _NewsItem {
+  const _NewsItem({
+    required this.titleUz,
+    required this.summaryUz,
+    required this.relatedCourseId,
+    required this.imageUrl,
+    required this.rating,
+    required this.commentCount,
+    required this.priceText,
+  });
+
+  final String titleUz;
+  final String summaryUz;
+  final String relatedCourseId;
+  final String imageUrl;
+  final double rating;
+  final int commentCount;
+  final String priceText;
+}
+
+Uint8List? _decodeDataImage(String value) {
+  if (!value.startsWith('data:image')) return null;
+  final commaIndex = value.indexOf(',');
+  if (commaIndex < 0 || commaIndex >= value.length - 1) return null;
+  try {
+    return base64Decode(value.substring(commaIndex + 1));
+  } catch (_) {
+    return null;
   }
 }

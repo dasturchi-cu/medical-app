@@ -1,37 +1,48 @@
 "use client";
 
-import { useMemo, useState } from "react";
-import { useAdminStore } from "@/lib/admin-store";
+import { useEffect, useMemo, useState } from "react";
+import { fetchSubscriptionsOverview, type CourseSubscriptionItem } from "@/lib/api/subscriptions";
+import { notifyError } from "@/lib/notify";
 
 export default function SubscriptionsPage() {
-  const { courses, users, userCourses } = useAdminStore((state) => state);
-  const [selectedCourse, setSelectedCourse] = useState(courses[0]?.id ?? "");
+  const [loading, setLoading] = useState(true);
+  const [items, setItems] = useState<CourseSubscriptionItem[]>([]);
+  const [totalCourseSales, setTotalCourseSales] = useState(0);
+  const [totalUniqueBuyers, setTotalUniqueBuyers] = useState(0);
+  const [selectedCourse, setSelectedCourse] = useState("");
 
-  const activeRelations = useMemo(
-    () => userCourses.filter((item) => item.is_active),
-    [userCourses],
-  );
-  const totalUniqueBuyers = useMemo(
-    () => new Set(activeRelations.map((item) => item.user_id)).size,
-    [activeRelations],
-  );
-  const totalCourseSales = activeRelations.length;
+  useEffect(() => {
+    let mounted = true;
+    const load = async () => {
+      try {
+        const overview = await fetchSubscriptionsOverview();
+        if (!mounted) return;
+        setItems(overview.items ?? []);
+        setTotalCourseSales(Number(overview.total_course_sales) || 0);
+        setTotalUniqueBuyers(Number(overview.total_unique_buyers) || 0);
+        setSelectedCourse((overview.items?.[0]?.course_id ?? ""));
+      } catch (error) {
+        if (!mounted) return;
+        notifyError(error instanceof Error ? error.message : "Obunalarni olishda xatolik.");
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
-  const selectedCourseEntry = courses.find((course) => course.id === selectedCourse);
-  const selectedCourseBuyers = useMemo(
-    () =>
-      activeRelations
-        .filter((item) => item.course_id === selectedCourse)
-        .map((relation) => ({
-          relation,
-          user: users.find((user) => user.id === relation.user_id),
-        }))
-        .filter(
-          (entry): entry is { relation: (typeof activeRelations)[number]; user: (typeof users)[number] } =>
-            Boolean(entry.user),
-        ),
-    [activeRelations, selectedCourse, users],
+  const selectedCourseEntry = useMemo(
+    () => items.find((course) => course.course_id === selectedCourse),
+    [items, selectedCourse],
   );
+  const selectedCourseBuyers = selectedCourseEntry?.buyers ?? [];
+
+  if (loading) {
+    return <section className="admin-page"><p className="text-sm text-slate-500">Yuklanmoqda...</p></section>;
+  }
 
   return (
     <section className="admin-page">
@@ -59,9 +70,9 @@ export default function SubscriptionsPage() {
             onChange={(event) => setSelectedCourse(event.target.value)}
             className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
           >
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.title_uz}
+            {items.map((course) => (
+              <option key={course.course_id} value={course.course_id}>
+                {course.course_title}
               </option>
             ))}
           </select>
@@ -70,7 +81,7 @@ export default function SubscriptionsPage() {
         <div className="rounded-xl bg-slate-50 p-3 text-sm text-slate-700">
           {selectedCourseEntry ? (
             <span>
-              <strong>{selectedCourseEntry.title_uz}</strong> kursi uchun <strong>{selectedCourseBuyers.length}</strong> ta foydalanuvchi obuna olgan.
+              <strong>{selectedCourseEntry.course_title}</strong> kursi uchun <strong>{selectedCourseBuyers.length}</strong> ta foydalanuvchi obuna olgan.
             </span>
           ) : (
             <span>Kurs tanlanmagan.</span>
@@ -79,12 +90,12 @@ export default function SubscriptionsPage() {
 
         <div className="space-y-2">
           {selectedCourseBuyers.length > 0 ? (
-            selectedCourseBuyers.map(({ relation, user }) => (
-              <article key={`${user.id}-${relation.course_id}`} className="rounded-xl border border-slate-100 bg-white p-3">
-                <p className="font-medium text-slate-800">{user.name}</p>
-                <p className="text-sm text-slate-500">{user.email}</p>
+            selectedCourseBuyers.map((buyer) => (
+              <article key={`${buyer.user_id}-${selectedCourseEntry?.course_id}`} className="rounded-xl border border-slate-100 bg-white p-3">
+                <p className="font-medium text-slate-800">{buyer.user_name}</p>
+                <p className="text-sm text-slate-500">{buyer.user_email}</p>
                 <p className="mt-1 text-xs text-slate-500">
-                  Sotib olgan sana: {relation.purchased_at || "Qo&apos;lda ochilgan"}
+                  Sotib olgan sana: {buyer.purchased_at || "Qo&apos;lda ochilgan"}
                 </p>
               </article>
             ))

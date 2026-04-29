@@ -6,9 +6,23 @@ class TelegramService {
   Future<bool> openTelegram({
     required String courseName,
     required String userId,
+    String? courseId,
+    String? userName,
+    String? userPhone,
   }) async {
-    final message =
-        'Salom, men kurs sotib olmoqchiman. ID: $userId. Kurs: "$courseName"';
+    final normalizedCourseId = (courseId ?? '').trim().isEmpty ? 'noma\'lum' : courseId!.trim();
+    final normalizedName = (userName ?? '').trim().isEmpty ? '-' : userName!.trim();
+    final normalizedPhone = (userPhone ?? '').trim().isEmpty ? '-' : userPhone!.trim();
+    final message = '''
+Salom admin.
+Menga shu kursni ochib bering, iltimos.
+
+User ID: $userId
+Ism: $normalizedName
+Telefon: $normalizedPhone
+Kurs ID: $normalizedCourseId
+Kurs nomi: "$courseName"
+''';
     final encoded = Uri.encodeComponent(message);
     final appUri = Uri.parse(
       'tg://resolve?domain=$_adminUsername&text=$encoded',

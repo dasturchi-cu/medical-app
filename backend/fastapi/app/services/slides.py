@@ -1,11 +1,14 @@
 from __future__ import annotations
 
+import logging
 from datetime import datetime
 from typing import Any
 
 from supabase import Client
 
 from ..schemas.slides import SlideCreate, SlideItem, SlideUpdate
+
+logger = logging.getLogger(__name__)
 
 
 def _to_item(row: dict[str, Any]) -> SlideItem:
@@ -30,11 +33,15 @@ def _to_item(row: dict[str, Any]) -> SlideItem:
 
 
 def list_slides(client: Client, *, active_only: bool = False) -> list[SlideItem]:
-    query = client.table("home_slides").select("*").order("order_no", desc=False)
-    if active_only:
-        query = query.eq("is_active", True)
-    response = query.execute()
-    return [_to_item(row) for row in (response.data or [])]
+    try:
+        query = client.table("home_slides").select("*").order("order_no", desc=False)
+        if active_only:
+            query = query.eq("is_active", True)
+        response = query.execute()
+        return [_to_item(row) for row in (response.data or [])]
+    except Exception as error:
+        logger.warning("Failed to list slides from Supabase: %s", error)
+        return []
 
 
 def create_slide(client: Client, payload: SlideCreate) -> SlideItem:
