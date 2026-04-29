@@ -11,8 +11,10 @@ const titleByPath: Record<string, string> = {
   "/lessons": "Darslar",
   "/banners": "Reklamalar",
   "/home-banners": "Home reklamalari",
+  "/slides": "Slaydlar",
   "/subscriptions": "Kurs obunalari",
   "/notifications": "Notification markazi",
+  "/tests": "Testlar",
   "/users": "Foydalanuvchilar",
   "/comments": "Izohlar va reytinglar",
 };

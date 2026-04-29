@@ -9,11 +9,15 @@ import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { adminActions, type NotificationCampaign, useAdminStore } from "@/lib/admin-store";
+import { createNotification, fetchNotifications, removeNotification } from "@/lib/api/notifications";
+import { getApiConfig } from "@/lib/api/config";
+import { adminActions, getAdminState, type NotificationCampaign, useAdminStore } from "@/lib/admin-store";
 import { notifySuccess } from "@/lib/notify";
 
 export default function NotificationsPage() {
-  const { notifications, users } = useAdminStore((state) => state);
+  const store = useAdminStore((state) => state);
+  const { users } = store;
+  const [notifications, setNotifications] = useState<NotificationCampaign[]>(store.notifications);
   const [loading, setLoading] = useState(true);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState({
@@ -23,8 +27,27 @@ export default function NotificationsPage() {
   });
 
   useEffect(() => {
-    const timer = setTimeout(() => setLoading(false), 450);
-    return () => clearTimeout(timer);
+    let mounted = true;
+    const load = async () => {
+      if (!getApiConfig().isConfigured) {
+        setNotifications(getAdminState().notifications);
+        setLoading(false);
+        return;
+      }
+      try {
+        const items = await fetchNotifications();
+        if (mounted) setNotifications(items);
+      } catch (error) {
+        console.error(error);
+        if (mounted) setNotifications(getAdminState().notifications);
+      } finally {
+        if (mounted) setLoading(false);
+      }
+    };
+    void load();
+    return () => {
+      mounted = false;
+    };
   }, []);
 
   const stats = useMemo(() => {
@@ -73,13 +96,30 @@ export default function NotificationsPage() {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    adminActions.sendNotification({
-      title: formValues.title,
-      message: formValues.message,
-      image: formValues.image,
-    });
-    notifySuccess("Notification muvaffaqiyatli yuborildi.");
-    setFormValues({ title: "", message: "", image: "" });
+    const submit = async () => {
+      try {
+        if (getApiConfig().isConfigured) {
+          const item = await createNotification({
+            title: formValues.title,
+            message: formValues.message,
+            image: formValues.image,
+          });
+          setNotifications((prev) => [item, ...prev]);
+        } else {
+          adminActions.sendNotification({
+            title: formValues.title,
+            message: formValues.message,
+            image: formValues.image,
+          });
+          setNotifications(getAdminState().notifications);
+        }
+        notifySuccess("Notification muvaffaqiyatli yuborildi.");
+        setFormValues({ title: "", message: "", image: "" });
+      } catch (error) {
+        console.error(error);
+      }
+    };
+    void submit();
   };
 
   if (loading) return <PageSkeleton />;
@@ -136,10 +176,23 @@ export default function NotificationsPage() {
         confirmText="Ha, o&apos;chirish"
         onCancel={() => setDeleteId(null)}
         onConfirm={() => {
-          if (!deleteId) return;
-          adminActions.deleteNotification(deleteId);
-          notifySuccess("Notification tarixi o'chirildi.");
-          setDeleteId(null);
+          const submitDelete = async () => {
+            if (!deleteId) return;
+            try {
+              if (getApiConfig().isConfigured) {
+                await removeNotification(deleteId);
+                setNotifications((prev) => prev.filter((item) => item.id !== deleteId));
+              } else {
+                adminActions.deleteNotification(deleteId);
+                setNotifications(getAdminState().notifications);
+              }
+              notifySuccess("Notification tarixi o'chirildi.");
+              setDeleteId(null);
+            } catch (error) {
+              console.error(error);
+            }
+          };
+          void submitDelete();
         }}
       />
     </section>

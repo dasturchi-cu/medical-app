@@ -4,7 +4,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../core/state/auth_controller.dart';
-import '../core/state/comments_controller.dart';
+import '../core/di/providers.dart';
+import '../core/state/comments_state.dart';
 import '../core/state/progress_controller.dart';
 
 class CourseStatsCommentsSheet extends ConsumerStatefulWidget {
@@ -32,8 +33,11 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
 
   @override
   Widget build(BuildContext context) {
-    final comments = ref.watch(courseCommentsProvider(widget.courseId));
     final auth = ref.watch(authControllerProvider);
+    final userId = auth.userId ?? '';
+    final commentsAsync = ref.watch(
+      courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
+    );
     final progress = ref.watch(progressControllerProvider).byCourseId[widget.courseId];
 
     final enrolled = 120 + (widget.courseId.hashCode.abs() % 480);
@@ -92,43 +96,74 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             const SizedBox(height: 8),
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 260),
-              child: ListView.separated(
-                shrinkWrap: true,
-                itemCount: max(1, comments.length),
-                separatorBuilder: (_, index) => const SizedBox(height: 8),
-                itemBuilder: (context, i) {
-                  if (comments.isEmpty) {
-                    return Text(
-                      'Hozircha izoh yo‘q',
-                      style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                            color: Colors.black54,
-                          ),
-                    );
-                  }
-                  final c = comments[i];
-                  return Card(
-                    margin: EdgeInsets.zero,
-                    child: Padding(
-                      padding: const EdgeInsets.all(12),
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            c.authorUz,
-                            style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                  fontWeight: FontWeight.w900,
+              child: commentsAsync.when(
+                loading: () => const Center(child: CircularProgressIndicator()),
+                error: (_, _) => const Center(child: Text('Izohlarni yuklashda xatolik.')),
+                data: (comments) => ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: max(1, comments.length),
+                  separatorBuilder: (_, index) => const SizedBox(height: 8),
+                  itemBuilder: (context, i) {
+                    if (comments.isEmpty) {
+                      return Text(
+                        'Hozircha izoh yo‘q',
+                        style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                              color: Colors.black54,
+                            ),
+                      );
+                    }
+                    final c = comments[i];
+                    return Card(
+                      margin: EdgeInsets.zero,
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              c.authorName,
+                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
+                                    fontWeight: FontWeight.w900,
+                                  ),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              c.text,
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                            const SizedBox(height: 8),
+                            Row(
+                              children: [
+                                IconButton(
+                                  onPressed: userId.isEmpty
+                                      ? null
+                                      : () async {
+                                          await ref.read(commentsRepositoryProvider).toggleLike(
+                                            commentId: c.id,
+                                            userId: userId,
+                                          );
+                                          ref.invalidate(
+                                            courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
+                                          );
+                                        },
+                                  icon: Icon(
+                                    c.likedByMe ? Icons.favorite : Icons.favorite_border,
+                                    size: 18,
+                                    color: c.likedByMe ? Colors.red : Colors.black54,
+                                  ),
+                                  visualDensity: VisualDensity.compact,
+                                  padding: EdgeInsets.zero,
                                 ),
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            c.textUz,
-                            style: Theme.of(context).textTheme.bodyMedium,
-                          ),
-                        ],
+                                const SizedBox(width: 4),
+                                Text('${c.likesCount}'),
+                              ],
+                            ),
+                          ],
+                        ),
                       ),
-                    ),
-                  );
-                },
+                    );
+                  },
+                ),
               ),
             ),
             const SizedBox(height: 10),
@@ -154,10 +189,22 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                       ),
                     ),
                     onPressed: () {
+                      final text = _controller.text.trim();
+                      if (text.isEmpty || userId.isEmpty) return;
                       ref
-                          .read(courseCommentsProvider(widget.courseId).notifier)
-                          .add(authorUz: auth.name, textUz: _controller.text);
-                      _controller.clear();
+                          .read(commentsRepositoryProvider)
+                          .addComment(
+                            courseKey: widget.courseId,
+                            userId: userId,
+                            authorName: auth.name,
+                            text: text,
+                          )
+                          .then((_) {
+                            _controller.clear();
+                            ref.invalidate(
+                              courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
+                            );
+                          });
                     },
                     child: const Text(
                       'Yuborish',

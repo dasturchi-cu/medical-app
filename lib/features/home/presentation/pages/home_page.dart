@@ -11,6 +11,7 @@ import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../core/state/slides_state.dart';
 import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/category_chip.dart';
 import '../../../../widgets/course_card.dart';
@@ -30,6 +31,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   Timer? _timer;
   Timer? _loadingTimer;
   bool _loading = true;
+  int _slideCount = 1;
 
   @override
   void initState() {
@@ -40,7 +42,7 @@ class _HomePageState extends ConsumerState<HomePage> {
     _timer = Timer.periodic(const Duration(seconds: 5), (_) {
       if (!_pageController.hasClients) return;
       final next = (_pageController.page?.round() ?? 0) + 1;
-      final index = next % MockData.homeSlidesUz.length;
+      final index = next % (_slideCount <= 0 ? 1 : _slideCount);
       _pageController.animateToPage(
         index,
         duration: const Duration(milliseconds: 420),
@@ -63,6 +65,27 @@ class _HomePageState extends ConsumerState<HomePage> {
     final query = ref.watch(homeSearchQueryProvider).trim().toLowerCase();
     final repo = ref.watch(courseRepositoryProvider);
     final allCourses = repo.getCourses();
+    final slidesAsync = ref.watch(slidesFeedProvider);
+    final remoteSlides = slidesAsync.valueOrNull ?? const [];
+    final slideItems = remoteSlides.isNotEmpty
+        ? remoteSlides
+            .map(
+              (item) => (
+                title: item.title,
+                courseId: item.courseId ?? '',
+                buttonText: item.buttonText,
+              ),
+            )
+            .toList(growable: false)
+        : List.generate(
+            MockData.homeSlidesUz.length,
+            (index) => (
+              title: MockData.homeSlidesUz[index],
+              courseId: MockData.bannerCourseIds[index],
+              buttonText: 'Boshlash',
+            ),
+          );
+    _slideCount = slideItems.isEmpty ? 1 : slideItems.length;
     final courses = allCourses.where((c) {
       final matchesCategory = switch (selectedCat) {
         'cat_books' => false,
@@ -136,14 +159,15 @@ class _HomePageState extends ConsumerState<HomePage> {
               height: 154,
               child: PageView.builder(
                 controller: _pageController,
-                itemCount: MockData.homeSlidesUz.length,
+                itemCount: slideItems.length,
                 itemBuilder: (context, index) {
-                  final courseId = MockData.bannerCourseIds[index];
+                  final courseId = slideItems[index].courseId;
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
                       onTap: () {
+                        if (courseId.isEmpty) return;
                         ref.read(selectedCourseIdProvider.notifier).state =
                             courseId;
                         ref
@@ -193,7 +217,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                     ),
                                     const SizedBox(height: AppSpacing.s8),
                                     Text(
-                                      MockData.homeSlidesUz[index],
+                                      slideItems[index].title,
                                       maxLines: 2,
                                       overflow: TextOverflow.ellipsis,
                                       style: Theme.of(context)
@@ -218,6 +242,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                           foregroundColor: AppColors.primary,
                                         ),
                                         onPressed: () {
+                                          if (courseId.isEmpty) return;
                                           ref
                                                   .read(
                                                     selectedCourseIdProvider
@@ -235,8 +260,8 @@ class _HomePageState extends ConsumerState<HomePage> {
                                             '${AppRoutes.courseDetail}?id=$courseId',
                                           );
                                         },
-                                        child: const Text(
-                                          'Boshlash',
+                                        child: Text(
+                                          slideItems[index].buttonText,
                                           style: TextStyle(
                                             fontWeight: FontWeight.w700,
                                           ),
@@ -262,7 +287,7 @@ class _HomePageState extends ConsumerState<HomePage> {
               child: Center(
                 child: SmoothPageIndicator(
                   controller: _pageController,
-                  count: MockData.homeSlidesUz.length,
+                  count: slideItems.length,
                   effect: WormEffect(
                     dotWidth: 8,
                     dotHeight: 8,

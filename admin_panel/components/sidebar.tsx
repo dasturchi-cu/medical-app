@@ -2,7 +2,20 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Bell, BookOpen, House, ImageIcon, MessageSquareText, MonitorPlay, PlayCircle, ShoppingCart, Users, X } from "lucide-react";
+import {
+  Bell,
+  BookOpen,
+  FileQuestion,
+  House,
+  ImageIcon,
+  MessageSquareText,
+  MonitorPlay,
+  PanelsTopLeft,
+  PlayCircle,
+  ShoppingCart,
+  Users,
+  X,
+} from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -11,8 +24,10 @@ const navItems = [
   { href: "/lessons", label: "Darslar", icon: PlayCircle },
   { href: "/banners", label: "Reklamalar", icon: ImageIcon },
   { href: "/home-banners", label: "Home reklamalari", icon: MonitorPlay },
+  { href: "/slides", label: "Slaydlar", icon: PanelsTopLeft },
   { href: "/subscriptions", label: "Kurs obunalari", icon: ShoppingCart },
   { href: "/notifications", label: "Notification", icon: Bell },
+  { href: "/tests", label: "Testlar", icon: FileQuestion },
   { href: "/users", label: "Foydalanuvchilar", icon: Users },
   { href: "/comments", label: "Izohlar", icon: MessageSquareText },
 ];

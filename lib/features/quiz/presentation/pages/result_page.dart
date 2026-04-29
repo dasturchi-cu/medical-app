@@ -5,18 +5,58 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/state/app_state_providers.dart';
+import '../../../../core/state/auth_controller.dart';
 import '../../../../core/state/progress_controller.dart';
-import '../providers/quiz_controller.dart';
 
-class ResultPage extends ConsumerWidget {
-  const ResultPage({super.key, required this.score, required this.total});
+class ResultPage extends ConsumerStatefulWidget {
+  const ResultPage({
+    super.key,
+    required this.score,
+    required this.total,
+    required this.quizId,
+    required this.correctCount,
+    required this.totalQuestions,
+    required this.durationMinutes,
+  });
 
   final int score;
   final int total;
+  final String quizId;
+  final int correctCount;
+  final int totalQuestions;
+  final double durationMinutes;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
-    final passed = score >= 50;
+  ConsumerState<ResultPage> createState() => _ResultPageState();
+}
+
+class _ResultPageState extends ConsumerState<ResultPage> {
+  bool _sentAttempt = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future.microtask(() async {
+      if (_sentAttempt) return;
+      final userId = ref.read(authControllerProvider).userId;
+      if (userId == null || userId.isEmpty) return;
+      await ref
+          .read(testAttemptRepositoryProvider)
+          .submitAttempt(
+            quizId: widget.quizId,
+            userId: userId,
+            scorePercent: widget.score.toDouble(),
+            correctCount: widget.correctCount,
+            totalQuestions: widget.totalQuestions,
+            durationMinutes: widget.durationMinutes,
+          );
+      _sentAttempt = true;
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final passed = widget.score >= 50;
 
     return Scaffold(
       appBar: AppBar(title: const Text('Natija')),
@@ -47,7 +87,7 @@ class ResultPage extends ConsumerWidget {
                     ),
                     const SizedBox(height: 6),
                     Text(
-                      '$score',
+                      '${widget.score}',
                       style: Theme.of(context).textTheme.displaySmall?.copyWith(
                             fontWeight: FontWeight.w900,
                           ),
@@ -94,8 +134,7 @@ class ResultPage extends ConsumerWidget {
                         ),
                       ),
                       onPressed: () {
-                        ref.read(quizControllerProvider('quiz_1').notifier).reset();
-                        context.pop();
+                        context.pushReplacement('${AppRoutes.quiz}?id=${widget.quizId}');
                       },
                       child: const Text(
                         'Qayta',

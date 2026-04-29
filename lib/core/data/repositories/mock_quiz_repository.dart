@@ -6,7 +6,11 @@ class MockQuizRepository implements QuizRepository {
   @override
   Quiz? getQuizById(String id) {
     if (id == MockData.quiz.id) return MockData.quiz;
-    return null;
+    return Quiz(
+      id: id,
+      titleUz: MockData.quiz.titleUz,
+      questions: MockData.quiz.questions,
+    );
   }
 }
 

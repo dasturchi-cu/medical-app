@@ -86,7 +86,25 @@ final appRouterProvider = Provider<GoRouter>((ref) {
                   int.tryParse(state.uri.queryParameters['score'] ?? '') ?? 0;
               final total =
                   int.tryParse(state.uri.queryParameters['total'] ?? '') ?? 0;
-              return ResultPage(score: score, total: total);
+              final quizId = state.uri.queryParameters['quizId'] ?? 'quiz_1';
+              final correct =
+                  int.tryParse(state.uri.queryParameters['correct'] ?? '') ?? 0;
+              final totalQuestions = int.tryParse(
+                    state.uri.queryParameters['totalQuestions'] ?? '',
+                  ) ??
+                  0;
+              final durationMin = double.tryParse(
+                    state.uri.queryParameters['durationMin'] ?? '',
+                  ) ??
+                  0;
+              return ResultPage(
+                score: score,
+                total: total,
+                quizId: quizId,
+                correctCount: correct,
+                totalQuestions: totalQuestions,
+                durationMinutes: durationMin,
+              );
             },
           ),
           GoRoute(

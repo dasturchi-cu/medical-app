@@ -7,6 +7,7 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
+import '../../../../core/state/lesson_slides_state.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../widgets/video_player_box.dart';
 
@@ -41,6 +42,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
   Widget build(BuildContext context) {
     final repo = ref.watch(courseRepositoryProvider);
     final lesson = repo.getLessonById(widget.lessonId);
+    final lessonSlidesAsync = ref.watch(lessonSlidesProvider(widget.lessonId));
     final courseId = repo.getCourseIdForLesson(widget.lessonId);
     final orientation = MediaQuery.orientationOf(context);
     final size = MediaQuery.sizeOf(context);
@@ -60,6 +62,13 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
         body: const Center(child: Text('Dars topilmadi')),
       );
     }
+
+    final remoteSlides = lessonSlidesAsync.valueOrNull ?? const [];
+    final slideTexts = remoteSlides.isNotEmpty
+        ? remoteSlides
+            .map((item) => item.body.trim().isEmpty ? item.title : '${item.title}\n${item.body}')
+            .toList(growable: false)
+        : lesson.slides;
 
     return Scaffold(
       appBar: AppBar(
@@ -97,7 +106,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                 return VideoPlayerBox(url: lesson.videoUrl, height: mediaHeight);
               }
               return _SlideViewer(
-                slides: lesson.slides,
+                slides: slideTexts,
                 controller: _slidesController,
                 height: mediaHeight,
               );
@@ -170,7 +179,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                             .read(progressControllerProvider.notifier)
                             .completeLesson(courseId: courseId, lessonId: widget.lessonId);
                       }
-                      context.push('${AppRoutes.quiz}?id=quiz_1');
+                      context.push('${AppRoutes.quiz}?id=${widget.lessonId}');
                     },
                     child: const Text(
                       'Testga o‘tish',

@@ -376,6 +376,10 @@ export function useAdminStore<T>(selector: (current: AdminState) => T): T {
   );
 }
 
+export function getAdminState() {
+  return state;
+}
+
 export const adminActions = {
   addCourse(course: { title: string; image: string; price: string; admin_telegram: string; has_modules: boolean; modules: string[] }) {
     const translated = autoTranslateTitle(course.title);

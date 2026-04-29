@@ -239,7 +239,7 @@ class CourseDetailPage extends ConsumerWidget {
                   context.push('${AppRoutes.lesson}?id=${first.id}');
                   return;
                 }
-                context.push('${AppRoutes.quiz}?id=quiz_1');
+                context.push('${AppRoutes.quiz}?id=${course.id}_intro_quiz');
               },
               child: const Text(
                 'Boshlash',
