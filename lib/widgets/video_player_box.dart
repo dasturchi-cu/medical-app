@@ -98,12 +98,6 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
                 playedColor: Color(0xFF1E6BB8),
                 handleColor: Color(0xFF1E6BB8),
               ),
-              onEnterFullScreen: () {
-                SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
-              },
-              onExitFullScreen: () {
-                SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-              },
             ),
             builder: (context, player) => ColoredBox(
               color: Colors.black,

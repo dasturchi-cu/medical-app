@@ -20,9 +20,18 @@ function headers() {
   };
 }
 
+async function parseError(response: Response, fallback: string) {
+  try {
+    const data = (await response.json()) as { detail?: string };
+    return data.detail?.trim() || fallback;
+  } catch {
+    return fallback;
+  }
+}
+
 export async function fetchSlides() {
   const response = await apiFetch("/api/v1/slides", { cache: "no-store" });
-  if (!response.ok) throw new Error("Slaydlarni olishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Slaydlarni olishda xatolik."));
   const data = (await response.json()) as { items: SlideItem[] };
   return data.items ?? [];
 }
@@ -40,7 +49,7 @@ export async function createSlide(payload: {
     headers: headers(),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Slayd qo'shishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Slayd qo'shishda xatolik."));
   return (await response.json()) as SlideItem;
 }
 
@@ -49,7 +58,7 @@ export async function deleteSlide(id: string) {
     method: "DELETE",
     headers: headers(),
   });
-  if (!response.ok) throw new Error("Slayd o'chirishda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Slayd o'chirishda xatolik."));
 }
 
 export async function updateSlide(
@@ -69,6 +78,6 @@ export async function updateSlide(
     headers: headers(),
     body: JSON.stringify(payload),
   });
-  if (!response.ok) throw new Error("Slayd yangilashda xatolik.");
+  if (!response.ok) throw new Error(await parseError(response, "Slayd yangilashda xatolik."));
   return (await response.json()) as SlideItem;
 }

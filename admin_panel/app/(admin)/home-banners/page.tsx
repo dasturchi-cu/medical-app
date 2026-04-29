@@ -108,6 +108,10 @@ export default function HomeBannersPage() {
 
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    if (!formValues.title.trim()) {
+      notifyError("Banner matnini kiriting.");
+      return;
+    }
     if (!formValues.course_id) {
       notifyError("Qaysi kursga o'tishini tanlang.");
       return;
@@ -127,7 +131,7 @@ export default function HomeBannersPage() {
         title: "",
         button_text: "Boshlash",
         image: "",
-        course_id: "",
+        course_id: formValues.course_id,
       });
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Home reklama qo'shilmadi.");
@@ -137,6 +141,10 @@ export default function HomeBannersPage() {
   const onEditSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editBanner) return;
+    if (!editValues.title.trim()) {
+      notifyError("Banner matnini kiriting.");
+      return;
+    }
     if (!editValues.course_id) {
       notifyError("Qaysi kursga o'tishini tanlang.");
       return;
