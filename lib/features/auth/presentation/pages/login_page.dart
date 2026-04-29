@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
@@ -12,7 +13,7 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
-  final _phoneController = TextEditingController();
+  final _phoneController = TextEditingController(text: '+998 ');
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
@@ -68,6 +69,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     TextFormField(
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,
+                      inputFormatters: const [_UzPhoneFormatter()],
                       decoration: const InputDecoration(
                         labelText: 'Telefon raqam',
                         hintText: '+998 90 123 45 67',
@@ -75,7 +77,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       ),
                       validator: (value) {
                         final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
-                        if (digits.length < 9) {
+                        if (digits.length != 12 || !digits.startsWith('998')) {
                           return 'Telefon raqamni to‘g‘ri kiriting';
                         }
                         return null;
@@ -113,5 +115,42 @@ class _LoginPageState extends ConsumerState<LoginPage> {
         ),
       ),
     );
+  }
+}
+
+class _UzPhoneFormatter extends TextInputFormatter {
+  const _UzPhoneFormatter();
+
+  @override
+  TextEditingValue formatEditUpdate(
+    TextEditingValue oldValue,
+    TextEditingValue newValue,
+  ) {
+    final digits = newValue.text.replaceAll(RegExp(r'\D'), '');
+    final local = digits.startsWith('998')
+        ? digits.substring(3)
+        : digits;
+    final trimmed = local.length > 9 ? local.substring(0, 9) : local;
+    final formatted = _format(trimmed);
+    return TextEditingValue(
+      text: formatted,
+      selection: TextSelection.collapsed(offset: formatted.length),
+    );
+  }
+
+  String _format(String local) {
+    final buffer = StringBuffer('+998');
+    if (local.isEmpty) {
+      buffer.write(' ');
+      return buffer.toString();
+    }
+    buffer.write(' ');
+    for (var i = 0; i < local.length; i++) {
+      buffer.write(local[i]);
+      if (i == 1 || i == 4 || i == 6) {
+        buffer.write(' ');
+      }
+    }
+    return buffer.toString().trimRight();
   }
 }

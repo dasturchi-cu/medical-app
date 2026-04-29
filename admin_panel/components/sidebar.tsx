@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, House, ImageIcon, MessageSquareText, PlayCircle, Users, X } from "lucide-react";
+import { BookOpen, House, ImageIcon, MessageSquareText, PlayCircle, Users } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -14,50 +14,21 @@ const navItems = [
   { href: "/comments", label: "Izohlar", icon: MessageSquareText },
 ];
 
-interface SidebarProps {
-  mobileOpen?: boolean;
-  onCloseMobile?: () => void;
-}
-
-export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
+export function Sidebar() {
   const pathname = usePathname();
 
   return (
-    <>
-      <aside className="surface-card sticky top-4 hidden h-[calc(100vh-2rem)] w-64 shrink-0 p-4 lg:flex lg:flex-col">
-        <SidebarContent pathname={pathname} />
-      </aside>
-
-      {mobileOpen ? (
-        <div className="fixed inset-0 z-40 bg-slate-900/35 lg:hidden" onClick={onCloseMobile}>
-          <aside
-            className="surface-card h-full w-[84%] max-w-xs rounded-none p-4"
-            onClick={(event) => event.stopPropagation()}
-          >
-            <div className="mb-4 flex items-center justify-between">
-              <p className="text-sm font-semibold text-slate-700">Menyu</p>
-              <button
-                type="button"
-                className="inline-flex size-9 items-center justify-center rounded-xl border border-slate-200"
-                onClick={onCloseMobile}
-              >
-                <X className="size-4 text-slate-600" />
-              </button>
-            </div>
-            <SidebarContent pathname={pathname} onNavigate={onCloseMobile} />
-          </aside>
-        </div>
-      ) : null}
-    </>
+    <aside className="surface-card sticky top-6 flex h-[calc(100vh-3rem)] w-64 shrink-0 flex-col p-4">
+      <SidebarContent pathname={pathname} />
+    </aside>
   );
 }
 
 interface SidebarContentProps {
   pathname: string;
-  onNavigate?: () => void;
 }
 
-function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
+function SidebarContent({ pathname }: SidebarContentProps) {
   return (
     <>
       <div className="mb-8 border-b border-slate-100 pb-4">
@@ -75,7 +46,6 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
             <Link
               key={item.href}
               href={item.href}
-              onClick={onNavigate}
               className={cn(
                 "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors",
                 isActive
