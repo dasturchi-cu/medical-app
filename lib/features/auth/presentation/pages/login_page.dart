@@ -12,28 +12,26 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
-  final _emailController = TextEditingController();
+  final _phoneController = TextEditingController();
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
 
   @override
   void dispose() {
-    _emailController.dispose();
+    _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
   }
 
-  Future<void> _submit({required bool isRegister}) async {
+  Future<void> _submit() async {
     if (!_formKey.currentState!.validate()) return;
     setState(() => _loading = true);
 
     final auth = ref.read(authControllerProvider.notifier);
-    final email = _emailController.text;
+    final phone = _phoneController.text;
     final password = _passwordController.text;
-    final error = isRegister
-        ? await auth.register(email: email, password: password)
-        : await auth.login(email: email, password: password);
+    final error = await auth.login(phone: phone, password: password);
 
     if (!mounted) return;
     setState(() => _loading = false);
@@ -65,19 +63,20 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                       style: TextStyle(fontSize: 28, fontWeight: FontWeight.w800),
                     ),
                     const SizedBox(height: 6),
-                    const Text('Kurs sotib olish uchun akkauntga kiring'),
+                    const Text('Telefon raqam orqali kiring'),
                     const SizedBox(height: 20),
                     TextFormField(
-                      controller: _emailController,
-                      keyboardType: TextInputType.emailAddress,
+                      controller: _phoneController,
+                      keyboardType: TextInputType.phone,
                       decoration: const InputDecoration(
-                        labelText: 'Email',
-                        prefixIcon: Icon(Icons.email_outlined),
+                        labelText: 'Telefon raqam',
+                        hintText: '+998 90 123 45 67',
+                        prefixIcon: Icon(Icons.phone_outlined),
                       ),
                       validator: (value) {
-                        final v = value?.trim() ?? '';
-                        if (v.isEmpty || !v.contains('@')) {
-                          return 'Email kiriting';
+                        final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
+                        if (digits.length < 9) {
+                          return 'Telefon raqamni to‘g‘ri kiriting';
                         }
                         return null;
                       },
@@ -102,14 +101,9 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     SizedBox(
                       height: 48,
                       child: FilledButton(
-                        onPressed: _loading ? null : () => _submit(isRegister: false),
+                        onPressed: _loading ? null : _submit,
                         child: Text(_loading ? 'Kutilmoqda...' : 'Kirish'),
                       ),
-                    ),
-                    const SizedBox(height: 10),
-                    TextButton(
-                      onPressed: _loading ? null : () => _submit(isRegister: true),
-                      child: const Text('Ro‘yxatdan o‘tish'),
                     ),
                   ],
                 ),

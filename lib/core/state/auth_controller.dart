@@ -60,41 +60,18 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<String?> login({
-    required String email,
+    required String phone,
     required String password,
   }) async {
     try {
       final user = await ref
           .read(authServiceProvider)
-          .signIn(email: email.trim(), password: password.trim());
+          .signIn(phone: phone.trim(), password: password.trim());
       if (user == null) {
-        return 'Email yoki parol noto‘g‘ri';
+        return 'Telefon raqami noto‘g‘ri';
       }
       state = _fromUser(user);
       return null;
-    } catch (_) {
-      return 'Xatolik yuz berdi. Qayta urinib ko‘ring';
-    }
-  }
-
-  Future<String?> register({
-    required String email,
-    required String password,
-  }) async {
-    try {
-      final user = await ref
-          .read(authServiceProvider)
-          .signUp(email: email.trim(), password: password.trim());
-      if (user == null) {
-        return 'Ro‘yxatdan o‘tishda xatolik';
-      }
-      state = _fromUser(user);
-      return null;
-    } on StateError catch (e) {
-      if (e.message.toLowerCase().contains('allaqachon')) {
-        return 'Bu email allaqachon mavjud';
-      }
-      return e.message;
     } catch (_) {
       return 'Xatolik yuz berdi. Qayta urinib ko‘ring';
     }
