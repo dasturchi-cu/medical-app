@@ -155,6 +155,8 @@ export default function CoursesPage() {
             image={formValues.image}
             videoCount={courseList[0] ? 12 : 0}
             sampleCourses={courseList.map((course) => course.title_uz)}
+            hasModules={formValues.has_modules}
+            modules={formValues.modules}
           />
         </MobilePreview>
       </div>
