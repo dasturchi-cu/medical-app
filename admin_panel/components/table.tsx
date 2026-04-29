@@ -27,7 +27,8 @@ export function AppTable<T extends object>({
 }: AppTableProps<T>) {
   return (
     <div className="surface-card overflow-hidden">
-      <UITable>
+      <div className="w-full overflow-x-auto">
+      <UITable className="min-w-[760px]">
         <TableHeader>
           <TableRow>
             {columns.map((column) => (
@@ -60,6 +61,7 @@ export function AppTable<T extends object>({
           )}
         </TableBody>
       </UITable>
+      </div>
     </div>
   );
 }
