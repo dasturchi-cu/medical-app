@@ -3,10 +3,7 @@ import 'dart:math';
 import 'package:flutter/material.dart';
 
 class CourseVisual extends StatefulWidget {
-  const CourseVisual({
-    super.key,
-    required this.kind,
-  });
+  const CourseVisual({super.key, required this.kind});
 
   /// e.g. 'eeg', 'brain', 'medical', 'enmg'
   final String kind;
@@ -15,14 +12,17 @@ class CourseVisual extends StatefulWidget {
   State<CourseVisual> createState() => _CourseVisualState();
 }
 
-class _CourseVisualState extends State<CourseVisual> with SingleTickerProviderStateMixin {
+class _CourseVisualState extends State<CourseVisual>
+    with SingleTickerProviderStateMixin {
   late final AnimationController _c;
 
   @override
   void initState() {
     super.initState();
-    _c = AnimationController(vsync: this, duration: const Duration(milliseconds: 1200))
-      ..repeat(reverse: true);
+    _c = AnimationController(
+      vsync: this,
+      duration: const Duration(milliseconds: 1200),
+    )..repeat(reverse: true);
   }
 
   @override
@@ -33,6 +33,93 @@ class _CourseVisualState extends State<CourseVisual> with SingleTickerProviderSt
 
   @override
   Widget build(BuildContext context) {
+    if (widget.kind == 'umumiy_bachelor') {
+      return Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE9F0FF),
+          borderRadius: BorderRadius.circular(16),
+          image: const DecorationImage(
+            image: AssetImage('assets/images/umumiy_nevrologiya_bakalavr.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+    if (widget.kind == 'xususiy_bachelor') {
+      return Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE9F0FF),
+          borderRadius: BorderRadius.circular(16),
+          image: const DecorationImage(
+            image: AssetImage('assets/images/xususiy_nevrologiya_bakalavr.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+    if (widget.kind == 'xususiy_doctors') {
+      return Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE9F0FF),
+          borderRadius: BorderRadius.circular(16),
+          image: const DecorationImage(
+            image: AssetImage(
+              'assets/images/xususiy_nevrologiya_shifokorlar.png',
+            ),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+    if (widget.kind == 'epileptologiya_img') {
+      return Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE9F0FF),
+          borderRadius: BorderRadius.circular(16),
+          image: const DecorationImage(
+            image: AssetImage('assets/images/epileptologiya.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+    if (widget.kind == 'eeg_img') {
+      return Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE9F0FF),
+          borderRadius: BorderRadius.circular(16),
+          image: const DecorationImage(
+            image: AssetImage('assets/images/eeg.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+    if (widget.kind == 'enmg_img') {
+      return Container(
+        width: 52,
+        height: 52,
+        decoration: BoxDecoration(
+          color: const Color(0xFFE9F0FF),
+          borderRadius: BorderRadius.circular(16),
+          image: const DecorationImage(
+            image: AssetImage('assets/images/enmg.png'),
+            fit: BoxFit.cover,
+          ),
+        ),
+      );
+    }
+
     return AnimatedBuilder(
       animation: _c,
       builder: (context, _) {
@@ -139,16 +226,36 @@ class _VisualPainter extends CustomPainter {
 
       final y = 18 + 2 * t;
       canvas.drawArc(
-        Rect.fromCenter(center: Offset(center.dx, y + 10), width: 22, height: 22),
+        Rect.fromCenter(
+          center: Offset(center.dx, y + 10),
+          width: 22,
+          height: 22,
+        ),
         pi,
         pi,
         false,
         p,
       );
-      canvas.drawLine(Offset(center.dx - 11, y + 10), Offset(center.dx - 11, y + 18), p);
-      canvas.drawLine(Offset(center.dx + 11, y + 10), Offset(center.dx + 11, y + 18), p);
-      canvas.drawCircle(Offset(center.dx - 11, y + 20), 2.2, Paint()..color = pink);
-      canvas.drawCircle(Offset(center.dx + 11, y + 20), 2.2, Paint()..color = pink);
+      canvas.drawLine(
+        Offset(center.dx - 11, y + 10),
+        Offset(center.dx - 11, y + 18),
+        p,
+      );
+      canvas.drawLine(
+        Offset(center.dx + 11, y + 10),
+        Offset(center.dx + 11, y + 18),
+        p,
+      );
+      canvas.drawCircle(
+        Offset(center.dx - 11, y + 20),
+        2.2,
+        Paint()..color = pink,
+      );
+      canvas.drawCircle(
+        Offset(center.dx + 11, y + 20),
+        2.2,
+        Paint()..color = pink,
+      );
 
       // small pulse line
       final pulse = Paint()
@@ -200,9 +307,19 @@ class _VisualPainter extends CustomPainter {
       ..style = PaintingStyle.stroke
       ..strokeWidth = 2.0;
 
-    final brainR = Rect.fromCenter(center: Offset(center.dx, center.dy + 1), width: 30, height: 24);
-    canvas.drawRRect(RRect.fromRectAndRadius(brainR, const Radius.circular(12)), fill);
-    canvas.drawRRect(RRect.fromRectAndRadius(brainR, const Radius.circular(12)), stroke);
+    final brainR = Rect.fromCenter(
+      center: Offset(center.dx, center.dy + 1),
+      width: 30,
+      height: 24,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(brainR, const Radius.circular(12)),
+      fill,
+    );
+    canvas.drawRRect(
+      RRect.fromRectAndRadius(brainR, const Radius.circular(12)),
+      stroke,
+    );
 
     final syn = Paint()..color = pink.withValues(alpha: 0.95);
     final nodes = [
@@ -214,7 +331,9 @@ class _VisualPainter extends CustomPainter {
       Offset(center.dx - 7, center.dy + 7),
     ];
     for (int i = 0; i < nodes.length; i++) {
-      final o = nodes[i] + Offset(sin(t * pi * 2 + i) * 1.0, cos(t * pi * 2 + i) * 1.0);
+      final o =
+          nodes[i] +
+          Offset(sin(t * pi * 2 + i) * 1.0, cos(t * pi * 2 + i) * 1.0);
       canvas.drawCircle(o, 2.1, syn);
     }
   }
@@ -223,4 +342,3 @@ class _VisualPainter extends CustomPainter {
   bool shouldRepaint(covariant _VisualPainter oldDelegate) =>
       oldDelegate.kind != kind || oldDelegate.t != t;
 }
-

@@ -6,6 +6,7 @@ import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../core/theme/design_system.dart';
 
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
@@ -21,46 +22,55 @@ class ProfilePage extends ConsumerWidget {
 
     return SafeArea(
       child: ListView(
-        padding: const EdgeInsets.fromLTRB(16, 12, 16, 16),
+        padding: const EdgeInsets.fromLTRB(
+          AppSpacing.s16,
+          AppSpacing.s12,
+          AppSpacing.s16,
+          AppSpacing.s16,
+        ),
         children: [
           Text(
             context.tr('profile'),
-            style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleLarge?.copyWith(fontWeight: FontWeight.w900),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.s12),
           Card(
             margin: EdgeInsets.zero,
             child: Padding(
-              padding: const EdgeInsets.all(14),
+              padding: const EdgeInsets.all(AppSpacing.s12),
               child: Row(
                 children: [
                   Container(
                     width: 54,
                     height: 54,
                     decoration: BoxDecoration(
-                      color: const Color(0xFFE9F0FF),
-                      borderRadius: BorderRadius.circular(18),
+                      color: AppColors.surfaceAlt,
+                      borderRadius: BorderRadius.circular(AppRadius.card),
                     ),
-                    child: const Icon(Icons.person, color: Color(0xFF1E6BB8), size: 30),
+                    child: const Icon(
+                      Icons.person,
+                      color: AppColors.primary,
+                      size: 30,
+                    ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: AppSpacing.s12),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
                           'Azizbek User',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                fontWeight: FontWeight.w900,
-                              ),
+                          style: Theme.of(context).textTheme.titleMedium
+                              ?.copyWith(fontWeight: FontWeight.w900),
                         ),
                         const SizedBox(height: 2),
                         Text(
                           '$myCount ta kurs',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: Colors.black54,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: AppColors.textSecondary,
                                 fontWeight: FontWeight.w700,
                               ),
                         ),
@@ -71,7 +81,7 @@ class ProfilePage extends ConsumerWidget {
               ),
             ),
           ),
-          const SizedBox(height: 12),
+          const SizedBox(height: AppSpacing.s12),
           Card(
             margin: EdgeInsets.zero,
             child: Column(
@@ -88,17 +98,22 @@ class ProfilePage extends ConsumerWidget {
                   title: Text(context.tr('language')),
                   trailing: DropdownButtonHideUnderline(
                     child: DropdownButton<AppLang>(
-                      value: (ref.watch(localizationProvider).valueOrNull?.langCode ?? 'uz') ==
-                              'ru'
-                          ? AppLang.ru
-                          : (ref
+                      value:
+                          (ref
                                       .watch(localizationProvider)
                                       .valueOrNull
                                       ?.langCode ??
                                   'uz') ==
-                              'en'
-                              ? AppLang.en
-                              : AppLang.uz,
+                              'ru'
+                          ? AppLang.ru
+                          : (ref
+                                        .watch(localizationProvider)
+                                        .valueOrNull
+                                        ?.langCode ??
+                                    'uz') ==
+                                'en'
+                          ? AppLang.en
+                          : AppLang.uz,
                       items: [
                         DropdownMenuItem(
                           value: AppLang.uz,
@@ -115,12 +130,14 @@ class ProfilePage extends ConsumerWidget {
                       ],
                       onChanged: (v) {
                         if (v == null) return;
-                        ref.read(localizationProvider.notifier).setLang(
+                        ref
+                            .read(localizationProvider.notifier)
+                            .setLang(
                               v == AppLang.ru
                                   ? 'ru'
                                   : v == AppLang.en
-                                      ? 'en'
-                                      : 'uz',
+                                  ? 'en'
+                                  : 'uz',
                             );
                       },
                     ),
@@ -132,9 +149,9 @@ class ProfilePage extends ConsumerWidget {
                   title: Text(context.tr('settings')),
                   subtitle: Text(context.tr('dummy')),
                   onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(context.tr('soon'))),
-                    );
+                    ScaffoldMessenger.of(
+                      context,
+                    ).showSnackBar(SnackBar(content: Text(context.tr('soon'))));
                   },
                 ),
               ],
@@ -145,4 +162,3 @@ class ProfilePage extends ConsumerWidget {
     );
   }
 }
-

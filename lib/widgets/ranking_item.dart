@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/design_system.dart';
+
 class RankingItem extends StatelessWidget {
   const RankingItem({
     super.key,
@@ -16,43 +18,52 @@ class RankingItem extends StatelessWidget {
   final bool isCurrentUser;
   final String? prefixLabel;
 
-  Color _rankColor() {
-    // Required: 1 Yellow, 2 Blue, 3 Green
-    if (rank == 1) return const Color(0xFFFFC107);
-    if (rank == 2) return const Color(0xFF1E6BB8);
-    if (rank == 3) return const Color(0xFF2E7D32);
-    return const Color(0xFF1E6BB8);
+  Color _rankColor() => AppColors.primary;
+
+  bool get _isTop3 => rank <= 3;
+
+  Color _topBgColor() {
+    if (rank == 1) return AppColors.primary.withValues(alpha: 0.12);
+    if (rank == 2) return AppColors.primary.withValues(alpha: 0.09);
+    return AppColors.primary.withValues(alpha: 0.06);
   }
 
   @override
   Widget build(BuildContext context) {
-    final bg = isCurrentUser ? const Color(0xFFEAF2FF) : Colors.white;
-    final top = rank <= 3;
-    final cardColor = top ? _rankColor().withValues(alpha: 0.08) : bg;
+    final bg = isCurrentUser ? AppColors.surfaceAlt : AppColors.surface;
+    final cardColor = _isTop3 ? _topBgColor() : bg;
 
     return Card(
       margin: EdgeInsets.zero,
       color: cardColor,
       child: Padding(
-        padding: EdgeInsets.symmetric(
-          horizontal: 12,
-          vertical: top ? 12 : 10,
+        padding: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s12,
+          vertical: AppSpacing.s12,
         ),
         child: Row(
           children: [
-            SizedBox(
+            Container(
               width: 34,
+              height: 34,
+              alignment: Alignment.center,
+              decoration: BoxDecoration(
+                color: _isTop3
+                    ? AppColors.primary.withValues(alpha: 0.18)
+                    : AppColors.primary.withValues(alpha: 0.08),
+                shape: BoxShape.circle,
+              ),
               child: Text(
                 '$rank',
-                style: Theme.of(context).textTheme.titleLarge?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: _rankColor(),
-                    ),
+                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                  fontWeight: FontWeight.w900,
+                  color: _rankColor(),
+                ),
               ),
             ),
-            const SizedBox(width: 6),
+            const SizedBox(width: AppSpacing.s8),
             CircleAvatar(
-              radius: top ? 20 : 18,
+              radius: _isTop3 ? 20 : 18,
               backgroundColor: _rankColor().withValues(alpha: 0.15),
               child: Icon(Icons.person, color: _rankColor()),
             ),
@@ -65,15 +76,15 @@ class RankingItem extends StatelessWidget {
                     Text(
                       prefixLabel!,
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                            color: Colors.black54,
-                            fontWeight: FontWeight.w700,
-                          ),
+                        color: AppColors.textSecondary,
+                        fontWeight: FontWeight.w700,
+                      ),
                     ),
                   Text(
                     name,
                     style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                          fontWeight: top ? FontWeight.w900 : FontWeight.w800,
-                        ),
+                      fontWeight: _isTop3 ? FontWeight.w900 : FontWeight.w800,
+                    ),
                   ),
                 ],
               ),
@@ -84,9 +95,9 @@ class RankingItem extends StatelessWidget {
                 timeLabel,
                 textAlign: TextAlign.right,
                 style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                      fontWeight: top ? FontWeight.w900 : FontWeight.w800,
-                      color: const Color(0xFF1E6BB8),
-                    ),
+                  fontWeight: _isTop3 ? FontWeight.w900 : FontWeight.w800,
+                  color: AppColors.primary,
+                ),
               ),
             ),
           ],
@@ -95,4 +106,3 @@ class RankingItem extends StatelessWidget {
     );
   }
 }
-

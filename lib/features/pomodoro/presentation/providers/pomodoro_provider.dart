@@ -6,8 +6,10 @@ enum PomodoroSessionType { focus, breakTime }
 
 class PomodoroState {
   const PomodoroState({
-    required this.selectedCourseId,
     required this.sessionType,
+    required this.focusMinutes,
+    required this.breakMinutes,
+    required this.soundOn,
     required this.totalSeconds,
     required this.remainingSeconds,
     required this.isRunning,
@@ -17,8 +19,10 @@ class PomodoroState {
 
   factory PomodoroState.initial() {
     return const PomodoroState(
-      selectedCourseId: '',
       sessionType: PomodoroSessionType.focus,
+      focusMinutes: 25,
+      breakMinutes: 5,
+      soundOn: true,
       totalSeconds: 25 * 60,
       remainingSeconds: 25 * 60,
       isRunning: false,
@@ -27,8 +31,10 @@ class PomodoroState {
     );
   }
 
-  final String selectedCourseId;
   final PomodoroSessionType sessionType;
+  final int focusMinutes;
+  final int breakMinutes;
+  final bool soundOn;
   final int totalSeconds;
   final int remainingSeconds;
   final bool isRunning;
@@ -36,8 +42,10 @@ class PomodoroState {
   final int completedSessions;
 
   PomodoroState copyWith({
-    String? selectedCourseId,
     PomodoroSessionType? sessionType,
+    int? focusMinutes,
+    int? breakMinutes,
+    bool? soundOn,
     int? totalSeconds,
     int? remainingSeconds,
     bool? isRunning,
@@ -45,8 +53,10 @@ class PomodoroState {
     int? completedSessions,
   }) {
     return PomodoroState(
-      selectedCourseId: selectedCourseId ?? this.selectedCourseId,
       sessionType: sessionType ?? this.sessionType,
+      focusMinutes: focusMinutes ?? this.focusMinutes,
+      breakMinutes: breakMinutes ?? this.breakMinutes,
+      soundOn: soundOn ?? this.soundOn,
       totalSeconds: totalSeconds ?? this.totalSeconds,
       remainingSeconds: remainingSeconds ?? this.remainingSeconds,
       isRunning: isRunning ?? this.isRunning,
@@ -75,10 +85,6 @@ class PomodoroController extends Notifier<PomodoroState> {
     return PomodoroState.initial();
   }
 
-  void selectCourse(String courseId) {
-    state = state.copyWith(selectedCourseId: courseId);
-  }
-
   void setSessionType(PomodoroSessionType type) {
     if (state.sessionType == type) return;
     _cancelTimer();
@@ -89,6 +95,34 @@ class PomodoroController extends Notifier<PomodoroState> {
       remainingSeconds: duration,
       isRunning: false,
     );
+  }
+
+  void updateFocusMinutes(int minutes) {
+    final clamped = minutes.clamp(1, 90);
+    final isFocus = state.sessionType == PomodoroSessionType.focus;
+    state = state.copyWith(
+      focusMinutes: clamped,
+      totalSeconds: isFocus ? clamped * 60 : state.totalSeconds,
+      remainingSeconds: isFocus ? clamped * 60 : state.remainingSeconds,
+      isRunning: isFocus ? false : state.isRunning,
+    );
+    if (isFocus) _cancelTimer();
+  }
+
+  void updateBreakMinutes(int minutes) {
+    final clamped = minutes.clamp(1, 45);
+    final isBreak = state.sessionType == PomodoroSessionType.breakTime;
+    state = state.copyWith(
+      breakMinutes: clamped,
+      totalSeconds: isBreak ? clamped * 60 : state.totalSeconds,
+      remainingSeconds: isBreak ? clamped * 60 : state.remainingSeconds,
+      isRunning: isBreak ? false : state.isRunning,
+    );
+    if (isBreak) _cancelTimer();
+  }
+
+  void toggleSound(bool value) {
+    state = state.copyWith(soundOn: value);
   }
 
   void start() {
@@ -136,7 +170,9 @@ class PomodoroController extends Notifier<PomodoroState> {
   }
 
   int _durationFor(PomodoroSessionType type) {
-    return type == PomodoroSessionType.focus ? 25 * 60 : 5 * 60;
+    return type == PomodoroSessionType.focus
+        ? state.focusMinutes * 60
+        : state.breakMinutes * 60;
   }
 
   void _cancelTimer() {

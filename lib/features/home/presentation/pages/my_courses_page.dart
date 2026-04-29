@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/course_card.dart';
 import '../../../../widgets/course_stats_comments_sheet.dart';
 
@@ -64,19 +65,27 @@ class MyCoursesPage extends ConsumerWidget {
 
                 return CourseCard(
                   animationDelayMs: (index % 8) * 55,
-                  visualKind: c.titleUz == 'EEG'
-                      ? 'eeg'
+                  visualKind:
+                      c.titleUz == 'Xususiy Nevrologiya (Bakalavr uchun)'
+                      ? 'xususiy_bachelor'
+                      : c.titleUz == 'Umumiy Nevrologiya (Bakalavr uchun)'
+                      ? 'umumiy_bachelor'
+                      : c.titleUz == 'Xususiy nevrologiya (shifokorlar uchun)'
+                      ? 'xususiy_doctors'
+                      : c.titleUz == 'EEG'
+                      ? 'eeg_img'
                       : c.titleUz == 'Epileptologiya'
-                      ? 'medical'
+                      ? 'epileptologiya_img'
                       : c.titleUz == 'ENMG'
-                      ? 'enmg'
+                      ? 'enmg_img'
                       : 'brain',
                   title: c.titleUz,
                   author: c.authorUz,
                   progress: progressValue,
                   ratingText: c.rating.toStringAsFixed(1),
+                  videoCountText: '$totalLessons ta video',
                   buttonText: buttonText,
-                  buttonColor: const Color(0xFFFF7A2D),
+                  buttonColor: AppColors.primary,
                   onPressed: () {
                     final last = p?.lastLessonId;
                     if (last != null) {

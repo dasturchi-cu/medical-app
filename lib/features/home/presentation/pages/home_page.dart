@@ -11,6 +11,7 @@ import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/category_chip.dart';
 import '../../../../widgets/course_card.dart';
 import '../../../../widgets/course_stats_comments_sheet.dart';
@@ -61,13 +62,17 @@ class _HomePageState extends ConsumerState<HomePage> {
     final query = ref.watch(homeSearchQueryProvider).trim().toLowerCase();
     final repo = ref.watch(courseRepositoryProvider);
     final allCourses = repo.getCourses();
-    final courses = selectedCat == 'cat_books'
-        ? const []
-        : allCourses.where((c) => c.categoryId == selectedCat).where((c) {
-            if (query.isEmpty) return true;
-            return c.titleUz.toLowerCase().contains(query) ||
-                c.authorUz.toLowerCase().contains(query);
-          }).toList();
+    final courses = allCourses.where((c) {
+      final matchesCategory = switch (selectedCat) {
+        'cat_books' => false,
+        'cat_nevralogiya' => c.titleUz.toLowerCase().contains('nevrologiya'),
+        _ => c.categoryId == 'cat_online',
+      };
+      if (!matchesCategory) return false;
+      if (query.isEmpty) return true;
+      return c.titleUz.toLowerCase().contains(query) ||
+          c.authorUz.toLowerCase().contains(query);
+    }).toList();
     final progress = ref.watch(progressControllerProvider);
 
     return SafeArea(
@@ -109,8 +114,9 @@ class _HomePageState extends ConsumerState<HomePage> {
                     width: 44,
                     height: 44,
                     decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(14),
+                      color: AppColors.surface,
+                      borderRadius: BorderRadius.circular(AppRadius.input),
+                      boxShadow: AppShadows.soft,
                     ),
                     child: IconButton(
                       icon: const Icon(Icons.notifications_none),
@@ -151,29 +157,28 @@ class _HomePageState extends ConsumerState<HomePage> {
                         margin: EdgeInsets.zero,
                         child: Container(
                           decoration: BoxDecoration(
-                            borderRadius: BorderRadius.circular(16),
-                            gradient: const LinearGradient(
-                              colors: [Color(0xFF1E6BB8), Color(0xFF0E4E8B)],
-                              begin: Alignment.topLeft,
-                              end: Alignment.bottomRight,
-                            ),
+                            color: AppColors.primary,
+                            borderRadius: BorderRadius.circular(AppRadius.card),
+                            boxShadow: AppShadows.soft,
                           ),
                           child: Stack(
                             children: [
                               Positioned(
-                                right: -14,
-                                top: 14,
+                                right: -24,
+                                top: 10,
                                 child: Container(
-                                  width: 120,
-                                  height: 120,
+                                  width: 110,
+                                  height: 110,
                                   decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.12),
-                                    borderRadius: BorderRadius.circular(28),
+                                    color: Colors.white.withValues(alpha: 0.10),
+                                    borderRadius: BorderRadius.circular(
+                                      AppRadius.card,
+                                    ),
                                   ),
                                 ),
                               ),
                               Padding(
-                                padding: const EdgeInsets.all(16),
+                                padding: const EdgeInsets.all(AppSpacing.s16),
                                 child: Column(
                                   crossAxisAlignment: CrossAxisAlignment.start,
                                   mainAxisAlignment: MainAxisAlignment.center,
@@ -185,10 +190,10 @@ class _HomePageState extends ConsumerState<HomePage> {
                                           .labelLarge
                                           ?.copyWith(
                                             color: Colors.white70,
-                                            fontWeight: FontWeight.w700,
+                                            fontWeight: FontWeight.w600,
                                           ),
                                     ),
-                                    const SizedBox(height: 6),
+                                    const SizedBox(height: AppSpacing.s8),
                                     Text(
                                       MockData.homeSlidesUz[index],
                                       maxLines: 2,
@@ -198,23 +203,21 @@ class _HomePageState extends ConsumerState<HomePage> {
                                           .titleLarge
                                           ?.copyWith(
                                             color: Colors.white,
-                                            fontWeight: FontWeight.w800,
+                                            fontWeight: FontWeight.w700,
                                           ),
                                     ),
-                                    const SizedBox(height: 10),
+                                    const SizedBox(height: AppSpacing.s12),
                                     SizedBox(
-                                      height: 34,
-                                      child: FilledButton.tonal(
+                                      height: 36,
+                                      child: FilledButton(
                                         style: FilledButton.styleFrom(
-                                          backgroundColor: Colors.white,
-                                          foregroundColor: const Color(
-                                            0xFF0E4E8B,
-                                          ),
                                           shape: RoundedRectangleBorder(
                                             borderRadius: BorderRadius.circular(
-                                              999,
+                                              AppRadius.button,
                                             ),
                                           ),
+                                          backgroundColor: Colors.white,
+                                          foregroundColor: AppColors.primary,
                                         ),
                                         onPressed: () {
                                           ref
@@ -237,7 +240,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                                         child: const Text(
                                           'Boshlash',
                                           style: TextStyle(
-                                            fontWeight: FontWeight.w800,
+                                            fontWeight: FontWeight.w700,
                                           ),
                                         ),
                                       ),
@@ -286,24 +289,40 @@ class _HomePageState extends ConsumerState<HomePage> {
           SliverToBoxAdapter(
             child: SizedBox(
               height: 44,
-              child: ListView.separated(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
-                scrollDirection: Axis.horizontal,
-                itemBuilder: (context, i) {
-                  final cat = MockData.categories[i];
-                  final selected = cat.id == selectedCat;
-                  return CategoryChip(
-                    label: i == 0
-                        ? context.tr('cat_online')
-                        : context.tr('cat_books'),
-                    selected: selected,
-                    onTap: () =>
-                        ref.read(selectedCategoryIdProvider.notifier).state =
-                            cat.id,
-                  );
-                },
-                separatorBuilder: (_, index) => const SizedBox(width: 10),
-                itemCount: MockData.categories.length,
+              child: Row(
+                children: [
+                  const SizedBox(width: 16),
+                  Expanded(
+                    child: CategoryChip(
+                      label: 'Nevralogiya',
+                      selected: selectedCat == 'cat_nevralogiya',
+                      onTap: () =>
+                          ref.read(selectedCategoryIdProvider.notifier).state =
+                              'cat_nevralogiya',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: CategoryChip(
+                      label: 'Kitoblar',
+                      selected: selectedCat == 'cat_books',
+                      onTap: () =>
+                          ref.read(selectedCategoryIdProvider.notifier).state =
+                              'cat_books',
+                    ),
+                  ),
+                  const SizedBox(width: 8),
+                  Expanded(
+                    child: CategoryChip(
+                      label: 'Onlayn kurslar',
+                      selected: selectedCat == 'cat_online',
+                      onTap: () =>
+                          ref.read(selectedCategoryIdProvider.notifier).state =
+                              'cat_online',
+                    ),
+                  ),
+                  const SizedBox(width: 16),
+                ],
               ),
             ),
           ),
@@ -332,15 +351,13 @@ class _HomePageState extends ConsumerState<HomePage> {
               final buttonText = (p?.enrolled ?? false) || progressValue > 0
                   ? context.tr('btn_continue')
                   : context.tr('btn_start');
-              final buttonColor = buttonText == context.tr('btn_continue')
-                  ? const Color(0xFFFF7A2D)
-                  : const Color(0xFF1E6BB8);
+              const buttonColor = AppColors.primary;
 
               if (_loading) {
                 return Card(
                   margin: const EdgeInsets.symmetric(
-                    horizontal: 16,
-                    vertical: 8,
+                    horizontal: AppSpacing.s16,
+                    vertical: AppSpacing.s8,
                   ),
                   child: const SizedBox(height: 116),
                 );
@@ -348,17 +365,24 @@ class _HomePageState extends ConsumerState<HomePage> {
 
               return CourseCard(
                 animationDelayMs: (index % 8) * 55,
-                visualKind: c.titleUz == 'EEG'
-                    ? 'eeg'
+                visualKind: c.titleUz == 'Xususiy Nevrologiya (Bakalavr uchun)'
+                    ? 'xususiy_bachelor'
+                    : c.titleUz == 'Umumiy Nevrologiya (Bakalavr uchun)'
+                    ? 'umumiy_bachelor'
+                    : c.titleUz == 'Xususiy nevrologiya (shifokorlar uchun)'
+                    ? 'xususiy_doctors'
+                    : c.titleUz == 'EEG'
+                    ? 'eeg_img'
                     : c.titleUz == 'Epileptologiya'
-                    ? 'medical'
+                    ? 'epileptologiya_img'
                     : c.titleUz == 'ENMG'
-                    ? 'enmg'
+                    ? 'enmg_img'
                     : 'brain',
                 title: c.titleUz,
                 author: c.authorUz,
                 progress: progressValue,
                 ratingText: c.rating.toStringAsFixed(1),
+                videoCountText: '$totalLessons ta video',
                 buttonText: buttonText,
                 buttonColor: buttonColor,
                 onPressed: () {

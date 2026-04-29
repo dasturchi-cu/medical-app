@@ -36,13 +36,56 @@ class MockData {
     });
   }
 
-  static List<Section> _singleSection(String courseId, String titleUz, int lessons) {
+  static List<Section> _singleSection(
+    String courseId,
+    String titleUz,
+    int lessons,
+  ) {
     return [
       Section(
         id: '${courseId}_s1',
         titleUz: titleUz,
         durationUz: '${lessons * 10} daq',
-        lessons: _makeLessons(courseId: courseId, count: lessons, titlePrefixUz: titleUz),
+        lessons: _makeLessons(
+          courseId: courseId,
+          count: lessons,
+          titlePrefixUz: titleUz,
+        ),
+      ),
+    ];
+  }
+
+  static List<Section> _doctorBases(String courseId) {
+    return [
+      Section(
+        id: '${courseId}_b1',
+        titleUz: '1-baza',
+        durationUz: '320 daq',
+        lessons: _makeLessons(
+          courseId: '${courseId}_b1',
+          count: 32,
+          titlePrefixUz: '1-baza',
+        ),
+      ),
+      Section(
+        id: '${courseId}_b2',
+        titleUz: '2-baza',
+        durationUz: '140 daq',
+        lessons: _makeLessons(
+          courseId: '${courseId}_b2',
+          count: 14,
+          titlePrefixUz: '2-baza',
+        ),
+      ),
+      Section(
+        id: '${courseId}_b3',
+        titleUz: '3-baza',
+        durationUz: '150 daq',
+        lessons: _makeLessons(
+          courseId: '${courseId}_b3',
+          count: 15,
+          titlePrefixUz: '3-baza',
+        ),
       ),
     ];
   }
@@ -56,8 +99,13 @@ class MockData {
       progress: 0.1,
       rating: 4.7,
       isPaid: true,
-      descriptionUz: 'Bakalavr uchun umumiy nevrologiya asoslari. 1-dars bepul.',
-      sections: _singleSection('course_general_bachelor', 'Nevrologiya kirish', 12),
+      descriptionUz:
+          'Bakalavr uchun umumiy nevrologiya asoslari. 1-dars bepul.',
+      sections: _singleSection(
+        'course_general_bachelor',
+        'Nevrologiya kirish',
+        12,
+      ),
     ),
     Course(
       id: 'course_private_bachelor',
@@ -68,7 +116,11 @@ class MockData {
       rating: 4.6,
       isPaid: true,
       descriptionUz: 'Bakalavr uchun xususiy nevrologiya bo‘limlari.',
-      sections: _singleSection('course_private_bachelor', 'Xususiy mavzular', 12),
+      sections: _singleSection(
+        'course_private_bachelor',
+        'Xususiy mavzular',
+        10,
+      ),
     ),
     Course(
       id: 'course_eeg',
@@ -79,7 +131,7 @@ class MockData {
       rating: 4.8,
       isPaid: true,
       descriptionUz: 'EEG talqini, ritmlar, artefaktlar va amaliy holatlar.',
-      sections: _singleSection('course_eeg', 'EEG asoslari', 12),
+      sections: _singleSection('course_eeg', 'EEG asoslari', 25),
     ),
     Course(
       id: 'course_epilepsy',
@@ -90,7 +142,7 @@ class MockData {
       rating: 4.5,
       isPaid: true,
       descriptionUz: 'Tutqanoq turlari, diagnostika va davolash yondashuvlari.',
-      sections: _singleSection('course_epilepsy', 'Epilepsiya', 15),
+      sections: _singleSection('course_epilepsy', 'Epilepsiya', 7),
     ),
     Course(
       id: 'course_enmg',
@@ -101,18 +153,19 @@ class MockData {
       rating: 4.4,
       isPaid: true,
       descriptionUz: 'ENMG tekshiruvlari va periferik nerv shikastlanishlari.',
-      sections: _singleSection('course_enmg', 'ENMG amaliyot', 10),
+      sections: _singleSection('course_enmg', 'ENMG amaliyot', 36),
     ),
     Course(
       id: 'course_private_neuro',
       categoryId: 'cat_online',
-      titleUz: 'Xususiy Nevrologiya',
+      titleUz: 'Xususiy nevrologiya (shifokorlar uchun)',
       authorUz: 'Neuroscience',
       progress: 0.0,
       rating: 4.3,
       isPaid: true,
-      descriptionUz: 'Miya kasalliklari bo‘yicha chuqurlashtirilgan kurs.',
-      sections: _singleSection('course_private_neuro', 'Miya kasalliklari', 12),
+      descriptionUz:
+          'Shifokorlar uchun chuqurlashtirilgan xususiy nevrologiya kursi.',
+      sections: _doctorBases('course_private_neuro'),
     ),
   ];
 
@@ -150,7 +203,7 @@ class MockData {
           'Miyaning moslashuvchanligi',
           'Ko‘rish qobiliyati',
           'Uyqu fazasi',
-          'Nafas olish tezligi'
+          'Nafas olish tezligi',
         ],
         correctIndex: 0,
       ),
@@ -163,4 +216,3 @@ class MockData {
     ],
   );
 }
-

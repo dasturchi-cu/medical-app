@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../core/localization/language_provider.dart';
+import '../core/theme/design_system.dart';
 
 class AppBottomNav extends StatelessWidget {
   const AppBottomNav({
@@ -17,6 +18,8 @@ class AppBottomNav extends StatelessWidget {
     return NavigationBar(
       selectedIndex: currentIndex,
       onDestinationSelected: onTap,
+      backgroundColor: AppColors.surface,
+      indicatorColor: AppColors.surfaceAlt,
       destinations: [
         NavigationDestination(
           icon: const Icon(Icons.home_outlined),

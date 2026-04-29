@@ -42,10 +42,6 @@ class LessonListPage extends ConsumerWidget {
       );
     }
 
-    final flat = repo.getFlattenLessons(courseId);
-    int globalIndexOf(String lessonId) =>
-        flat.indexWhere((x) => x.id == lessonId);
-
     return Scaffold(
       appBar: AppBar(
         title: Text(context.tr('lessons')),
@@ -60,14 +56,11 @@ class LessonListPage extends ConsumerWidget {
         separatorBuilder: (_, index) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
           final l = section.lessons[i];
-
-          final g = globalIndexOf(l.id);
-          final locked =
-              !purchased && g > 0; // only first lesson overall is free
+          final locked = !purchased && i > 0;
 
           return LessonItem(
             animationDelayMs: (i % 10) * 45,
-            index: g + 1,
+            index: i + 1,
             title: l.titleUz,
             duration: l.durationUz,
             locked: locked,

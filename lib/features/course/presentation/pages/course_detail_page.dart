@@ -7,6 +7,8 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/purchase_controller.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../widgets/base_card.dart';
+import '../../../../widgets/lesson_item.dart';
 import '../widgets/purchase_modal.dart';
 
 class CourseDetailPage extends ConsumerWidget {
@@ -24,6 +26,7 @@ class CourseDetailPage extends ConsumerWidget {
     final lessons = course == null
         ? const []
         : repo.getFlattenLessons(courseId);
+    final isDoctorCourse = course?.id == 'course_private_neuro';
 
     if (course == null) {
       return Scaffold(
@@ -136,79 +139,72 @@ class CourseDetailPage extends ConsumerWidget {
               ),
             ),
           const SizedBox(height: 14),
-          ...course.sections.map((s) {
-            return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
-              child: Card(
-                margin: EdgeInsets.zero,
-                child: ExpansionTile(
-                  shape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  collapsedShape: RoundedRectangleBorder(
-                    borderRadius: BorderRadius.circular(16),
-                  ),
-                  title: Text(
-                    s.titleUz,
-                    style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                      fontWeight: FontWeight.w800,
-                    ),
-                  ),
-                  subtitle: Text(
-                    s.durationUz,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: Colors.black54),
-                  ),
-                  children: [
-                    Padding(
-                      padding: const EdgeInsets.fromLTRB(16, 0, 16, 14),
-                      child: Row(
-                        children: [
-                          Expanded(
-                            child: Text(
-                              '${s.lessons.length} ta dars',
-                              style: Theme.of(context).textTheme.bodyMedium
-                                  ?.copyWith(
-                                    fontWeight: FontWeight.w600,
-                                    color: Colors.black87,
-                                  ),
-                            ),
-                          ),
-                          SizedBox(
-                            height: 36,
-                            child: FilledButton(
-                              style: FilledButton.styleFrom(
-                                shape: RoundedRectangleBorder(
-                                  borderRadius: BorderRadius.circular(999),
-                                ),
-                              ),
-                              onPressed: () {
-                                ref
-                                        .read(selectedCourseIdProvider.notifier)
-                                        .state =
-                                    course.id;
-                                ref
-                                    .read(progressControllerProvider.notifier)
-                                    .enroll(course.id);
-                                context.push(
-                                  '${AppRoutes.lessonList}?courseId=${course.id}&sectionId=${s.id}',
-                                );
-                              },
-                              child: const Text(
-                                'Darslar',
-                                style: TextStyle(fontWeight: FontWeight.w800),
-                              ),
-                            ),
-                          ),
-                        ],
-                      ),
-                    ),
-                  ],
+          if (isDoctorCourse) ...[
+            Text(
+              'Bazalar',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            ...course.sections.map((s) {
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: BaseCard(
+                  title: s.titleUz,
+                  videoCountText: '${s.lessons.length} ta video',
+                  onTap: () {
+                    ref.read(selectedCourseIdProvider.notifier).state =
+                        course.id;
+                    ref
+                        .read(progressControllerProvider.notifier)
+                        .enroll(course.id);
+                    context.push(
+                      '${AppRoutes.lessonList}?courseId=${course.id}&sectionId=${s.id}',
+                    );
+                  },
                 ),
-              ),
-            );
-          }),
+              );
+            }),
+          ] else ...[
+            Text(
+              'Video darslar',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 10),
+            ...List.generate(lessons.length, (i) {
+              final l = lessons[i];
+              final locked = !purchased && i > 0;
+              return Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: LessonItem(
+                  index: i + 1,
+                  title: l.titleUz,
+                  duration: l.durationUz,
+                  locked: locked,
+                  onTap: () async {
+                    if (locked) {
+                      await showPurchaseModal(
+                        context: context,
+                        courseName: course.titleUz,
+                        description: course.descriptionUz,
+                        price: '299 000 so\'m',
+                      );
+                      return;
+                    }
+                    ref.read(selectedCourseIdProvider.notifier).state =
+                        course.id;
+                    ref
+                        .read(progressControllerProvider.notifier)
+                        .openedLesson(courseId: course.id, lessonId: l.id);
+                    context.push('${AppRoutes.lesson}?id=${l.id}');
+                  },
+                ),
+              );
+            }),
+          ],
           const SizedBox(height: 8),
           SizedBox(
             height: 48,

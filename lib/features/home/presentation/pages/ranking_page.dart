@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 
 import '../../../../core/localization/language_provider.dart';
+import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/ranking_item.dart';
 
 class RankingPage extends StatefulWidget {
@@ -10,9 +11,10 @@ class RankingPage extends StatefulWidget {
   State<RankingPage> createState() => _RankingPageState();
 }
 
-class _RankingPageState extends State<RankingPage> with SingleTickerProviderStateMixin {
+class _RankingPageState extends State<RankingPage>
+    with SingleTickerProviderStateMixin {
   late final TabController _tabs;
- late final List<List<_RankingUser>> _datasets;
+  late final List<List<_RankingUser>> _datasets;
 
   @override
   void initState() {
@@ -66,10 +68,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
         controller: _tabs,
         children: List.generate(
           tabTitles.length,
-          (i) => _RankingList(
-            titleUz: tabTitles[i],
-            users: _datasets[i],
-          ),
+          (i) => _RankingList(titleUz: tabTitles[i], users: _datasets[i]),
         ),
       ),
     );
@@ -89,10 +88,7 @@ class _RankingPageState extends State<RankingPage> with SingleTickerProviderStat
 }
 
 class _RankingList extends StatefulWidget {
-  const _RankingList({
-    required this.titleUz,
-    required this.users,
-  });
+  const _RankingList({required this.titleUz, required this.users});
 
   final String titleUz;
   final List<_RankingUser> users;
@@ -117,7 +113,7 @@ class _RankingListState extends State<_RankingList>
         await Future<void>.delayed(const Duration(milliseconds: 350));
       },
       child: ListView.builder(
-        padding: const EdgeInsets.all(16),
+        padding: const EdgeInsets.all(AppSpacing.s16),
         itemCount: top10.length + (!inTop10 ? 3 : 0),
         itemBuilder: (context, index) {
           final topStart = 0;
@@ -127,7 +123,7 @@ class _RankingListState extends State<_RankingList>
             final h = u.studyMinutes ~/ 60;
             final m = u.studyMinutes % 60;
             return Padding(
-              padding: const EdgeInsets.only(bottom: 10),
+              padding: const EdgeInsets.only(bottom: AppSpacing.s8),
               child: RankingItem(
                 rank: u.rank,
                 name: u.name,
@@ -146,18 +142,21 @@ class _RankingListState extends State<_RankingList>
               return Text(
                 context.tr('your_place'),
                 style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                      fontWeight: FontWeight.w900,
-                      color: Colors.black54,
-                    ),
+                  fontWeight: FontWeight.w900,
+                  color: AppColors.textSecondary,
+                ),
               );
             }
-            if (local == 1) return const SizedBox(height: 8);
+            if (local == 1) return const SizedBox(height: AppSpacing.s8);
             return RankingItem(
               rank: me.rank,
               name: me.name,
               timeLabel: context.tr(
                 'time_hm',
-                params: {'h': '${me.studyMinutes ~/ 60}', 'm': '${me.studyMinutes % 60}'},
+                params: {
+                  'h': '${me.studyMinutes ~/ 60}',
+                  'm': '${me.studyMinutes % 60}',
+                },
               ),
               isCurrentUser: true,
               prefixLabel: context.tr('nav_profile'),
@@ -186,4 +185,3 @@ class _RankingUser {
     required this.me,
   });
 }
-

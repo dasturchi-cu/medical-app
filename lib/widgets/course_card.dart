@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 
+import '../core/theme/design_system.dart';
 import 'course_visual.dart';
 
 class CourseCard extends StatelessWidget {
@@ -10,6 +11,7 @@ class CourseCard extends StatelessWidget {
     required this.author,
     required this.progress,
     required this.ratingText,
+    required this.videoCountText,
     required this.buttonText,
     required this.buttonColor,
     required this.onPressed,
@@ -22,6 +24,7 @@ class CourseCard extends StatelessWidget {
   final String author;
   final double progress;
   final String ratingText;
+  final String videoCountText;
   final String buttonText;
   final Color buttonColor;
   final VoidCallback onPressed;
@@ -44,14 +47,17 @@ class CourseCard extends StatelessWidget {
         );
       },
       child: Card(
-        margin: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+        margin: const EdgeInsets.symmetric(
+          horizontal: AppSpacing.s16,
+          vertical: AppSpacing.s8,
+        ),
         child: Padding(
-          padding: const EdgeInsets.all(12),
+          padding: const EdgeInsets.all(AppSpacing.s12),
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
               CourseVisual(kind: visualKind),
-              const SizedBox(width: 12),
+              const SizedBox(width: AppSpacing.s12),
               Expanded(
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
@@ -64,62 +70,83 @@ class CourseCard extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
-                    const SizedBox(height: 2),
+                    const SizedBox(height: AppSpacing.s4),
                     Text(
                       author,
-                      style: Theme.of(
-                        context,
-                      ).textTheme.bodySmall?.copyWith(color: Colors.black54),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.textSecondary,
+                      ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: AppSpacing.s8),
                     Row(
                       children: [
                         Expanded(
                           child: ClipRRect(
-                            borderRadius: BorderRadius.circular(999),
+                            borderRadius: BorderRadius.circular(
+                              AppRadius.button,
+                            ),
                             child: LinearProgressIndicator(
                               value: progress.clamp(0, 1),
-                              minHeight: 8,
-                              backgroundColor: const Color(0xFFE8ECF3),
+                              minHeight: AppSpacing.s8,
+                              backgroundColor: AppColors.surfaceAlt,
                               valueColor: const AlwaysStoppedAnimation(
-                                Color(0xFF1E6BB8),
+                                AppColors.primary,
                               ),
                             ),
                           ),
                         ),
-                        const SizedBox(width: 10),
+                        const SizedBox(width: AppSpacing.s8),
                         Text(
                           '${(progress * 100).round()}%',
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w600,
-                                color: Colors.black54,
+                                color: AppColors.textSecondary,
                               ),
                         ),
                       ],
                     ),
-                    const SizedBox(height: 10),
+                    const SizedBox(height: AppSpacing.s8),
                     Row(
                       children: [
                         const Icon(
                           Icons.star,
                           size: 16,
-                          color: Color(0xFFF5B400),
+                          color: AppColors.textSecondary,
                         ),
-                        const SizedBox(width: 4),
+                        const SizedBox(width: AppSpacing.s4),
                         Text(
                           ratingText,
                           style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
                                 fontWeight: FontWeight.w600,
-                                color: Colors.black87,
+                                color: AppColors.textPrimary,
                               ),
                         ),
                         const SizedBox(width: 8),
+                        const Icon(
+                          Icons.videocam_outlined,
+                          size: 16,
+                          color: AppColors.textSecondary,
+                        ),
+                        const SizedBox(width: AppSpacing.s4),
+                        Text(
+                          videoCountText,
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                fontWeight: FontWeight.w600,
+                                color: AppColors.textSecondary,
+                              ),
+                        ),
+                        const SizedBox(width: AppSpacing.s8),
                         IconButton(
                           visualDensity: VisualDensity.compact,
                           onPressed: onMessagePressed,
-                          icon: const Icon(Icons.chat_bubble_outline, size: 18),
+                          icon: const Icon(
+                            Icons.chat_bubble_outline,
+                            size: 18,
+                            color: AppColors.textSecondary,
+                          ),
                           tooltip: 'Izohlar',
                         ),
                         const Spacer(),
@@ -130,10 +157,12 @@ class CourseCard extends StatelessWidget {
                               backgroundColor: buttonColor,
                               foregroundColor: Colors.white,
                               shape: RoundedRectangleBorder(
-                                borderRadius: BorderRadius.circular(999),
+                                borderRadius: BorderRadius.circular(
+                                  AppRadius.button,
+                                ),
                               ),
                               padding: const EdgeInsets.symmetric(
-                                horizontal: 16,
+                                horizontal: AppSpacing.s12,
                               ),
                             ),
                             onPressed: onPressed,
