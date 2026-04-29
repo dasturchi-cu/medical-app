@@ -49,6 +49,8 @@ export default function LessonsPage() {
   const effectiveSelectedModule = selectedCourseData?.has_modules
     ? selectedModule ?? modulesForCourse[0]?.id ?? ""
     : "";
+  const effectiveModuleName =
+    modulesForCourse.find((entry) => entry.id === effectiveSelectedModule)?.name ?? "Bazani tanlang";
 
   const columns = useMemo(
     () => [
@@ -76,7 +78,7 @@ export default function LessonsPage() {
         key: "actions",
         label: "Amallar",
         render: (item: Lesson) => (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               className="h-8 rounded-lg border-slate-200 px-3 text-xs"
@@ -140,13 +142,19 @@ export default function LessonsPage() {
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[1fr_380px]">
+    <section className="grid gap-6 lg:grid-cols-[1fr_390px]">
       <div className="space-y-4">
-        <div className="surface-card p-6">
+        <div className="surface-card space-y-4 p-6">
+          <div>
+            <h3 className="text-base font-semibold text-slate-900">Filtrlar</h3>
+            <p className="text-sm text-slate-500">Kurs va bazani tanlab, kerakli darslarni boshqaring.</p>
+          </div>
           <Label className="mb-2 block text-sm text-slate-600">Kursni tanlang</Label>
           <Select value={selectedCourse} onValueChange={(value) => setSelectedCourse(value ?? "")}>
             <SelectTrigger className="h-11 w-full rounded-xl border-slate-200">
-              <SelectValue placeholder="Kursni tanlang" />
+              <SelectValue placeholder="Kursni tanlang">
+                {selectedCourseData?.title_uz ?? "Kursni tanlang"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {courses.map((course) => (
@@ -162,7 +170,7 @@ export default function LessonsPage() {
               <Label className="mb-2 block text-sm text-slate-600">Qaysi bazaga tegishli?</Label>
               <Select value={effectiveSelectedModule} onValueChange={(value) => setSelectedModule(value ?? "")}>
                 <SelectTrigger className="h-11 w-full rounded-xl border-slate-200">
-                  <SelectValue placeholder="Bazani tanlang" />
+                  <SelectValue placeholder="Bazani tanlang">{effectiveModuleName}</SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {modulesForCourse.map((module) => (
@@ -222,7 +230,10 @@ export default function LessonsPage() {
               onValueChange={(value) => setFormValues((prev) => ({ ...prev, module_id: value ?? "" }))}
             >
               <SelectTrigger id="module_id" className="h-11 rounded-xl border-slate-200">
-                <SelectValue placeholder="Bazani tanlang" />
+                <SelectValue placeholder="Bazani tanlang">
+                  {modulesForCourse.find((entry) => entry.id === (formValues.module_id || effectiveSelectedModule))
+                    ?.name ?? "Bazani tanlang"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {modulesForCourse.map((module) => (
@@ -291,7 +302,9 @@ export default function LessonsPage() {
                 onValueChange={(value) => setEditValues((prev) => ({ ...prev, module_id: value ?? "" }))}
               >
                 <SelectTrigger id="edit_module" className="h-11 rounded-xl border-slate-200">
-                  <SelectValue placeholder="Bazani tanlang" />
+                  <SelectValue placeholder="Bazani tanlang">
+                    {modulesForCourse.find((entry) => entry.id === editValues.module_id)?.name ?? "Bazani tanlang"}
+                  </SelectValue>
                 </SelectTrigger>
                 <SelectContent>
                   {modulesForCourse.map((module) => (

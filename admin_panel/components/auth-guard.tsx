@@ -1,6 +1,6 @@
 "use client";
 
-import { useEffect } from "react";
+import { useEffect, useSyncExternalStore } from "react";
 import type { ReactNode } from "react";
 import { usePathname, useRouter } from "next/navigation";
 import { isAdminAuthenticated } from "@/lib/admin-auth";
@@ -12,7 +12,7 @@ interface AuthGuardProps {
 export function AuthGuard({ children }: AuthGuardProps) {
   const router = useRouter();
   const pathname = usePathname();
-  const allowed = isAdminAuthenticated();
+  const allowed = useSyncExternalStore(subscribeAuthState, getAuthSnapshot, getServerAuthSnapshot);
 
   useEffect(() => {
     if (!allowed) {
@@ -31,4 +31,23 @@ export function AuthGuard({ children }: AuthGuardProps) {
   }
 
   return <>{children}</>;
+}
+
+function subscribeAuthState(callback: () => void) {
+  if (typeof window === "undefined") return () => undefined;
+  const handler = () => callback();
+  window.addEventListener("storage", handler);
+  window.addEventListener("admin-auth-changed", handler);
+  return () => {
+    window.removeEventListener("storage", handler);
+    window.removeEventListener("admin-auth-changed", handler);
+  };
+}
+
+function getAuthSnapshot() {
+  return isAdminAuthenticated();
+}
+
+function getServerAuthSnapshot() {
+  return false;
 }

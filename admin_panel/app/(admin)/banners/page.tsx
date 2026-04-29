@@ -12,7 +12,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { adminActions, type Banner, useAdminStore } from "@/lib/admin-store";
+import { adminActions, courseTitleByLanguage, type Banner, useAdminStore } from "@/lib/admin-store";
 
 export default function BannersPage() {
   const { courses, banners } = useAdminStore((state) => state);
@@ -53,13 +53,17 @@ export default function BannersPage() {
       { key: "title", label: "Sarlavha" },
       {
         key: "courseId",
-        label: "Kurs ID",
+        label: "Kurs",
+        render: (item: Banner) => {
+          const course = courses.find((entry) => entry.id === item.courseId);
+          return course ? courseTitleByLanguage(course, "uz") : item.courseId;
+        },
       },
       {
         key: "actions",
         label: "Amallar",
         render: (item: Banner) => (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="outline"
               className="h-8 rounded-lg border-slate-200 px-3 text-xs"
@@ -81,7 +85,7 @@ export default function BannersPage() {
         ),
       },
     ],
-    [],
+    [courses],
   );
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -112,7 +116,7 @@ export default function BannersPage() {
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[1fr_380px]">
+    <section className="grid gap-6 lg:grid-cols-[1fr_390px]">
       <AppTable columns={columns} data={banners} emptyText="Hali bannerlar qo&apos;shilmagan." />
 
       <AppForm title="Banner yaratish" description="Kursga bog&apos;langan promo banner qo&apos;shing." onSubmit={onSubmit}>
@@ -135,13 +139,15 @@ export default function BannersPage() {
         />
 
         <div className="grid gap-2">
-          <Label htmlFor="course_id">Kurs ID - course_id</Label>
+          <Label htmlFor="course_id">Kurs</Label>
           <Select
             value={formValues.course_id ?? ""}
             onValueChange={(value) => setFormValues((prev) => ({ ...prev, course_id: value }))}
           >
             <SelectTrigger id="course_id" className="h-11 rounded-xl border-slate-200">
-              <SelectValue placeholder="Kursni tanlang" />
+              <SelectValue placeholder="Kursni tanlang">
+                {courses.find((course) => course.id === formValues.course_id)?.title_uz ?? "Kursni tanlang"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {courses.map((course) => (
@@ -177,13 +183,15 @@ export default function BannersPage() {
             onChange={(value) => setEditValues((prev) => ({ ...prev, image: value }))}
           />
           <div className="grid gap-2">
-            <Label htmlFor="edit_banner_course">Kurs ID</Label>
+            <Label htmlFor="edit_banner_course">Kurs</Label>
             <Select
               value={editValues.course_id ?? ""}
               onValueChange={(value) => setEditValues((prev) => ({ ...prev, course_id: value }))}
             >
               <SelectTrigger id="edit_banner_course" className="h-11 rounded-xl border-slate-200">
-                <SelectValue placeholder="Kursni tanlang" />
+                <SelectValue placeholder="Kursni tanlang">
+                  {courses.find((course) => course.id === editValues.course_id)?.title_uz ?? "Kursni tanlang"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {courses.map((course) => (

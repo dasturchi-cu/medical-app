@@ -7,6 +7,7 @@ import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/auth_controller.dart';
+import '../../../../core/state/purchase_controller.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../core/theme/design_system.dart';
 
@@ -17,6 +18,7 @@ class ProfilePage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(courseRepositoryProvider);
     final progress = ref.watch(progressControllerProvider);
+    final purchase = ref.watch(purchaseControllerProvider);
     final auth = ref.watch(authControllerProvider);
     final myCount = repo.getCourses().where((c) {
       final p = progress.byCourseId[c.id];
@@ -105,7 +107,7 @@ class ProfilePage extends ConsumerWidget {
                 ),
               ),
             ),
-          if (!auth.isLoggedIn)
+          if (!auth.isLoggedIn && purchase.purchasedCourseIds.isEmpty)
             Card(
               margin: const EdgeInsets.only(bottom: AppSpacing.s12),
               child: ListTile(

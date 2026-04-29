@@ -35,4 +35,5 @@ export function setAdminAuthenticated(value: boolean) {
   } else {
     window.localStorage.removeItem(ADMIN_AUTH_STORAGE_KEY);
   }
+  window.dispatchEvent(new Event("admin-auth-changed"));
 }

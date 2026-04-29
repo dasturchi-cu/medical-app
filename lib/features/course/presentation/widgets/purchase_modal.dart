@@ -5,12 +5,14 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/auth_controller.dart';
 import '../../../../core/services/telegram_service.dart';
+import '../../../../core/state/purchase_controller.dart';
 
 Future<void> showPurchaseModal({
   required BuildContext context,
   required String courseName,
   required String description,
   required String price,
+  String? courseId,
 }) async {
   await showModalBottomSheet<void>(
     context: context,
@@ -21,6 +23,7 @@ Future<void> showPurchaseModal({
         courseName: courseName,
         description: description,
         price: price,
+        courseId: courseId,
       );
     },
   );
@@ -31,11 +34,13 @@ class _PurchaseModalContent extends ConsumerStatefulWidget {
     required this.courseName,
     required this.description,
     required this.price,
+    this.courseId,
   });
 
   final String courseName;
   final String description;
   final String price;
+  final String? courseId;
 
   @override
   ConsumerState<_PurchaseModalContent> createState() =>
@@ -138,6 +143,12 @@ class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
                               userId: auth.userId!,
                             );
                             if (!context.mounted) return;
+
+                            if (opened && widget.courseId != null) {
+                              ref
+                                  .read(purchaseControllerProvider.notifier)
+                                  .purchaseCourse(widget.courseId!);
+                            }
 
                             setState(() => _loading = false);
                             Navigator.of(context).pop();

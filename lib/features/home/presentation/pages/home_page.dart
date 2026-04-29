@@ -15,6 +15,7 @@ import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/category_chip.dart';
 import '../../../../widgets/course_card.dart';
 import '../../../../widgets/course_stats_comments_sheet.dart';
+import '../../../course/presentation/widgets/purchase_modal.dart';
 import '../providers/home_providers.dart';
 
 class HomePage extends ConsumerStatefulWidget {
@@ -65,8 +66,9 @@ class _HomePageState extends ConsumerState<HomePage> {
     final courses = allCourses.where((c) {
       final matchesCategory = switch (selectedCat) {
         'cat_books' => false,
-        'cat_nevralogiya' => c.titleUz.toLowerCase().contains('nevrologiya'),
-        _ => c.categoryId == 'cat_online',
+        'cat_nevralogiya' => true,
+        'cat_online' => false,
+        _ => false,
       };
       if (!matchesCategory) return false;
       if (query.isEmpty) return true;
@@ -279,7 +281,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 14, 16, 8),
               child: Text(
-                context.tr('home_section_courses'),
+                'Kategoriyalar',
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
@@ -326,98 +328,150 @@ class _HomePageState extends ConsumerState<HomePage> {
               ),
             ),
           ),
-          SliverToBoxAdapter(
-            child: Padding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
-              child: Text(
-                context.tr('home_section_sections'),
-                style: Theme.of(
-                  context,
-                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          if (selectedCat == 'cat_online') ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text(
+                  'Kanal yangiliklari',
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
               ),
             ),
-          ),
-          SliverList.builder(
-            itemCount: courses.length,
-            itemBuilder: (context, index) {
-              final c = courses[index];
-              final p = progress.byCourseId[c.id];
-              final totalLessons = repo.getFlattenLessons(c.id).length;
-              final completed = p?.completedLessonIds.length ?? 0;
-              final progressValue = totalLessons == 0
-                  ? 0.0
-                  : (completed / totalLessons).toDouble().clamp(0.0, 1.0);
+            SliverToBoxAdapter(
+              child: SizedBox(
+                height: 306,
+                child: ListView.separated(
+                  scrollDirection: Axis.horizontal,
+                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                  itemCount: MockData.newsFeed.length,
+                  separatorBuilder: (_, index) => const SizedBox(width: 12),
+                  itemBuilder: (context, index) {
+                    final news = MockData.newsFeed[index];
+                    return _NewsCard(
+                      item: news,
+                      onCommentsTap: () {
+                        showModalBottomSheet(
+                          context: context,
+                          isScrollControlled: true,
+                          showDragHandle: false,
+                          builder: (_) => CourseStatsCommentsSheet(
+                            courseId: news.relatedCourseId,
+                            courseTitleUz: news.titleUz,
+                          ),
+                        );
+                      },
+                      onBuyTap: () async {
+                        await showPurchaseModal(
+                          context: context,
+                          courseName: news.titleUz,
+                          description: news.summaryUz,
+                          price: '299 000 so\'m',
+                          courseId: news.relatedCourseId,
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ),
+          ],
+          if (selectedCat != 'cat_online') ...[
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
+                child: Text(
+                  context.tr('home_section_sections'),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+                ),
+              ),
+            ),
+            SliverList.builder(
+              itemCount: courses.length,
+              itemBuilder: (context, index) {
+                final c = courses[index];
+                final p = progress.byCourseId[c.id];
+                final totalLessons = repo.getFlattenLessons(c.id).length;
+                final completed = p?.completedLessonIds.length ?? 0;
+                final progressValue = totalLessons == 0
+                    ? 0.0
+                    : (completed / totalLessons).toDouble().clamp(0.0, 1.0);
 
-              final buttonText = (p?.enrolled ?? false) || progressValue > 0
-                  ? context.tr('btn_continue')
-                  : context.tr('btn_start');
-              const buttonColor = AppColors.primary;
+                final buttonText = (p?.enrolled ?? false) || progressValue > 0
+                    ? context.tr('btn_continue')
+                    : context.tr('btn_start');
+                const buttonColor = AppColors.primary;
 
-              if (_loading) {
-                return Card(
-                  margin: const EdgeInsets.symmetric(
-                    horizontal: AppSpacing.s16,
-                    vertical: AppSpacing.s8,
-                  ),
-                  child: const SizedBox(height: 116),
-                );
-              }
-
-              return CourseCard(
-                animationDelayMs: (index % 8) * 55,
-                visualKind: c.titleUz == 'Xususiy Nevrologiya (Bakalavr uchun)'
-                    ? 'xususiy_bachelor'
-                    : c.titleUz == 'Umumiy Nevrologiya (Bakalavr uchun)'
-                    ? 'umumiy_bachelor'
-                    : c.titleUz == 'Xususiy nevrologiya (shifokorlar uchun)'
-                    ? 'xususiy_doctors'
-                    : c.titleUz == 'EEG'
-                    ? 'eeg_img'
-                    : c.titleUz == 'Epileptologiya'
-                    ? 'epileptologiya_img'
-                    : c.titleUz == 'ENMG'
-                    ? 'enmg_img'
-                    : 'brain',
-                title: c.titleUz,
-                author: c.authorUz,
-                progress: progressValue,
-                ratingText: c.rating.toStringAsFixed(1),
-                videoCountText: '$totalLessons ta video',
-                buttonText: buttonText,
-                buttonColor: buttonColor,
-                onPressed: () {
-                  ref.read(selectedCourseIdProvider.notifier).state = c.id;
-                  ref.read(progressControllerProvider.notifier).enroll(c.id);
-
-                  if (buttonText == 'Davom etish') {
-                    final last = progress.byCourseId[c.id]?.lastLessonId;
-                    if (last != null) {
-                      context.push('${AppRoutes.lesson}?id=$last');
-                      return;
-                    }
-                    final first = repo.getFirstUnlockedLesson(c.id);
-                    if (first != null) {
-                      context.push('${AppRoutes.lesson}?id=${first.id}');
-                      return;
-                    }
-                  }
-
-                  context.push('${AppRoutes.courseDetail}?id=${c.id}');
-                },
-                onMessagePressed: () {
-                  showModalBottomSheet(
-                    context: context,
-                    isScrollControlled: true,
-                    showDragHandle: false,
-                    builder: (_) => CourseStatsCommentsSheet(
-                      courseId: c.id,
-                      courseTitleUz: c.titleUz,
+                if (_loading) {
+                  return Card(
+                    margin: const EdgeInsets.symmetric(
+                      horizontal: AppSpacing.s16,
+                      vertical: AppSpacing.s8,
                     ),
+                    child: const SizedBox(height: 116),
                   );
-                },
-              );
-            },
-          ),
+                }
+
+                return CourseCard(
+                  animationDelayMs: (index % 8) * 55,
+                  visualKind: c.titleUz == 'Xususiy Nevrologiya (Bakalavr uchun)'
+                      ? 'xususiy_bachelor'
+                      : c.titleUz == 'Umumiy Nevrologiya (Bakalavr uchun)'
+                      ? 'umumiy_bachelor'
+                      : c.titleUz == 'Xususiy nevrologiya (shifokorlar uchun)'
+                      ? 'xususiy_doctors'
+                      : c.titleUz == 'EEG'
+                      ? 'eeg_img'
+                      : c.titleUz == 'Epileptologiya'
+                      ? 'epileptologiya_img'
+                      : c.titleUz == 'ENMG'
+                      ? 'enmg_img'
+                      : 'brain',
+                  title: c.titleUz,
+                  author: c.authorUz,
+                  progress: progressValue,
+                  ratingText: c.rating.toStringAsFixed(1),
+                  videoCountText: '$totalLessons ta video',
+                  buttonText: buttonText,
+                  buttonColor: buttonColor,
+                  onPressed: () {
+                    ref.read(selectedCourseIdProvider.notifier).state = c.id;
+                    ref.read(progressControllerProvider.notifier).enroll(c.id);
+
+                    if (buttonText == 'Davom etish') {
+                      final last = progress.byCourseId[c.id]?.lastLessonId;
+                      if (last != null) {
+                        context.push('${AppRoutes.lesson}?id=$last');
+                        return;
+                      }
+                      final first = repo.getFirstUnlockedLesson(c.id);
+                      if (first != null) {
+                        context.push('${AppRoutes.lesson}?id=${first.id}');
+                        return;
+                      }
+                    }
+
+                    context.push('${AppRoutes.courseDetail}?id=${c.id}');
+                  },
+                  onMessagePressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      showDragHandle: false,
+                      builder: (_) => CourseStatsCommentsSheet(
+                        courseId: c.id,
+                        courseTitleUz: c.titleUz,
+                      ),
+                    );
+                  },
+                );
+              },
+            ),
+          ],
           if (selectedCat == 'cat_books')
             SliverFillRemaining(
               hasScrollBody: false,
@@ -433,6 +487,124 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 10)),
         ],
+      ),
+    );
+  }
+}
+
+class _NewsCard extends StatelessWidget {
+  const _NewsCard({
+    required this.item,
+    required this.onCommentsTap,
+    required this.onBuyTap,
+  });
+
+  final NewsItem item;
+  final VoidCallback onCommentsTap;
+  final VoidCallback onBuyTap;
+
+  @override
+  Widget build(BuildContext context) {
+    return Container(
+      width: 312,
+      decoration: BoxDecoration(
+        color: Colors.white,
+        borderRadius: BorderRadius.circular(16),
+        boxShadow: AppShadows.soft,
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(16),
+        child: Column(
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            SizedBox(
+              height: 126,
+              width: double.infinity,
+              child: Image.network(
+                item.imageUrl,
+                fit: BoxFit.cover,
+                errorBuilder: (context, error, stackTrace) {
+                  return Container(
+                    color: const Color(0xFFE7EEF9),
+                    child: const Center(
+                      child: Icon(Icons.image_outlined, color: AppColors.primary),
+                    ),
+                  );
+                },
+              ),
+            ),
+            Padding(
+              padding: const EdgeInsets.fromLTRB(12, 10, 12, 10),
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    item.titleUz,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    item.summaryUz,
+                    maxLines: 2,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                      color: AppColors.textSecondary,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      const Icon(Icons.star, size: 16, color: Colors.amber),
+                      const SizedBox(width: 4),
+                      Text(
+                        item.rating.toStringAsFixed(1),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                      const SizedBox(width: 12),
+                      const Icon(
+                        Icons.chat_bubble_outline,
+                        size: 16,
+                        color: AppColors.textSecondary,
+                      ),
+                      const SizedBox(width: 4),
+                      Text(
+                        '${item.commentCount} ta sharh',
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                  Row(
+                    children: [
+                      Expanded(
+                        child: OutlinedButton(
+                          onPressed: onCommentsTap,
+                          child: const Text('Sharhlar'),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      Expanded(
+                        child: FilledButton(
+                          onPressed: onBuyTap,
+                          child: const Text('Sotib olish'),
+                        ),
+                      ),
+                    ],
+                  ),
+                ],
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }

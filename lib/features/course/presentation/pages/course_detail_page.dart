@@ -129,6 +129,7 @@ class CourseDetailPage extends ConsumerWidget {
                       courseName: course.titleUz,
                       description: course.descriptionUz,
                       price: '299 000 so\'m',
+                      courseId: course.id,
                     );
                   },
                   child: const Text(
@@ -191,6 +192,7 @@ class CourseDetailPage extends ConsumerWidget {
                         courseName: course.titleUz,
                         description: course.descriptionUz,
                         price: '299 000 so\'m',
+                        courseId: course.id,
                       );
                       return;
                     }

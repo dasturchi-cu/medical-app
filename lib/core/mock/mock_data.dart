@@ -1,6 +1,26 @@
 import '../models/course_models.dart';
 import '../models/quiz_models.dart';
 
+class NewsItem {
+  final String id;
+  final String titleUz;
+  final String summaryUz;
+  final String imageUrl;
+  final double rating;
+  final int commentCount;
+  final String relatedCourseId;
+
+  const NewsItem({
+    required this.id,
+    required this.titleUz,
+    required this.summaryUz,
+    required this.imageUrl,
+    required this.rating,
+    required this.commentCount,
+    required this.relatedCourseId,
+  });
+}
+
 class MockData {
   static const categories = <Category>[
     Category(id: 'cat_online', titleUz: 'Onlayn kurs', iconKey: 'online'),
@@ -184,6 +204,39 @@ class MockData {
     'Diqqat va fokus',
     'O‘rganish strategiyalari',
     'Amaliy testlar',
+  ];
+
+  static const newsFeed = <NewsItem>[
+    NewsItem(
+      id: 'news_1',
+      titleUz: 'Nevrologiyada yangi diagnostika kursi',
+      summaryUz:
+          'Kanalga yangi kurs joylandi: klinik holatlarni tahlil qilish bo‘yicha amaliy darslar.',
+      imageUrl: 'https://picsum.photos/seed/neuro-news-1/900/520',
+      rating: 4.8,
+      commentCount: 41,
+      relatedCourseId: 'course_private_neuro',
+    ),
+    NewsItem(
+      id: 'news_2',
+      titleUz: 'EEG bo‘yicha yangi onlayn blok',
+      summaryUz:
+          'Admin tomonidan EEG bo‘yicha yangilangan video darslar va testlar qo‘shildi.',
+      imageUrl: 'https://picsum.photos/seed/neuro-news-2/900/520',
+      rating: 4.7,
+      commentCount: 29,
+      relatedCourseId: 'course_eeg',
+    ),
+    NewsItem(
+      id: 'news_3',
+      titleUz: 'Epileptologiya kursi yangilandi',
+      summaryUz:
+          'Kursga yangi protokollar, sharhlar va ko‘proq real case misollar yuklandi.',
+      imageUrl: 'https://picsum.photos/seed/neuro-news-3/900/520',
+      rating: 4.6,
+      commentCount: 23,
+      relatedCourseId: 'course_epilepsy',
+    ),
   ];
 
   static const quiz = Quiz(

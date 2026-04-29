@@ -77,7 +77,7 @@ export default function CoursesPage() {
         key: "actions",
         label: "Amallar",
         render: (item: Course) => (
-          <div className="flex items-center gap-2">
+          <div className="flex flex-wrap items-center gap-2">
             <Link
               href={`/courses/${item.id}`}
               className="inline-flex h-8 items-center rounded-lg border border-slate-200 px-3 text-xs text-slate-700 transition-colors hover:border-primary hover:text-primary"
@@ -220,7 +220,7 @@ function LanguageFields({ values, onChange }: LanguageFieldsProps) {
 
       <div className="rounded-xl border border-slate-100 p-4">
         <Label className="mb-2 block">Bu kursda bazalar bormi?</Label>
-        <div className="flex gap-2">
+        <div className="flex flex-wrap gap-2">
           <button
             type="button"
             className={`rounded-lg px-3 py-2 text-xs ${values.has_modules ? "bg-primary text-white" : "bg-slate-100 text-slate-600"}`}

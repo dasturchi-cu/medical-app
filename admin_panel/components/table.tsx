@@ -26,13 +26,15 @@ export function AppTable<T extends object>({
   emptyText = "Ma'lumot mavjud emas.",
 }: AppTableProps<T>) {
   return (
-    <div className="surface-card overflow-hidden">
+    <div className="surface-card overflow-hidden border border-slate-100">
       <div className="w-full overflow-x-auto">
       <UITable className="min-w-[760px]">
         <TableHeader>
-          <TableRow>
+          <TableRow className="bg-slate-50/70">
             {columns.map((column) => (
-              <TableHead key={String(column.key)}>{column.label}</TableHead>
+              <TableHead key={String(column.key)} className="h-11 px-4 text-xs font-semibold uppercase tracking-wide text-slate-500">
+                {column.label}
+              </TableHead>
             ))}
           </TableRow>
         </TableHeader>
@@ -41,7 +43,7 @@ export function AppTable<T extends object>({
             data.map((item, index) => (
               <TableRow key={index} className="hover:bg-slate-50/80">
                 {columns.map((column) => (
-                  <TableCell key={String(column.key)}>
+                  <TableCell key={String(column.key)} className="px-4 py-3 text-sm text-slate-700">
                     {column.render
                       ? column.render(item)
                       : String((item as Record<string, unknown>)[String(column.key)] ?? "")}

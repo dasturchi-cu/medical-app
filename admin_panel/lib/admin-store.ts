@@ -89,6 +89,9 @@ export interface CommentItem {
   user_id: string;
   text: string;
   created_at: string;
+  parent_id: string | null;
+  hearts: number;
+  hearted_by_admin: boolean;
 }
 
 export interface RatingItem {
@@ -222,8 +225,36 @@ let state: AdminState = {
     { user_id: "user-2", course_id: "course-3", module_id: null, purchased_at: "", is_active: false },
   ],
   comments: [
-    { id: "comment-1", course_id: "course-1", user_id: "user-1", text: "Kurs juda tushunarli va amaliy bo'ldi.", created_at: "2026-04-20" },
-    { id: "comment-2", course_id: "course-2", user_id: "user-2", text: "Yaxshi, ammo yana ko'proq misollar kerak.", created_at: "2026-04-22" },
+    {
+      id: "comment-1",
+      course_id: "course-1",
+      user_id: "user-1",
+      text: "Kurs juda tushunarli va amaliy bo'ldi.",
+      created_at: "2026-04-20",
+      parent_id: null,
+      hearts: 5,
+      hearted_by_admin: false,
+    },
+    {
+      id: "comment-2",
+      course_id: "course-2",
+      user_id: "user-2",
+      text: "Yaxshi, ammo yana ko'proq misollar kerak.",
+      created_at: "2026-04-22",
+      parent_id: null,
+      hearts: 3,
+      hearted_by_admin: false,
+    },
+    {
+      id: "comment-3",
+      course_id: "course-1",
+      user_id: "user-2",
+      text: "Rahmat, bu mavzuning keyingi qismi ham bo'ladimi?",
+      created_at: "2026-04-22",
+      parent_id: "comment-1",
+      hearts: 1,
+      hearted_by_admin: false,
+    },
   ],
   ratings: [
     { id: "rate-1", course_id: "course-1", user_id: "user-1", rating: 5, created_at: "2026-04-20" },
@@ -436,7 +467,43 @@ export const adminActions = {
   deleteComment(commentId: string) {
     updateState((current) => ({
       ...current,
-      comments: current.comments.filter((comment) => comment.id !== commentId),
+      comments: current.comments.filter(
+        (comment) => comment.id !== commentId && comment.parent_id !== commentId,
+      ),
+    }));
+  },
+  addCommentReply(payload: { parentId: string; courseId: string; text: string }) {
+    const nextText = payload.text.trim();
+    if (!nextText) return;
+    updateState((current) => ({
+      ...current,
+      comments: [
+        ...current.comments,
+        {
+          id: `comment-${Date.now()}`,
+          course_id: payload.courseId,
+          user_id: "admin",
+          text: nextText,
+          created_at: new Date().toISOString().slice(0, 10),
+          parent_id: payload.parentId,
+          hearts: 0,
+          hearted_by_admin: false,
+        },
+      ],
+    }));
+  },
+  toggleCommentHeart(commentId: string) {
+    updateState((current) => ({
+      ...current,
+      comments: current.comments.map((comment) => {
+        if (comment.id !== commentId) return comment;
+        const nextHearted = !comment.hearted_by_admin;
+        return {
+          ...comment,
+          hearted_by_admin: nextHearted,
+          hearts: Math.max(0, comment.hearts + (nextHearted ? 1 : -1)),
+        };
+      }),
     }));
   },
   reorderLesson(courseId: string, lessonId: string, direction: "up" | "down") {
