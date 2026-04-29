@@ -487,7 +487,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                     : (completed / totalLessons).toDouble().clamp(0.0, 1.0);
 
                 final buttonText = (p?.enrolled ?? false) || progressValue > 0
-                    ? context.tr('btn_continue')
+                    ? 'Davom et'
                     : context.tr('btn_start');
                 const buttonColor = AppColors.primary;
 
@@ -529,31 +529,19 @@ class _HomePageState extends ConsumerState<HomePage> {
                     ref.read(selectedCourseIdProvider.notifier).state = c.id;
                     ref.read(progressControllerProvider.notifier).enroll(c.id);
 
-                    if (buttonText == 'Davom etish') {
-                      final last = progress.byCourseId[c.id]?.lastLessonId;
-                      if (last != null) {
-                        context.push('${AppRoutes.lesson}?id=$last');
-                        return;
-                      }
-                      final first = repo.getFirstUnlockedLesson(c.id);
-                      if (first != null) {
-                        context.push('${AppRoutes.lesson}?id=${first.id}');
+                    if (buttonText == 'Davom et') {
+                      final firstSection = c.sections.isNotEmpty
+                          ? c.sections.first
+                          : null;
+                      if (firstSection != null) {
+                        context.push(
+                          '${AppRoutes.lessonList}?courseId=${c.id}&sectionId=${firstSection.id}',
+                        );
                         return;
                       }
                     }
 
                     context.push('${AppRoutes.courseDetail}?id=${c.id}');
-                  },
-                  onMessagePressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      showDragHandle: false,
-                      builder: (_) => CourseStatsCommentsSheet(
-                        courseId: c.id,
-                        courseTitleUz: c.titleUz,
-                      ),
-                    );
                   },
                 );
               },

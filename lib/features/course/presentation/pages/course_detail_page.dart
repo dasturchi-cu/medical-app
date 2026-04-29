@@ -60,23 +60,6 @@ class CourseDetailPage extends ConsumerWidget {
               ),
               child: Stack(
                 children: [
-                  Positioned(
-                    left: 16,
-                    bottom: 16,
-                    child: Container(
-                      width: 56,
-                      height: 56,
-                      decoration: BoxDecoration(
-                        color: const Color(0xFFE9F0FF),
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                      child: const Icon(
-                        Icons.psychology,
-                        color: Color(0xFF1E6BB8),
-                        size: 30,
-                      ),
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -244,9 +227,13 @@ class CourseDetailPage extends ConsumerWidget {
                 }
                 ref.read(selectedCourseIdProvider.notifier).state = course.id;
                 ref.read(progressControllerProvider.notifier).enroll(course.id);
-                final first = repo.getFirstUnlockedLesson(course.id);
-                if (first != null) {
-                  context.push('${AppRoutes.lesson}?id=${first.id}');
+                final firstSection = course.sections.isNotEmpty
+                    ? course.sections.first
+                    : null;
+                if (firstSection != null) {
+                  context.push(
+                    '${AppRoutes.lessonList}?courseId=${course.id}&sectionId=${firstSection.id}',
+                  );
                   return;
                 }
                 ScaffoldMessenger.of(context).showSnackBar(

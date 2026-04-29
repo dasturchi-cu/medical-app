@@ -7,7 +7,6 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/course_card.dart';
-import '../../../../widgets/course_stats_comments_sheet.dart';
 
 class MyCoursesPage extends ConsumerWidget {
   const MyCoursesPage({super.key});
@@ -61,7 +60,7 @@ class MyCoursesPage extends ConsumerWidget {
                 final progressValue = totalLessons == 0
                     ? 0.0
                     : (completed / totalLessons).toDouble().clamp(0.0, 1.0);
-                final buttonText = 'Davom etish';
+                final buttonText = 'Davom et';
 
                 return CourseCard(
                   animationDelayMs: (index % 8) * 55,
@@ -89,28 +88,16 @@ class MyCoursesPage extends ConsumerWidget {
                   buttonText: buttonText,
                   buttonColor: AppColors.primary,
                   onPressed: () {
-                    final last = p?.lastLessonId;
-                    if (last != null) {
-                      context.push('${AppRoutes.lesson}?id=$last');
-                      return;
-                    }
-                    final first = repo.getFirstUnlockedLesson(c.id);
-                    if (first != null) {
-                      context.push('${AppRoutes.lesson}?id=${first.id}');
+                    final firstSection = c.sections.isNotEmpty
+                        ? c.sections.first
+                        : null;
+                    if (firstSection != null) {
+                      context.push(
+                        '${AppRoutes.lessonList}?courseId=${c.id}&sectionId=${firstSection.id}',
+                      );
                       return;
                     }
                     context.push('${AppRoutes.courseDetail}?id=${c.id}');
-                  },
-                  onMessagePressed: () {
-                    showModalBottomSheet(
-                      context: context,
-                      isScrollControlled: true,
-                      showDragHandle: false,
-                      builder: (_) => CourseStatsCommentsSheet(
-                        courseId: c.id,
-                        courseTitleUz: c.titleUz,
-                      ),
-                    );
                   },
                 );
               },

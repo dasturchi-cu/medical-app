@@ -162,8 +162,27 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                         ref
                             .read(progressControllerProvider.notifier)
                             .completeLesson(courseId: courseId, lessonId: widget.lessonId);
+                        final course = repo.getCourseById(courseId);
+                        String? sectionId;
+                        if (course != null) {
+                          for (final section in course.sections) {
+                            final hasLesson = section.lessons.any(
+                              (lessonItem) => lessonItem.id == widget.lessonId,
+                            );
+                            if (hasLesson) {
+                              sectionId = section.id;
+                              break;
+                            }
+                          }
+                        }
+                        if (sectionId != null && sectionId.isNotEmpty) {
+                          context.pushReplacement(
+                            '${AppRoutes.lessonList}?courseId=$courseId&sectionId=$sectionId',
+                          );
+                          return;
+                        }
                       }
-                      context.pop(); // back to lesson list
+                      context.pop();
                     },
                     child: const Text(
                       'Darsni yakunlash',

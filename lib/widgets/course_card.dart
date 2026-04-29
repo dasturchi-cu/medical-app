@@ -17,7 +17,7 @@ class CourseCard extends StatelessWidget {
     required this.buttonText,
     required this.buttonColor,
     required this.onPressed,
-    required this.onMessagePressed,
+    this.onMessagePressed,
     this.animationDelayMs = 0,
   });
 
@@ -32,7 +32,7 @@ class CourseCard extends StatelessWidget {
   final String buttonText;
   final Color buttonColor;
   final VoidCallback onPressed;
-  final VoidCallback onMessagePressed;
+  final VoidCallback? onMessagePressed;
   final int animationDelayMs;
 
   @override
@@ -151,16 +151,6 @@ class CourseCard extends StatelessWidget {
                               ),
                         ),
                         const SizedBox(width: AppSpacing.s8),
-                        IconButton(
-                          visualDensity: VisualDensity.compact,
-                          onPressed: onMessagePressed,
-                          icon: const Icon(
-                            Icons.chat_bubble_outline,
-                            size: 18,
-                            color: AppColors.textSecondary,
-                          ),
-                          tooltip: 'Izohlar',
-                        ),
                         const Spacer(),
                         SizedBox(
                           height: 34,

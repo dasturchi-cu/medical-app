@@ -224,17 +224,6 @@ class ProfilePage extends ConsumerWidget {
                     ),
                   ),
                 ),
-                const Divider(height: 1),
-                ListTile(
-                  leading: const Icon(Icons.settings_outlined),
-                  title: Text(context.tr('settings')),
-                  subtitle: Text(context.tr('dummy')),
-                  onTap: () {
-                    ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(context.tr('soon'))),
-                    );
-                  },
-                ),
               ],
             ),
           ),
