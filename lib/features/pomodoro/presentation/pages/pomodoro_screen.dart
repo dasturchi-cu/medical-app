@@ -1,6 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:flutter_beep/flutter_beep.dart';
+import 'package:audioplayers/audioplayers.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/localization/language_provider.dart';
@@ -20,10 +20,12 @@ class PomodoroScreen extends ConsumerStatefulWidget {
 
 class _PomodoroScreenState extends ConsumerState<PomodoroScreen> {
   late final ProviderSubscription<PomodoroState> _soundSubscription;
+  late final AudioPlayer _audioPlayer;
 
   @override
   void initState() {
     super.initState();
+    _audioPlayer = AudioPlayer();
     _soundSubscription = ref.listenManual<PomodoroState>(pomodoroProvider, (
       previous,
       next,
@@ -38,13 +40,14 @@ class _PomodoroScreenState extends ConsumerState<PomodoroScreen> {
 
   @override
   void dispose() {
+    _audioPlayer.dispose();
     _soundSubscription.close();
     super.dispose();
   }
 
   Future<void> _playCompletionAlert() async {
     try {
-      await FlutterBeep.beep();
+      await _audioPlayer.play(AssetSource('sounds/alert.wav'), volume: 1.0);
     } catch (_) {
       await SystemSound.play(SystemSoundType.alert);
     }

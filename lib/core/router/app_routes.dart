@@ -10,6 +10,7 @@ class AppRoutes {
   static const profile = '/profile';
   static const ranking = '/ranking';
   static const pomodoro = '/pomodoro';
+  static const login = '/login';
 
   // Extra (for lesson list screen from the UI image)
   static const lessonList = '/lesson-list';

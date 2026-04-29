@@ -132,7 +132,7 @@ class CourseDetailPage extends ConsumerWidget {
                     );
                   },
                   child: const Text(
-                    'Obuna sotib olish',
+                    'Sotib olish',
                     style: TextStyle(fontWeight: FontWeight.w900),
                   ),
                 ),

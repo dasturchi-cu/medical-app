@@ -5,6 +5,7 @@ import '../data/repositories/mock_course_repository.dart';
 import '../data/repositories/mock_quiz_repository.dart';
 import '../data/repositories/quiz_repository.dart';
 import '../services/activation_service.dart';
+import '../services/auth_service.dart';
 
 final courseRepositoryProvider = Provider<CourseRepository>((ref) {
   return MockCourseRepository();
@@ -16,5 +17,9 @@ final quizRepositoryProvider = Provider<QuizRepository>((ref) {
 
 final activationServiceProvider = Provider<ActivationService>((ref) {
   return ActivationService();
+});
+
+final authServiceProvider = Provider<AuthService>((ref) {
+  return AuthService();
 });
 

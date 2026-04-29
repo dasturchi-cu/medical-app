@@ -3,8 +3,12 @@ import 'package:url_launcher/url_launcher.dart';
 class TelegramService {
   static const String _adminUsername = 'Neuroscienceadmin';
 
-  Future<bool> openTelegram(String courseName) async {
-    final message = 'Salom, men "$courseName" kursini sotib olmoqchiman.';
+  Future<bool> openTelegram({
+    required String courseName,
+    required String userId,
+  }) async {
+    final message =
+        'Salom, men kurs sotib olmoqchiman. ID: $userId. Kurs: "$courseName"';
     final encoded = Uri.encodeComponent(message);
     final appUri = Uri.parse(
       'tg://resolve?domain=$_adminUsername&text=$encoded',

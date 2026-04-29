@@ -1,5 +1,9 @@
 import 'package:flutter/material.dart';
+import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_routes.dart';
+import '../../../../core/state/auth_controller.dart';
 import '../../../../core/services/telegram_service.dart';
 
 Future<void> showPurchaseModal({
@@ -22,7 +26,7 @@ Future<void> showPurchaseModal({
   );
 }
 
-class _PurchaseModalContent extends StatefulWidget {
+class _PurchaseModalContent extends ConsumerStatefulWidget {
   const _PurchaseModalContent({
     required this.courseName,
     required this.description,
@@ -34,10 +38,11 @@ class _PurchaseModalContent extends StatefulWidget {
   final String price;
 
   @override
-  State<_PurchaseModalContent> createState() => _PurchaseModalContentState();
+  ConsumerState<_PurchaseModalContent> createState() =>
+      _PurchaseModalContentState();
 }
 
-class _PurchaseModalContentState extends State<_PurchaseModalContent> {
+class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
   final TelegramService _telegramService = TelegramService();
   bool _loading = false;
 
@@ -119,10 +124,18 @@ class _PurchaseModalContentState extends State<_PurchaseModalContent> {
                   onPressed: _loading
                       ? null
                       : () async {
+                          final auth = ref.read(authControllerProvider);
+                          if (!auth.isLoggedIn || auth.userId == null) {
+                            Navigator.of(context).pop();
+                            context.push(AppRoutes.login);
+                            return;
+                          }
+
                           try {
                             setState(() => _loading = true);
                             final opened = await _telegramService.openTelegram(
-                              widget.courseName,
+                              courseName: widget.courseName,
+                              userId: auth.userId!,
                             );
                             if (!context.mounted) return;
 

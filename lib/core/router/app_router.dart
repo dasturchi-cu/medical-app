@@ -3,6 +3,7 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
 import '../../features/course/presentation/pages/course_detail_page.dart';
+import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/home/presentation/pages/my_courses_page.dart';
 import '../../features/home/presentation/pages/profile_page.dart';
@@ -19,6 +20,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
   return GoRouter(
     initialLocation: AppRoutes.home,
     routes: [
+      GoRoute(
+        path: AppRoutes.login,
+        builder: (context, state) => const LoginPage(),
+      ),
       ShellRoute(
         builder: (context, state, child) {
           return ShellScaffold(location: state.uri.toString(), child: child);
