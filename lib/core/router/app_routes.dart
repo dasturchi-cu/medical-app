@@ -11,6 +11,7 @@ class AppRoutes {
   static const ranking = '/ranking';
   static const pomodoro = '/pomodoro';
   static const login = '/login';
+  static const notifications = '/notifications';
 
   // Extra (for lesson list screen from the UI image)
   static const lessonList = '/lesson-list';

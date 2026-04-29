@@ -6,6 +6,7 @@ import '../../features/course/presentation/pages/course_detail_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
 import '../../features/home/presentation/pages/my_courses_page.dart';
+import '../../features/home/presentation/pages/notifications_page.dart';
 import '../../features/home/presentation/pages/profile_page.dart';
 import '../../features/home/presentation/pages/ranking_page.dart';
 import '../../features/lesson/presentation/pages/lesson_list_page.dart';
@@ -44,6 +45,10 @@ final appRouterProvider = Provider<GoRouter>((ref) {
           GoRoute(
             path: AppRoutes.ranking,
             builder: (context, state) => const RankingPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.notifications,
+            builder: (context, state) => const NotificationsPage(),
           ),
           GoRoute(
             path: AppRoutes.courseDetail,

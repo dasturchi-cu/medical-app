@@ -189,7 +189,7 @@ export default function UserDetailPage() {
 
       <SectionCard icon={ShoppingCart} title="Xaridlar va kurs ruxsati">
         <div className="rounded-xl border border-slate-100 p-3">
-          <p className="mb-2 text-sm font-medium text-slate-700">Kursni ochish</p>
+          <p className="mb-2 text-sm font-medium text-slate-700">Kurs berish</p>
           <div className="flex flex-col gap-2 sm:flex-row">
             <Select value={selectedCourse} onValueChange={(value) => setSelectedCourse(value ?? "")}>
               <SelectTrigger className="h-10 rounded-xl border-slate-200">
@@ -216,7 +216,7 @@ export default function UserDetailPage() {
                 notifySuccess("Foydalanuvchiga kurs muvaffaqiyatli berildi.");
               }}
             >
-              Kursni ochish
+              Kurs berish
             </Button>
           </div>
         </div>

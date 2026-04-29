@@ -88,7 +88,7 @@ export default function UsersPage() {
                 notifySuccess("Foydalanuvchiga kurs muvaffaqiyatli berildi.");
               }}
             >
-              Kursni ochish
+              Kurs berish
             </Button>
           </div>
         ),
@@ -117,7 +117,7 @@ export default function UsersPage() {
 
         <div className="surface-card grid gap-3 p-4">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Qaysi kurs ochiladi?</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Qaysi kurs beriladi?</label>
             <select
               value={selectedCourse}
               onChange={(event) => setSelectedCourse(event.target.value)}
