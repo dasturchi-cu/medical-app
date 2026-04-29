@@ -3,6 +3,8 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
+import { LessonPreview } from "@/components/lesson-preview";
+import { MobilePreview } from "@/components/mobile-preview";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { AppTable } from "@/components/table";
@@ -187,76 +189,88 @@ export default function LessonsPage() {
         <AppTable columns={columns} data={filteredLessons} emptyText="Bu kurs uchun hali darslar yo&apos;q." />
       </div>
 
-      <AppForm title="Dars qo&apos;shish" description="Tanlangan kurs uchun yangi dars yarating." onSubmit={onSubmit}>
-        <div className="grid gap-2">
-          <Label htmlFor="title">Dars nomi - title</Label>
-          <Input
-            id="title"
-            value={formValues.title}
-            onChange={(event) => setFormValues((prev) => ({ ...prev, title: event.target.value }))}
-            placeholder="Dars nomi"
-            className="h-11 rounded-xl border-slate-200"
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="videoId">YouTube video kodi - videoId</Label>
-          <Input
-            id="videoId"
-            value={formValues.videoId}
-            onChange={(event) => setFormValues((prev) => ({ ...prev, videoId: event.target.value }))}
-            placeholder="Masalan: ab12CdE"
-            className="h-11 rounded-xl border-slate-200"
-          />
-        </div>
-
-        <div className="grid gap-2">
-          <Label htmlFor="order">Bu nechanchi dars (order)</Label>
-          <Input
-            id="order"
-            type="number"
-            min={1}
-            value={formValues.order}
-            onChange={(event) => setFormValues((prev) => ({ ...prev, order: event.target.value }))}
-            className="h-11 rounded-xl border-slate-200"
-          />
-        </div>
-
-        {selectedCourseData?.has_modules ? (
+      <div className="space-y-6">
+        <AppForm title="Dars qo&apos;shish" description="Tanlangan kurs uchun yangi dars yarating." onSubmit={onSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="module_id">Qaysi bazaga tegishli?</Label>
-            <Select
-              value={formValues.module_id || effectiveSelectedModule}
-              onValueChange={(value) => setFormValues((prev) => ({ ...prev, module_id: value ?? "" }))}
-            >
-              <SelectTrigger id="module_id" className="h-11 rounded-xl border-slate-200">
-                <SelectValue placeholder="Bazani tanlang">
-                  {modulesForCourse.find((entry) => entry.id === (formValues.module_id || effectiveSelectedModule))
-                    ?.name ?? "Bazani tanlang"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {modulesForCourse.map((module) => (
-                  <SelectItem key={module.id} value={module.id}>
-                    {module.name}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="title">Dars nomi - title</Label>
+            <Input
+              id="title"
+              value={formValues.title}
+              onChange={(event) => setFormValues((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Dars nomi"
+              className="h-11 rounded-xl border-slate-200"
+            />
           </div>
-        ) : null}
 
-        <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
-          <Label htmlFor="isFree" className="text-sm text-slate-700">
-            Bepul dars
-          </Label>
-          <Switch
-            id="isFree"
-            checked={formValues.isFree}
-            onCheckedChange={(value) => setFormValues((prev) => ({ ...prev, isFree: value }))}
+          <div className="grid gap-2">
+            <Label htmlFor="videoId">YouTube video kodi - videoId</Label>
+            <Input
+              id="videoId"
+              value={formValues.videoId}
+              onChange={(event) => setFormValues((prev) => ({ ...prev, videoId: event.target.value }))}
+              placeholder="Masalan: ab12CdE"
+              className="h-11 rounded-xl border-slate-200"
+            />
+          </div>
+
+          <div className="grid gap-2">
+            <Label htmlFor="order">Bu nechanchi dars (order)</Label>
+            <Input
+              id="order"
+              type="number"
+              min={1}
+              value={formValues.order}
+              onChange={(event) => setFormValues((prev) => ({ ...prev, order: event.target.value }))}
+              className="h-11 rounded-xl border-slate-200"
+            />
+          </div>
+
+          {selectedCourseData?.has_modules ? (
+            <div className="grid gap-2">
+              <Label htmlFor="module_id">Qaysi bazaga tegishli?</Label>
+              <Select
+                value={formValues.module_id || effectiveSelectedModule}
+                onValueChange={(value) => setFormValues((prev) => ({ ...prev, module_id: value ?? "" }))}
+              >
+                <SelectTrigger id="module_id" className="h-11 rounded-xl border-slate-200">
+                  <SelectValue placeholder="Bazani tanlang">
+                    {modulesForCourse.find((entry) => entry.id === (formValues.module_id || effectiveSelectedModule))
+                      ?.name ?? "Bazani tanlang"}
+                  </SelectValue>
+                </SelectTrigger>
+                <SelectContent>
+                  {modulesForCourse.map((module) => (
+                    <SelectItem key={module.id} value={module.id}>
+                      {module.name}
+                    </SelectItem>
+                  ))}
+                </SelectContent>
+              </Select>
+            </div>
+          ) : null}
+
+          <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
+            <Label htmlFor="isFree" className="text-sm text-slate-700">
+              Bepul dars
+            </Label>
+            <Switch
+              id="isFree"
+              checked={formValues.isFree}
+              onCheckedChange={(value) => setFormValues((prev) => ({ ...prev, isFree: value }))}
+            />
+          </div>
+        </AppForm>
+
+        <MobilePreview title="Live Mobile Preview" subtitle="Dars ro&apos;yxati real vaqtda">
+          <LessonPreview
+            courseTitle={selectedCourseData?.title_uz ?? ""}
+            lessons={filteredLessons}
+            draftLessonTitle={formValues.title}
+            draftOrder={Number(formValues.order)}
+            draftIsFree={formValues.isFree}
           />
-        </div>
-      </AppForm>
+        </MobilePreview>
+      </div>
 
       <AppModal
         open={Boolean(editLesson)}
