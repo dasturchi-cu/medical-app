@@ -134,12 +134,6 @@ export default function CourseDetailPage() {
                   {lesson.order}. {lesson.title}
                 </p>
                 <p className="text-xs text-slate-500">{lesson.videoId}</p>
-                <p className="text-xs text-slate-500">
-                  Baza:{" "}
-                  {lesson.module_id
-                    ? state.courseModules.find((module) => module.id === lesson.module_id)?.name ?? "Noma&apos;lum"
-                    : "Umumiy"}
-                </p>
               </div>
               <div className="flex gap-2">
                 <Button

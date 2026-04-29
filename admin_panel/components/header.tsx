@@ -28,7 +28,7 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
       : titleByPath[pathname] ?? "Boshqaruv paneli";
 
   return (
-    <header className="surface-card mb-4 flex items-start justify-between gap-3 p-4 sm:mb-6 sm:px-6 sm:py-4">
+    <header className="surface-card sticky top-3 z-30 mb-4 flex items-start justify-between gap-3 p-4 backdrop-blur sm:mb-6 sm:px-6 sm:py-4">
       <div className="min-w-0">
         <div className="mb-2 flex items-center gap-2 lg:hidden">
           <button

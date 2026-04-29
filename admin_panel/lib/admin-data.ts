@@ -20,6 +20,9 @@ export interface Banner {
   title: string;
   image: string;
   courseId: string;
+  message: string;
+  price: string;
+  telegram: string;
 }
 
 export const courses: Course[] = [
@@ -35,6 +38,22 @@ export const lessons: Lesson[] = [
 ];
 
 export const banners: Banner[] = [
-  { id: "banner-1", title: "Bahorgi qabul boshlandi", image: "https://placehold.co/120x64", courseId: "course-1" },
-  { id: "banner-2", title: "Yangi farmakologiya kursi", image: "https://placehold.co/120x64", courseId: "course-2" },
+  {
+    id: "banner-1",
+    title: "Bahorgi qabul boshlandi",
+    image: "https://placehold.co/120x64",
+    courseId: "course-1",
+    message: "Kursga yozilish ochildi.",
+    price: "299 000 so'm",
+    telegram: "med_admin",
+  },
+  {
+    id: "banner-2",
+    title: "Yangi farmakologiya kursi",
+    image: "https://placehold.co/120x64",
+    courseId: "course-2",
+    message: "Yangi oqim uchun maxsus narx.",
+    price: "349 000 so'm",
+    telegram: "med_admin",
+  },
 ];

@@ -77,7 +77,7 @@ class LessonListPage extends ConsumerWidget {
                   description: isDoctorCourse
                       ? 'Ushbu baza uchun alohida to‘lov qilinadi'
                       : course.descriptionUz,
-                  price: '299 000 so\'m',
+                  price: course.priceUz,
                   courseId: isDoctorCourse
                       ? basePurchaseKey(course.id, section.id)
                       : course.id,

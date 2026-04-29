@@ -130,7 +130,7 @@ class CourseDetailPage extends ConsumerWidget {
                       context: context,
                       courseName: course.titleUz,
                       description: course.descriptionUz,
-                      price: '299 000 so\'m',
+                      price: course.priceUz,
                       courseId: course.id,
                     );
                   },
@@ -165,7 +165,7 @@ class CourseDetailPage extends ConsumerWidget {
                         context: context,
                         courseName: '${course.titleUz} - ${s.titleUz}',
                         description: 'Ushbu baza uchun alohida to‘lov qilinadi',
-                        price: '299 000 so\'m',
+                        price: course.priceUz,
                         courseId: basePurchaseKey(course.id, s.id),
                       );
                       return;
@@ -205,7 +205,7 @@ class CourseDetailPage extends ConsumerWidget {
                         context: context,
                         courseName: course.titleUz,
                         description: course.descriptionUz,
-                        price: '299 000 so\'m',
+                        price: course.priceUz,
                         courseId: course.id,
                       );
                       return;

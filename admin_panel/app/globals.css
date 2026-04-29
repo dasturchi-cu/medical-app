@@ -122,7 +122,8 @@
     @apply border-border outline-ring/50;
   }
   body {
-    @apply bg-background text-foreground;
+    @apply bg-background text-foreground antialiased;
+    background-image: radial-gradient(circle at top, rgba(47, 107, 255, 0.07), transparent 45%);
   }
   html {
     @apply font-sans;
@@ -131,6 +132,22 @@
 
 @layer components {
   .surface-card {
-    @apply rounded-2xl bg-white shadow-[0_8px_24px_rgba(15,23,42,0.06)];
+    @apply rounded-2xl border border-white/70 bg-white shadow-[0_12px_28px_rgba(15,23,42,0.06)];
+  }
+
+  .admin-page {
+    @apply space-y-6;
+  }
+
+  .editor-preview-grid {
+    @apply grid gap-6 xl:grid-cols-[minmax(0,1.45fr)_minmax(320px,1fr)];
+  }
+
+  .section-title {
+    @apply text-base font-semibold text-slate-900;
+  }
+
+  .section-caption {
+    @apply text-sm text-slate-500;
   }
 }

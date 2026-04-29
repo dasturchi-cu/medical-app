@@ -350,6 +350,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                   separatorBuilder: (_, index) => const SizedBox(width: 12),
                   itemBuilder: (context, index) {
                     final news = MockData.newsFeed[index];
+                    final relatedCourse = repo.getCourseById(news.relatedCourseId);
                     return _NewsCard(
                       item: news,
                       onCommentsTap: () {
@@ -368,7 +369,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                           context: context,
                           courseName: news.titleUz,
                           description: news.summaryUz,
-                          price: '299 000 so\'m',
+                          price: relatedCourse?.priceUz ?? "299 000 so'm",
                           courseId: news.relatedCourseId,
                         );
                       },
@@ -433,6 +434,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       : 'brain',
                   title: c.titleUz,
                   author: c.authorUz,
+                  priceText: c.priceUz,
                   progress: progressValue,
                   ratingText: c.rating.toStringAsFixed(1),
                   videoCountText: '$totalLessons ta video',

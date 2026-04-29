@@ -2,11 +2,9 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { BlueBanner } from "@/components/blue-banner";
-import { BannerPreview } from "@/components/banner-preview";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
-import { MobilePreview } from "@/components/mobile-preview";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { AppTable } from "@/components/table";
@@ -23,11 +21,17 @@ export default function BannersPage() {
   const [deleteBannerId, setDeleteBannerId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState({
     title: "",
+    message: "",
+    price: "",
+    telegram: "med_admin",
     image: "",
     course_id: (courses[0]?.id ?? "") as string | null,
   });
   const [editValues, setEditValues] = useState({
     title: "",
+    message: "",
+    price: "",
+    telegram: "med_admin",
     image: "",
     course_id: (courses[0]?.id ?? "") as string | null,
   });
@@ -54,6 +58,12 @@ export default function BannersPage() {
       },
       { key: "title", label: "Sarlavha" },
       {
+        key: "message",
+        label: "Xabar",
+        render: (item: Banner) => <span className="line-clamp-2 max-w-[220px]">{item.message}</span>,
+      },
+      { key: "price", label: "Narx" },
+      {
         key: "courseId",
         label: "Kurs",
         render: (item: Banner) => {
@@ -66,6 +76,14 @@ export default function BannersPage() {
         label: "Amallar",
         render: (item: Banner) => (
           <div className="flex flex-wrap gap-2">
+            <a
+              href={telegramLink(item.telegram, item.title, item.price)}
+              target="_blank"
+              rel="noreferrer"
+              className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-xs text-white"
+            >
+              Sotib olish
+            </a>
             <Button
               variant="outline"
               className="h-8 rounded-lg border-slate-200 px-3 text-xs"
@@ -73,6 +91,9 @@ export default function BannersPage() {
                 setEditBanner(item);
                 setEditValues({
                   title: item.title,
+                  message: item.message,
+                  price: item.price,
+                  telegram: item.telegram,
                   image: item.image,
                   course_id: item.courseId,
                 });
@@ -94,11 +115,17 @@ export default function BannersPage() {
     event.preventDefault();
     adminActions.addBanner({
       title: formValues.title,
+      message: formValues.message,
+      price: formValues.price,
+      telegram: normalizeTelegram(formValues.telegram),
       image: formValues.image,
       courseId: formValues.course_id ?? "",
     });
     setFormValues({
       title: "",
+      message: "",
+      price: "",
+      telegram: "med_admin",
       image: "",
       course_id: courses[0]?.id ?? "",
     });
@@ -109,6 +136,9 @@ export default function BannersPage() {
     if (!editBanner) return;
     adminActions.updateBanner(editBanner.id, {
       title: editValues.title,
+      message: editValues.message,
+      price: editValues.price,
+      telegram: normalizeTelegram(editValues.telegram),
       image: editValues.image ?? "",
       courseId: editValues.course_id ?? "",
     });
@@ -118,53 +148,79 @@ export default function BannersPage() {
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <AppForm title="Banner yaratish" description="Kursga bog&apos;langan promo banner qo&apos;shing." onSubmit={onSubmit}>
+    <section className="admin-page">
+      <AppForm title="Banner yaratish" description="Kursga bog&apos;langan promo banner qo&apos;shing." onSubmit={onSubmit}>
+        <div className="grid gap-2">
+          <Label htmlFor="title">Sarlavha - title</Label>
+          <Input
+            id="title"
+            value={formValues.title}
+            onChange={(event) => setFormValues((prev) => ({ ...prev, title: event.target.value }))}
+            placeholder="Banner sarlavhasi"
+            className="h-11 rounded-xl border-slate-200"
+          />
+        </div>
+        <div className="grid gap-2">
+          <Label htmlFor="message">Reklama xabari</Label>
+          <Input
+            id="message"
+            value={formValues.message}
+            onChange={(event) => setFormValues((prev) => ({ ...prev, message: event.target.value }))}
+            placeholder="Masalan: Joylar cheklangan, hoziroq yoziling"
+            className="h-11 rounded-xl border-slate-200"
+          />
+        </div>
+        <div className="grid gap-2 sm:grid-cols-2">
           <div className="grid gap-2">
-            <Label htmlFor="title">Sarlavha - title</Label>
+            <Label htmlFor="price">Kurs narxi</Label>
             <Input
-              id="title"
-              value={formValues.title}
-              onChange={(event) => setFormValues((prev) => ({ ...prev, title: event.target.value }))}
-              placeholder="Banner sarlavhasi"
+              id="price"
+              value={formValues.price}
+              onChange={(event) => setFormValues((prev) => ({ ...prev, price: event.target.value }))}
+              placeholder="Masalan: 299 000 so&apos;m"
               className="h-11 rounded-xl border-slate-200"
             />
           </div>
-
-          <ImagePicker
-            label="Rasm (upload yoki link)"
-            value={formValues.image}
-            helperText="Rasm qo&apos;yilmasa, avtomatik ko&apos;k banner ishlatiladi."
-            onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
-          />
-
           <div className="grid gap-2">
-            <Label htmlFor="course_id">Kurs</Label>
-            <Select
-              value={formValues.course_id ?? ""}
-              onValueChange={(value) => setFormValues((prev) => ({ ...prev, course_id: value }))}
-            >
-              <SelectTrigger id="course_id" className="h-11 rounded-xl border-slate-200">
-                <SelectValue placeholder="Kursni tanlang">
-                  {courses.find((course) => course.id === formValues.course_id)?.title_uz ?? "Kursni tanlang"}
-                </SelectValue>
-              </SelectTrigger>
-              <SelectContent>
-                {courses.map((course) => (
-                  <SelectItem key={course.id} value={course.id}>
-                    {course.title_uz}
-                  </SelectItem>
-                ))}
-              </SelectContent>
-            </Select>
+            <Label htmlFor="telegram">Telegram (admin)</Label>
+            <Input
+              id="telegram"
+              value={formValues.telegram}
+              onChange={(event) => setFormValues((prev) => ({ ...prev, telegram: event.target.value }))}
+              placeholder="med_admin"
+              className="h-11 rounded-xl border-slate-200"
+            />
           </div>
-        </AppForm>
+        </div>
 
-        <MobilePreview title="Live Mobile Preview" subtitle="Banner real vaqtda yangilanadi">
-          <BannerPreview title={formValues.title} image={formValues.image} />
-        </MobilePreview>
-      </div>
+        <ImagePicker
+          label="Rasm (upload yoki link)"
+          value={formValues.image}
+          helperText="Rasm qo&apos;yilmasa, avtomatik ko&apos;k banner ishlatiladi."
+          onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
+        />
+
+        <div className="grid gap-2">
+          <Label htmlFor="course_id">Kurs</Label>
+          <Select
+            value={formValues.course_id ?? ""}
+            onValueChange={(value) => setFormValues((prev) => ({ ...prev, course_id: value }))}
+          >
+            <SelectTrigger id="course_id" className="h-11 rounded-xl border-slate-200">
+              <SelectValue placeholder="Kursni tanlang">
+                {courses.find((course) => course.id === formValues.course_id)?.title_uz ?? "Kursni tanlang"}
+              </SelectValue>
+            </SelectTrigger>
+            <SelectContent>
+              {courses.map((course) => (
+                <SelectItem key={course.id} value={course.id}>
+                  {course.title_uz}
+                </SelectItem>
+              ))}
+            </SelectContent>
+          </Select>
+        </div>
+      </AppForm>
 
       <AppTable columns={columns} data={banners} emptyText="Hali bannerlar qo&apos;shilmagan." />
 
@@ -183,6 +239,35 @@ export default function BannersPage() {
               onChange={(event) => setEditValues((prev) => ({ ...prev, title: event.target.value }))}
               className="h-11 rounded-xl border-slate-200"
             />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="edit_banner_message">Reklama xabari</Label>
+            <Input
+              id="edit_banner_message"
+              value={editValues.message}
+              onChange={(event) => setEditValues((prev) => ({ ...prev, message: event.target.value }))}
+              className="h-11 rounded-xl border-slate-200"
+            />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <div className="grid gap-2">
+              <Label htmlFor="edit_banner_price">Kurs narxi</Label>
+              <Input
+                id="edit_banner_price"
+                value={editValues.price}
+                onChange={(event) => setEditValues((prev) => ({ ...prev, price: event.target.value }))}
+                className="h-11 rounded-xl border-slate-200"
+              />
+            </div>
+            <div className="grid gap-2">
+              <Label htmlFor="edit_banner_telegram">Telegram (admin)</Label>
+              <Input
+                id="edit_banner_telegram"
+                value={editValues.telegram}
+                onChange={(event) => setEditValues((prev) => ({ ...prev, telegram: event.target.value }))}
+                className="h-11 rounded-xl border-slate-200"
+              />
+            </div>
           </div>
           <ImagePicker
             label="Rasm (upload yoki link)"
@@ -227,4 +312,14 @@ export default function BannersPage() {
       />
     </section>
   );
+}
+
+function normalizeTelegram(value: string) {
+  return value.replace(/^@/, "").trim();
+}
+
+function telegramLink(username: string, title: string, price: string) {
+  const handle = normalizeTelegram(username) || "med_admin";
+  const text = encodeURIComponent(`Salom, "${title}" kursini sotib olmoqchiman. Narx: ${price || "kelishiladi"}.`);
+  return `https://t.me/${handle}?text=${text}`;
 }

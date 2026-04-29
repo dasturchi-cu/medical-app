@@ -9,6 +9,7 @@ export interface Course {
   title_uz: string;
   title_ru: string;
   title_en: string;
+  price: string;
   image: string;
   views: number;
   sales: number;
@@ -36,6 +37,9 @@ export interface Banner {
   title: string;
   image: string;
   courseId: string;
+  message: string;
+  price: string;
+  telegram: string;
 }
 
 export interface User {
@@ -131,6 +135,7 @@ let state: AdminState = {
       title_uz: "Klinik anatomiya",
       title_ru: "Клиническая анатомия",
       title_en: "Clinical Anatomy",
+      price: "299 000 so'm",
       image: "",
       views: 3200,
       sales: 210,
@@ -141,6 +146,7 @@ let state: AdminState = {
       title_uz: "Farmakologiya asoslari",
       title_ru: "Основы фармакологии",
       title_en: "Pharmacology Basics",
+      price: "349 000 so'm",
       image: "",
       views: 1900,
       sales: 124,
@@ -151,6 +157,7 @@ let state: AdminState = {
       title_uz: "Terapevtik amaliyot",
       title_ru: "Терапевтическая практика",
       title_en: "Therapeutic Practice",
+      price: "259 000 so'm",
       image: "",
       views: 640,
       sales: 0,
@@ -171,8 +178,24 @@ let state: AdminState = {
     { id: "lesson-3", courseId: "course-2", module_id: null, title: "Retseptor turlari", videoId: "xYz982k", order: 1, isFree: true },
   ],
   banners: [
-    { id: "banner-1", title: "Bahorgi qabul boshlandi", image: "", courseId: "course-1" },
-    { id: "banner-2", title: "Yangi farmakologiya kursi", image: "", courseId: "course-2" },
+    {
+      id: "banner-1",
+      title: "Bahorgi qabul boshlandi",
+      image: "",
+      courseId: "course-1",
+      message: "Kursga yozilish ochildi. Joylar cheklangan.",
+      price: "299 000 so'm",
+      telegram: "med_admin",
+    },
+    {
+      id: "banner-2",
+      title: "Yangi farmakologiya kursi",
+      image: "",
+      courseId: "course-2",
+      message: "Yangi oqim uchun maxsus narx.",
+      price: "349 000 so'm",
+      telegram: "med_admin",
+    },
   ],
   users: [
     {
@@ -295,7 +318,7 @@ export function useAdminStore<T>(selector: (current: AdminState) => T): T {
 }
 
 export const adminActions = {
-  addCourse(course: { title: string; image: string; has_modules: boolean; modules: string[] }) {
+  addCourse(course: { title: string; image: string; price: string; has_modules: boolean; modules: string[] }) {
     const translated = autoTranslateTitle(course.title);
     const courseId = `course-${Date.now()}`;
     const generatedModules = course.has_modules
@@ -315,6 +338,7 @@ export const adminActions = {
         {
           id: courseId,
           image: course.image,
+          price: course.price.trim() || "Kelishiladi",
           views: 0,
           sales: 0,
           has_modules: course.has_modules,
@@ -327,7 +351,7 @@ export const adminActions = {
   },
   updateCourse(
     id: string,
-    payload: { title: string; image: string; has_modules: boolean; modules: string[] },
+    payload: { title: string; image: string; price: string; has_modules: boolean; modules: string[] },
   ) {
     const translated = autoTranslateTitle(payload.title);
     const nextModules = payload.has_modules
@@ -345,7 +369,13 @@ export const adminActions = {
       ...current,
       courses: current.courses.map((course) =>
         course.id === id
-          ? { ...course, image: payload.image, has_modules: payload.has_modules, ...translated }
+          ? {
+              ...course,
+              image: payload.image,
+              price: payload.price.trim() || "Kelishiladi",
+              has_modules: payload.has_modules,
+              ...translated,
+            }
           : course,
       ),
       courseModules: [

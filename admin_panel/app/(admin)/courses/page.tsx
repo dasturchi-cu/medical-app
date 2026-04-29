@@ -4,10 +4,8 @@ import Link from "next/link";
 import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { BlueBanner } from "@/components/blue-banner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
-import { CoursePreview } from "@/components/course-preview";
 import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
-import { MobilePreview } from "@/components/mobile-preview";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { AppTable } from "@/components/table";
@@ -17,20 +15,18 @@ import { adminActions, type Course, useAdminStore } from "@/lib/admin-store";
 
 interface CourseFormValues {
   title: string;
+  price: string;
   image: string;
-  has_modules: boolean;
-  modules: string[];
 }
 
 const emptyCourseForm: CourseFormValues = {
   title: "",
+  price: "",
   image: "",
-  has_modules: false,
-  modules: [],
 };
 
 export default function CoursesPage() {
-  const { courses: courseList, courseModules } = useAdminStore((state) => state);
+  const { courses: courseList } = useAdminStore((state) => state);
   const [loading, setLoading] = useState(true);
   const [editCourse, setEditCourse] = useState<Course | null>(null);
   const [deleteCourseId, setDeleteCourseId] = useState<string | null>(null);
@@ -76,6 +72,10 @@ export default function CoursesPage() {
         ),
       },
       {
+        key: "price",
+        label: "Narx",
+      },
+      {
         key: "actions",
         label: "Amallar",
         render: (item: Course) => (
@@ -93,11 +93,8 @@ export default function CoursesPage() {
                 setEditCourse(item);
                 setEditValues({
                   title: item.title_uz,
+                  price: item.price,
                   image: item.image,
-                  has_modules: item.has_modules,
-                  modules: courseModules
-                    .filter((module) => module.course_id === item.id)
-                    .map((module) => module.name),
                 });
               }}
             >
@@ -114,52 +111,39 @@ export default function CoursesPage() {
         ),
       },
     ],
-    [courseModules],
+    [],
   );
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
-    adminActions.addCourse(formValues);
+    adminActions.addCourse({ ...formValues, has_modules: false, modules: [] });
     setFormValues(emptyCourseForm);
   };
 
   const onEditSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     if (!editCourse) return;
-    adminActions.updateCourse(editCourse.id, editValues);
+    adminActions.updateCourse(editCourse.id, { ...editValues, has_modules: false, modules: [] });
     setEditCourse(null);
   };
 
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="space-y-6">
-      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
-        <AppForm
-          title="Kurs yaratish"
-          description="Sarlavhani kiriting, tizim avtomatik UZ / RU / EN versiyalarini yaratadi."
-          onSubmit={onSubmit}
-          submitLabel="Kursni saqlash"
-        >
-          <LanguageFields values={formValues} onChange={setFormValues} />
-          <ImagePicker
-            label="Rasm (upload yoki link)"
-            value={formValues.image}
-            onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
-          />
-        </AppForm>
-
-        <MobilePreview title="Live Mobile Preview" subtitle="Kurs ma&apos;lumotlari real vaqtda">
-          <CoursePreview
-            title={formValues.title}
-            image={formValues.image}
-            videoCount={courseList[0] ? 12 : 0}
-            sampleCourses={courseList.map((course) => course.title_uz)}
-            hasModules={formValues.has_modules}
-            modules={formValues.modules}
-          />
-        </MobilePreview>
-      </div>
+    <section className="admin-page">
+      <AppForm
+        title="Kurs yaratish"
+        description="Sarlavhani kiriting, tizim avtomatik UZ / RU / EN versiyalarini yaratadi."
+        onSubmit={onSubmit}
+        submitLabel="Kursni saqlash"
+      >
+        <LanguageFields values={formValues} onChange={setFormValues} />
+        <ImagePicker
+          label="Rasm (upload yoki link)"
+          value={formValues.image}
+          onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
+        />
+      </AppForm>
 
       <div className="grid gap-4 lg:grid-cols-3">
         <AnalyticsCard title="Eng ko&apos;p sotilgan kurslar" items={analytics.sold.map((course) => `${course.title_uz} (${course.sales})`)} />
@@ -208,7 +192,7 @@ interface LanguageFieldsProps {
 
 function LanguageFields({ values, onChange }: LanguageFieldsProps) {
   return (
-    <div className="space-y-4">
+    <div className="space-y-3">
       <div className="grid gap-2">
         <Label htmlFor="title">Kurs sarlavhasi</Label>
         <input
@@ -219,55 +203,16 @@ function LanguageFields({ values, onChange }: LanguageFieldsProps) {
           className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
         />
       </div>
-
-      <div className="rounded-xl border border-slate-100 p-4">
-        <Label className="mb-2 block">Bu kursda bazalar bormi?</Label>
-        <div className="flex flex-wrap gap-2">
-          <button
-            type="button"
-            className={`rounded-lg px-3 py-2 text-xs ${values.has_modules ? "bg-primary text-white" : "bg-slate-100 text-slate-600"}`}
-            onClick={() => onChange((prev) => ({ ...prev, has_modules: true, modules: prev.modules.length > 0 ? prev.modules : ["1-baza"] }))}
-          >
-            Ha
-          </button>
-          <button
-            type="button"
-            className={`rounded-lg px-3 py-2 text-xs ${!values.has_modules ? "bg-primary text-white" : "bg-slate-100 text-slate-600"}`}
-            onClick={() => onChange((prev) => ({ ...prev, has_modules: false, modules: [] }))}
-          >
-            Yo&apos;q
-          </button>
-        </div>
+      <div className="grid gap-2">
+        <Label htmlFor="price">Kurs narxi</Label>
+        <input
+          id="price"
+          value={values.price}
+          onChange={(event) => onChange((prev) => ({ ...prev, price: event.target.value }))}
+          placeholder="Masalan: 299 000 so'm"
+          className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
+        />
       </div>
-
-      {values.has_modules ? (
-        <div className="space-y-2 rounded-xl border border-slate-100 p-4">
-          <div className="flex items-center justify-between">
-            <Label>Modullar ro&apos;yxati</Label>
-            <button
-              type="button"
-              className="rounded-lg bg-slate-100 px-3 py-1 text-xs text-slate-600"
-              onClick={() => onChange((prev) => ({ ...prev, modules: [...prev.modules, `${prev.modules.length + 1}-baza`] }))}
-            >
-              + Add module
-            </button>
-          </div>
-          {values.modules.map((moduleName, index) => (
-            <input
-              key={`${moduleName}-${index}`}
-              value={moduleName}
-              onChange={(event) =>
-                onChange((prev) => ({
-                  ...prev,
-                  modules: prev.modules.map((item, itemIndex) => (itemIndex === index ? event.target.value : item)),
-                }))
-              }
-              className="h-10 w-full rounded-lg border border-slate-200 px-3 text-sm outline-none focus:border-primary"
-              placeholder={`${index + 1}-baza`}
-            />
-          ))}
-        </div>
-      ) : null}
     </div>
   );
 }
@@ -295,3 +240,4 @@ function AnalyticsCard({ title, items }: AnalyticsCardProps) {
     </div>
   );
 }
+

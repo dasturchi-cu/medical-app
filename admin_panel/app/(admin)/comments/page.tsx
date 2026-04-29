@@ -31,11 +31,10 @@ export default function CommentsPage() {
         })),
     [comments],
   );
-
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="space-y-4">
+    <section className="admin-page">
       <div className="surface-card space-y-2 p-5">
         <h3 className="text-lg font-semibold text-slate-900">Izohlar va javoblar</h3>
         <p className="text-sm text-slate-500">

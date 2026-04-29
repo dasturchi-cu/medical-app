@@ -3,8 +3,6 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
-import { LessonPreview } from "@/components/lesson-preview";
-import { MobilePreview } from "@/components/mobile-preview";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { AppTable } from "@/components/table";
@@ -17,24 +15,21 @@ import { Switch } from "@/components/ui/switch";
 import { adminActions, type Lesson, useAdminStore } from "@/lib/admin-store";
 
 export default function LessonsPage() {
-  const { courses, courseModules, lessons } = useAdminStore((state) => state);
+  const { courses, lessons } = useAdminStore((state) => state);
   const [loading, setLoading] = useState(true);
   const [selectedCourse, setSelectedCourse] = useState(courses[0]?.id ?? "");
-  const [selectedModule, setSelectedModule] = useState<string | null>(null);
   const [editLesson, setEditLesson] = useState<Lesson | null>(null);
   const [deleteLessonId, setDeleteLessonId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState({
     title: "",
     videoId: "",
     order: "1",
-    module_id: "",
     isFree: false,
   });
   const [editValues, setEditValues] = useState({
     title: "",
     videoId: "",
     order: "1",
-    module_id: "",
     isFree: false,
   });
 
@@ -44,27 +39,10 @@ export default function LessonsPage() {
   }, []);
 
   const selectedCourseData = courses.find((course) => course.id === selectedCourse);
-  const modulesForCourse = useMemo(
-    () => courseModules.filter((entry) => entry.course_id === selectedCourse),
-    [courseModules, selectedCourse],
-  );
-  const effectiveSelectedModule = selectedCourseData?.has_modules
-    ? selectedModule ?? modulesForCourse[0]?.id ?? ""
-    : "";
-  const effectiveModuleName =
-    modulesForCourse.find((entry) => entry.id === effectiveSelectedModule)?.name ?? "Bazani tanlang";
 
   const columns = useMemo(
     () => [
       { key: "title", label: "Nomi" },
-      {
-        key: "module",
-        label: "Baza",
-        render: (item: Lesson) => {
-          const courseModule = courseModules.find((entry) => entry.id === item.module_id);
-          return courseModule ? courseModule.name : "Umumiy";
-        },
-      },
       { key: "videoId", label: "videoId (YouTube)" },
       { key: "order", label: "Tartib" },
       {
@@ -90,7 +68,6 @@ export default function LessonsPage() {
                   title: item.title,
                   videoId: item.videoId,
                   order: String(item.order),
-                  module_id: item.module_id ?? "",
                   isFree: item.isFree,
                 });
               }}
@@ -104,12 +81,11 @@ export default function LessonsPage() {
         ),
       },
     ],
-    [courseModules],
+    [],
   );
 
   const filteredLessons = lessons
     .filter((lesson) => lesson.courseId === selectedCourse)
-    .filter((lesson) => (!selectedCourseData?.has_modules ? true : lesson.module_id === effectiveSelectedModule))
     .sort((a, b) => a.order - b.order);
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
@@ -119,9 +95,7 @@ export default function LessonsPage() {
       title: formValues.title,
       videoId: formValues.videoId,
       order: Number(formValues.order),
-      module_id: selectedCourseData?.has_modules
-        ? formValues.module_id || effectiveSelectedModule || null
-        : null,
+      module_id: null,
       isFree: formValues.isFree,
     });
     setFormValues((prev) => ({ ...prev, title: "", videoId: "", order: "1", isFree: false }));
@@ -135,7 +109,7 @@ export default function LessonsPage() {
       title: editValues.title,
       videoId: editValues.videoId,
       order: Number(editValues.order),
-      module_id: selectedCourseData?.has_modules ? editValues.module_id || null : null,
+      module_id: null,
       isFree: editValues.isFree,
     });
     setEditLesson(null);
@@ -149,7 +123,7 @@ export default function LessonsPage() {
         <div className="surface-card space-y-4 p-6">
           <div>
             <h3 className="text-base font-semibold text-slate-900">Filtrlar</h3>
-            <p className="text-sm text-slate-500">Kurs va bazani tanlab, kerakli darslarni boshqaring.</p>
+            <p className="text-sm text-slate-500">Kursni tanlab, kerakli darslarni boshqaring.</p>
           </div>
           <Label className="mb-2 block text-sm text-slate-600">Kursni tanlang</Label>
           <Select value={selectedCourse} onValueChange={(value) => setSelectedCourse(value ?? "")}>
@@ -166,31 +140,12 @@ export default function LessonsPage() {
               ))}
             </SelectContent>
           </Select>
-
-          {selectedCourseData?.has_modules ? (
-            <div className="mt-4">
-              <Label className="mb-2 block text-sm text-slate-600">Qaysi bazaga tegishli?</Label>
-              <Select value={effectiveSelectedModule} onValueChange={(value) => setSelectedModule(value ?? "")}>
-                <SelectTrigger className="h-11 w-full rounded-xl border-slate-200">
-                  <SelectValue placeholder="Bazani tanlang">{effectiveModuleName}</SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {modulesForCourse.map((module) => (
-                    <SelectItem key={module.id} value={module.id}>
-                      {module.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
         </div>
 
         <AppTable columns={columns} data={filteredLessons} emptyText="Bu kurs uchun hali darslar yo&apos;q." />
       </div>
 
-      <div className="space-y-6">
-        <AppForm title="Dars qo&apos;shish" description="Tanlangan kurs uchun yangi dars yarating." onSubmit={onSubmit}>
+      <AppForm title="Dars qo&apos;shish" description="Tanlangan kurs uchun yangi dars yarating." onSubmit={onSubmit}>
           <div className="grid gap-2">
             <Label htmlFor="title">Dars nomi - title</Label>
             <Input
@@ -225,30 +180,6 @@ export default function LessonsPage() {
             />
           </div>
 
-          {selectedCourseData?.has_modules ? (
-            <div className="grid gap-2">
-              <Label htmlFor="module_id">Qaysi bazaga tegishli?</Label>
-              <Select
-                value={formValues.module_id || effectiveSelectedModule}
-                onValueChange={(value) => setFormValues((prev) => ({ ...prev, module_id: value ?? "" }))}
-              >
-                <SelectTrigger id="module_id" className="h-11 rounded-xl border-slate-200">
-                  <SelectValue placeholder="Bazani tanlang">
-                    {modulesForCourse.find((entry) => entry.id === (formValues.module_id || effectiveSelectedModule))
-                      ?.name ?? "Bazani tanlang"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {modulesForCourse.map((module) => (
-                    <SelectItem key={module.id} value={module.id}>
-                      {module.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
-
           <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
             <Label htmlFor="isFree" className="text-sm text-slate-700">
               Bepul dars
@@ -259,18 +190,7 @@ export default function LessonsPage() {
               onCheckedChange={(value) => setFormValues((prev) => ({ ...prev, isFree: value }))}
             />
           </div>
-        </AppForm>
-
-        <MobilePreview title="Live Mobile Preview" subtitle="Dars ro&apos;yxati real vaqtda">
-          <LessonPreview
-            courseTitle={selectedCourseData?.title_uz ?? ""}
-            lessons={filteredLessons}
-            draftLessonTitle={formValues.title}
-            draftOrder={Number(formValues.order)}
-            draftIsFree={formValues.isFree}
-          />
-        </MobilePreview>
-      </div>
+      </AppForm>
 
       <AppModal
         open={Boolean(editLesson)}
@@ -308,28 +228,6 @@ export default function LessonsPage() {
               className="h-11 rounded-xl border-slate-200"
             />
           </div>
-          {selectedCourseData?.has_modules ? (
-            <div className="grid gap-2">
-              <Label htmlFor="edit_module">Qaysi bazaga tegishli?</Label>
-              <Select
-                value={editValues.module_id}
-                onValueChange={(value) => setEditValues((prev) => ({ ...prev, module_id: value ?? "" }))}
-              >
-                <SelectTrigger id="edit_module" className="h-11 rounded-xl border-slate-200">
-                  <SelectValue placeholder="Bazani tanlang">
-                    {modulesForCourse.find((entry) => entry.id === editValues.module_id)?.name ?? "Bazani tanlang"}
-                  </SelectValue>
-                </SelectTrigger>
-                <SelectContent>
-                  {modulesForCourse.map((module) => (
-                    <SelectItem key={module.id} value={module.id}>
-                      {module.name}
-                    </SelectItem>
-                  ))}
-                </SelectContent>
-              </Select>
-            </div>
-          ) : null}
           <div className="flex items-center justify-between rounded-xl border border-slate-100 px-4 py-3">
             <Label htmlFor="edit_is_free" className="text-sm text-slate-700">
               Bepul dars

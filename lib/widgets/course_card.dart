@@ -9,6 +9,7 @@ class CourseCard extends StatelessWidget {
     required this.visualKind,
     required this.title,
     required this.author,
+    required this.priceText,
     required this.progress,
     required this.ratingText,
     required this.videoCountText,
@@ -22,6 +23,7 @@ class CourseCard extends StatelessWidget {
   final String visualKind;
   final String title;
   final String author;
+  final String priceText;
   final double progress;
   final String ratingText;
   final String videoCountText;
@@ -75,6 +77,14 @@ class CourseCard extends StatelessWidget {
                       author,
                       style: Theme.of(context).textTheme.bodySmall?.copyWith(
                         color: AppColors.textSecondary,
+                      ),
+                    ),
+                    const SizedBox(height: AppSpacing.s4),
+                    Text(
+                      priceText,
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: AppColors.primary,
+                        fontWeight: FontWeight.w800,
                       ),
                     ),
                     const SizedBox(height: AppSpacing.s8),

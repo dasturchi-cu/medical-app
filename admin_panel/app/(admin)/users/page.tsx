@@ -9,11 +9,10 @@ import { Input } from "@/components/ui/input";
 import { adminActions, useAdminStore } from "@/lib/admin-store";
 
 export default function UsersPage() {
-  const { users, courses, courseModules } = useAdminStore((state) => state);
+  const { users, courses } = useAdminStore((state) => state);
   const [loading, setLoading] = useState(true);
   const [query, setQuery] = useState("");
   const [selectedCourse, setSelectedCourse] = useState(courses[0]?.id ?? "");
-  const [selectedModule, setSelectedModule] = useState<string>("");
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 500);
@@ -24,16 +23,6 @@ export default function UsersPage() {
     () => users.filter((user) => user.id.toLowerCase().includes(query.trim().toLowerCase())),
     [query, users],
   );
-
-  const selectedCourseData = courses.find((course) => course.id === selectedCourse);
-  const modulesForCourse = useMemo(
-    () => courseModules.filter((module) => module.course_id === selectedCourse),
-    [courseModules, selectedCourse],
-  );
-
-  const effectiveModuleId = selectedCourseData?.has_modules
-    ? selectedModule || modulesForCourse[0]?.id || ""
-    : "";
 
   const columns = useMemo(
     () => [
@@ -87,7 +76,7 @@ export default function UsersPage() {
                 adminActions.grantCourse(
                   user.id,
                   selectedCourse,
-                  selectedCourseData?.has_modules ? effectiveModuleId || null : null,
+                  null,
                 )
               }
             >
@@ -97,64 +86,46 @@ export default function UsersPage() {
         ),
       },
     ],
-    [effectiveModuleId, selectedCourse, selectedCourseData?.has_modules],
+    [selectedCourse],
   );
 
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="space-y-4">
-      <div className="surface-card p-4">
-        <label htmlFor="search-user" className="mb-2 block text-sm font-medium text-slate-700">
-          User ID qidirish
-        </label>
-        <Input
-          id="search-user"
-          value={query}
-          onChange={(event) => setQuery(event.target.value)}
-          placeholder="Masalan: user-1"
-          className="h-11 rounded-xl border-slate-200"
-        />
-      </div>
-
-      <div className="surface-card grid gap-3 p-4 md:grid-cols-2">
-        <div>
-          <label className="mb-2 block text-sm font-medium text-slate-700">Qaysi kurs ochiladi?</label>
-          <select
-            value={selectedCourse}
-            onChange={(event) => setSelectedCourse(event.target.value)}
-            className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
-          >
-            {courses.map((course) => (
-              <option key={course.id} value={course.id}>
-                {course.title_uz}
-              </option>
-            ))}
-          </select>
+    <section className="admin-page">
+      <div className="space-y-4">
+        <div className="surface-card p-4">
+          <label htmlFor="search-user" className="mb-2 block text-sm font-medium text-slate-700">
+            User ID qidirish
+          </label>
+          <Input
+            id="search-user"
+            value={query}
+            onChange={(event) => setQuery(event.target.value)}
+            placeholder="Masalan: user-1"
+            className="h-11 rounded-xl border-slate-200"
+          />
         </div>
-        {selectedCourseData?.has_modules ? (
+
+        <div className="surface-card grid gap-3 p-4">
           <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Qaysi baza?</label>
+            <label className="mb-2 block text-sm font-medium text-slate-700">Qaysi kurs ochiladi?</label>
             <select
-              value={effectiveModuleId}
-              onChange={(event) => setSelectedModule(event.target.value)}
+              value={selectedCourse}
+              onChange={(event) => setSelectedCourse(event.target.value)}
               className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
             >
-              {modulesForCourse.map((module) => (
-                <option key={module.id} value={module.id}>
-                  {module.name}
+              {courses.map((course) => (
+                <option key={course.id} value={course.id}>
+                  {course.title_uz}
                 </option>
               ))}
             </select>
           </div>
-        ) : (
-          <div className="flex items-end">
-            <p className="text-sm text-slate-500">Bu kurs modulga bo&apos;linmagan.</p>
-          </div>
-        )}
-      </div>
+        </div>
 
-      <AppTable columns={columns} data={filteredUsers} emptyText="Kiritilgan ID bo&apos;yicha foydalanuvchi topilmadi." />
+        <AppTable columns={columns} data={filteredUsers} emptyText="Kiritilgan ID bo&apos;yicha foydalanuvchi topilmadi." />
+      </div>
     </section>
   );
 }

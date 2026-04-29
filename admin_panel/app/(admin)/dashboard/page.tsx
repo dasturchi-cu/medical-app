@@ -33,10 +33,10 @@ export default function DashboardPage() {
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="space-y-6">
+    <section className="admin-page">
       <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
-          <Card key={stat.label} className="surface-card border-slate-100">
+          <Card key={stat.label} className="surface-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-slate-500">{stat.label}</CardTitle>
             </CardHeader>
@@ -48,7 +48,7 @@ export default function DashboardPage() {
       </div>
 
       <div className="grid gap-6 lg:grid-cols-3">
-        <Card className="surface-card border-slate-100">
+        <Card className="surface-card">
           <CardHeader>
             <CardTitle className="text-sm text-slate-500">Eng ko&apos;p ko&apos;rilgan kurs</CardTitle>
           </CardHeader>
@@ -58,7 +58,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="surface-card border-slate-100">
+        <Card className="surface-card">
           <CardHeader>
             <CardTitle className="text-sm text-slate-500">Eng ko&apos;p sotilgan kurs</CardTitle>
           </CardHeader>
@@ -68,7 +68,7 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
 
-        <Card className="surface-card border-slate-100">
+        <Card className="surface-card">
           <CardHeader>
             <CardTitle className="text-sm text-slate-500">Umuman sotilmagan kurslar</CardTitle>
           </CardHeader>
@@ -88,7 +88,7 @@ export default function DashboardPage() {
         </Card>
       </div>
 
-      <Card className="surface-card border-slate-100">
+      <Card className="surface-card">
         <CardHeader>
           <CardTitle>Foydalanuvchi faolligi (7 kun)</CardTitle>
         </CardHeader>

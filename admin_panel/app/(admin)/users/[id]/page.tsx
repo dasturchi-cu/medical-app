@@ -26,7 +26,6 @@ export default function UserDetailPage() {
   const [loading, setLoading] = useState(true);
   const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
   const [selectedCourse, setSelectedCourse] = useState(state.courses[0]?.id ?? "");
-  const [selectedModule, setSelectedModule] = useState<string>("");
 
   useEffect(() => {
     const timer = setTimeout(() => setLoading(false), 500);
@@ -82,14 +81,6 @@ export default function UserDetailPage() {
 
   const focusMinutes = sessions.reduce((sum, item) => sum + item.focus_minutes, 0);
   const breakMinutes = sessions.reduce((sum, item) => sum + item.break_minutes, 0);
-  const selectedCourseData = state.courses.find((course) => course.id === selectedCourse);
-  const modulesForCourse = useMemo(
-    () => state.courseModules.filter((module) => module.course_id === selectedCourse),
-    [selectedCourse, state.courseModules],
-  );
-  const effectiveModuleId = selectedCourseData?.has_modules
-    ? selectedModule || modulesForCourse[0]?.id || ""
-    : "";
 
   if (loading) return <PageSkeleton />;
 
@@ -216,29 +207,13 @@ export default function UserDetailPage() {
                 adminActions.grantCourse(
                   user.id,
                   selectedCourse,
-                  selectedCourseData?.has_modules ? effectiveModuleId || null : null,
+                  null,
                 )
               }
             >
               Kursni ochish
             </Button>
           </div>
-          {selectedCourseData?.has_modules ? (
-            <div className="mt-2">
-              <p className="mb-1 text-xs text-slate-500">Qaysi baza ochiladi?</p>
-              <select
-                value={effectiveModuleId}
-                onChange={(event) => setSelectedModule(event.target.value)}
-                className="h-10 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
-              >
-                {modulesForCourse.map((module) => (
-                  <option key={module.id} value={module.id}>
-                    {module.name}
-                  </option>
-                ))}
-              </select>
-            </div>
-          ) : null}
         </div>
 
         <div className="grid gap-4 md:grid-cols-2">
@@ -251,19 +226,13 @@ export default function UserDetailPage() {
                     <div>
                       <p className="text-sm">{courseTitleByLanguage(item.course, "uz")}</p>
                       <p className="text-xs text-slate-500">
-                        Sana: {item.relation.purchased_at || "Qo'lda ochilgan"}{" "}
-                        {item.relation.module_id
-                          ? `| ${
-                              state.courseModules.find((module) => module.id === item.relation.module_id)?.name ??
-                              "Baza"
-                            }`
-                          : ""}
+                        Sana: {item.relation.purchased_at || "Qo'lda ochilgan"}
                       </p>
                     </div>
                     <Button
                       variant="destructive"
                       className="h-8 rounded-lg px-3 text-xs"
-                      onClick={() => adminActions.revokeCourse(user.id, item.course.id, item.relation.module_id)}
+                      onClick={() => adminActions.revokeCourse(user.id, item.course.id, null)}
                     >
                       Olib tashlash
                     </Button>

@@ -77,9 +77,9 @@ function SidebarContent({ pathname, onNavigate }: SidebarContentProps) {
               href={item.href}
               onClick={onNavigate}
               className={cn(
-                "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-colors",
+                "flex items-center gap-3 rounded-2xl px-4 py-3 text-sm font-medium transition-all",
                 isActive
-                  ? "bg-primary text-primary-foreground shadow-sm"
+                  ? "bg-primary text-primary-foreground shadow-[0_10px_20px_rgba(47,107,255,0.25)]"
                   : "text-slate-600 hover:bg-slate-50 hover:text-slate-900",
               )}
             >
