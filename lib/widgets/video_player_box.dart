@@ -22,6 +22,7 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
   YoutubePlayerController? _youtubeController;
   String? _youtubeId;
   double _speed = 1.0;
+  bool _youtubeWasFullscreen = false;
 
   @override
   void initState() {
@@ -36,6 +37,7 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
           enableCaption: true,
         ),
       );
+      _youtubeController!.addListener(_handleYoutubeFullscreenChange);
     } else {
       _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
         ..initialize().then((_) {
@@ -47,9 +49,33 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
 
   @override
   void dispose() {
+    _youtubeController?.removeListener(_handleYoutubeFullscreenChange);
     _controller?.dispose();
     _youtubeController?.dispose();
+    _restoreSystemUi();
     super.dispose();
+  }
+
+  Future<void> _handleYoutubeFullscreenChange() async {
+    final controller = _youtubeController;
+    if (controller == null) return;
+    final isFullscreen = controller.value.isFullScreen;
+    if (isFullscreen == _youtubeWasFullscreen) return;
+    _youtubeWasFullscreen = isFullscreen;
+    if (isFullscreen) {
+      await SystemChrome.setPreferredOrientations([
+        DeviceOrientation.landscapeLeft,
+        DeviceOrientation.landscapeRight,
+      ]);
+      await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+      return;
+    }
+    await _restoreSystemUi();
+  }
+
+  Future<void> _restoreSystemUi() async {
+    await SystemChrome.setPreferredOrientations(DeviceOrientation.values);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
   }
 
   Future<void> _setSpeed(double speed) async {
