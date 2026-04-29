@@ -50,10 +50,10 @@ class AuthController extends Notifier<AuthState> {
   }
 
   AuthState _fromUser(LocalAuthUser user) {
-    final guessedName = user.name;
+    final guessedName = user.name.trim().isEmpty ? 'Ism yozmagansiz' : user.name;
     return AuthState(
       isLoggedIn: true,
-      name: guessedName.trim().isEmpty ? 'Foydalanuvchi' : guessedName,
+      name: guessedName,
       userId: user.id,
       email: user.email,
     );
@@ -62,11 +62,16 @@ class AuthController extends Notifier<AuthState> {
   Future<String?> login({
     required String phone,
     required String password,
+    String? displayName,
   }) async {
     try {
       final user = await ref
           .read(authServiceProvider)
-          .signIn(phone: phone.trim(), password: password.trim());
+          .signIn(
+            phone: phone.trim(),
+            password: password.trim(),
+            displayName: (displayName ?? '').trim(),
+          );
       if (user == null) {
         return 'Telefon raqami noto‘g‘ri';
       }
@@ -74,6 +79,15 @@ class AuthController extends Notifier<AuthState> {
       return null;
     } catch (_) {
       return 'Xatolik yuz berdi. Qayta urinib ko‘ring';
+    }
+  }
+
+  Future<void> updateName(String name) async {
+    final updated = await ref
+        .read(authServiceProvider)
+        .updateCurrentUserName(name);
+    if (updated != null) {
+      state = _fromUser(updated);
     }
   }
 

@@ -1,5 +1,6 @@
 "use client";
 
+import { useState } from "react";
 import type { ReactNode } from "react";
 import { AuthGuard } from "@/components/auth-guard";
 import { Header } from "@/components/header";
@@ -10,16 +11,16 @@ interface AdminLayoutProps {
 }
 
 export default function AdminLayout({ children }: AdminLayoutProps) {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
     <AuthGuard>
-      <div className="w-full overflow-x-auto">
-        <div className="mx-auto flex min-h-screen min-w-[1200px] max-w-[1440px] gap-6 p-6">
-          <Sidebar />
-          <main className="min-h-[calc(100vh-3rem)] min-w-0 flex-1">
-            <Header />
-            {children}
-          </main>
-        </div>
+      <div className="mx-auto flex w-full max-w-[1440px] gap-4 p-4 md:gap-6 md:p-6">
+        <Sidebar mobileOpen={mobileOpen} onCloseMobile={() => setMobileOpen(false)} />
+        <main className="min-h-[calc(100vh-2rem)] min-w-0 flex-1">
+          <Header onOpenMobileMenu={() => setMobileOpen(true)} />
+          {children}
+        </main>
       </div>
     </AuthGuard>
   );

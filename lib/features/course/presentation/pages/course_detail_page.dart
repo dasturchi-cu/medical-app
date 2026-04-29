@@ -107,12 +107,14 @@ class CourseDetailPage extends ConsumerWidget {
               ),
               _ChipInfo(
                 icon: Icons.lock_open_outlined,
-                label: purchased ? 'Kurs ochilgan' : '1-dars bepul',
+                label: isDoctorCourse
+                    ? 'Har bir baza alohida sotiladi'
+                    : (purchased ? 'Kurs ochilgan' : '1-dars bepul'),
               ),
               _ChipInfo(icon: Icons.person_outline, label: 'Mehmon'),
             ],
           ),
-          if (!purchased)
+          if (!purchased && !isDoctorCourse)
             Padding(
               padding: const EdgeInsets.only(top: 10),
               child: SizedBox(
@@ -149,14 +151,26 @@ class CourseDetailPage extends ConsumerWidget {
             ),
             const SizedBox(height: 10),
             ...course.sections.map((s) {
+              final basePurchased = ref
+                  .watch(purchaseControllerProvider)
+                  .isBasePurchased(course.id, s.id);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: BaseCard(
-                  title: s.titleUz,
+                  title: basePurchased ? '${s.titleUz} (sotib olingan)' : s.titleUz,
                   videoCountText: '${s.lessons.length} ta video',
-                  onTap: () {
-                    ref.read(selectedCourseIdProvider.notifier).state =
-                        course.id;
+                  onTap: () async {
+                    if (!basePurchased) {
+                      await showPurchaseModal(
+                        context: context,
+                        courseName: '${course.titleUz} - ${s.titleUz}',
+                        description: 'Ushbu baza uchun alohida to‘lov qilinadi',
+                        price: '299 000 so\'m',
+                        courseId: basePurchaseKey(course.id, s.id),
+                      );
+                      return;
+                    }
+                    ref.read(selectedCourseIdProvider.notifier).state = course.id;
                     ref
                         .read(progressControllerProvider.notifier)
                         .enroll(course.id);

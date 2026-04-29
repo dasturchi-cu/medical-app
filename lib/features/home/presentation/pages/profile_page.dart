@@ -14,6 +14,38 @@ import '../../../../core/theme/design_system.dart';
 class ProfilePage extends ConsumerWidget {
   const ProfilePage({super.key});
 
+  Future<void> _showNameEditDialog(BuildContext context, WidgetRef ref) async {
+    final auth = ref.read(authControllerProvider);
+    var editedName = auth.name == 'Ism yozmagansiz' ? '' : auth.name;
+    final newName = await showDialog<String>(
+      context: context,
+      builder: (ctx) {
+        return AlertDialog(
+          title: const Text('Ismni tahrirlash'),
+          content: TextFormField(
+            initialValue: editedName,
+            autofocus: true,
+            textCapitalization: TextCapitalization.words,
+            decoration: const InputDecoration(hintText: 'Ismingizni kiriting'),
+            onChanged: (value) => editedName = value,
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: const Text('Bekor qilish'),
+            ),
+            FilledButton(
+              onPressed: () => Navigator.of(ctx).pop(editedName.trim()),
+              child: const Text('Saqlash'),
+            ),
+          ],
+        );
+      },
+    );
+    if (!context.mounted || newName == null) return;
+    await ref.read(authControllerProvider.notifier).updateName(newName);
+  }
+
   @override
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(courseRepositoryProvider);
@@ -81,6 +113,20 @@ class ProfilePage extends ConsumerWidget {
                                 fontWeight: FontWeight.w700,
                               ),
                         ),
+                        if (auth.isLoggedIn)
+                          Align(
+                            alignment: Alignment.centerLeft,
+                            child: TextButton.icon(
+                              onPressed: () => _showNameEditDialog(context, ref),
+                              style: TextButton.styleFrom(
+                                padding: const EdgeInsets.symmetric(vertical: 2),
+                                minimumSize: const Size(0, 0),
+                                tapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                              ),
+                              icon: const Icon(Icons.edit_outlined, size: 16),
+                              label: const Text('Tahrirlash'),
+                            ),
+                          ),
                       ],
                     ),
                   ),
