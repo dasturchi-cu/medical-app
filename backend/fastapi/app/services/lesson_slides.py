@@ -3,6 +3,7 @@ from __future__ import annotations
 from datetime import datetime
 from typing import Any
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..schemas.lesson_slides import LessonSlideCreate, LessonSlideItem, LessonSlideUpdate
@@ -36,24 +37,41 @@ def list_lesson_slides(client: Client, *, lesson_id: str, active_only: bool = Tr
     return [_to_item(row) for row in (response.data or [])]
 
 
-def create_lesson_slide(client: Client, payload: LessonSlideCreate) -> LessonSlideItem:
-    inserted = (
+def _next_order_no(client: Client, *, lesson_id: str) -> int:
+    rows = (
         client.table("lesson_slides")
-        .insert(
-            {
-                "lesson_id": payload.lesson_id,
-                "title": payload.title.strip(),
-                "body": payload.body.strip(),
-                "image_url": payload.image_url.strip(),
-                "order_no": payload.order_no,
-            }
-        )
+        .select("order_no")
+        .eq("lesson_id", lesson_id)
+        .order("order_no", desc=True)
+        .limit(1)
         .execute()
-    )
-    row = (inserted.data or [None])[0]
-    if not row:
-        raise RuntimeError("Failed to create lesson slide.")
-    return _to_item(row)
+    ).data or []
+    if not rows:
+        return 1
+    return int(rows[0].get("order_no") or 0) + 1
+
+
+def create_lesson_slide(client: Client, payload: LessonSlideCreate) -> LessonSlideItem:
+    base_row = {
+        "lesson_id": payload.lesson_id,
+        "title": payload.title.strip(),
+        "body": payload.body.strip(),
+        "image_url": payload.image_url.strip(),
+    }
+    order_no = payload.order_no
+    for _ in range(3):
+        try:
+            inserted = client.table("lesson_slides").insert({**base_row, "order_no": order_no}).execute()
+            row = (inserted.data or [None])[0]
+            if not row:
+                raise RuntimeError("Failed to create lesson slide.")
+            return _to_item(row)
+        except APIError as error:
+            if error.code == "23505":
+                order_no = _next_order_no(client, lesson_id=payload.lesson_id)
+                continue
+            raise
+    raise RuntimeError("Slayd qo'shishda order_no band bo'lib qoldi. Qayta urinib ko'ring.")
 
 
 def update_lesson_slide(client: Client, *, slide_id: str, payload: LessonSlideUpdate) -> LessonSlideItem:

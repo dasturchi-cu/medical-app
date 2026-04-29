@@ -15,6 +15,7 @@ class Course {
   final String categoryId;
   final String titleUz;
   final String authorUz;
+  final String imageUrl;
   final String priceUz;
   final double progress; // 0..1
   final double rating; // 0..5
@@ -27,6 +28,7 @@ class Course {
     required this.categoryId,
     required this.titleUz,
     required this.authorUz,
+    required this.imageUrl,
     required this.priceUz,
     required this.progress,
     required this.rating,

@@ -1,9 +1,12 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
+import '../../../../core/config/api_config.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
@@ -332,20 +335,12 @@ class _SlideViewerState extends State<_SlideViewer> {
                               const SizedBox(height: 12),
                               ClipRRect(
                                 borderRadius: BorderRadius.circular(12),
-                                child: Image.network(
-                                  slide.imageUrl,
+                                child: _SlideImage(
+                                  imageUrl: slide.imageUrl,
                                   fit: BoxFit.cover,
                                   width: double.infinity,
                                   height: widget.height * 0.38,
-                                  errorBuilder: (context, error, stackTrace) => Container(
-                                    height: widget.height * 0.28,
-                                    alignment: Alignment.center,
-                                    color: Colors.white.withValues(alpha: 0.16),
-                                    child: const Text(
-                                      'Rasmni yuklab bo\'lmadi',
-                                      style: TextStyle(color: Colors.white),
-                                    ),
-                                  ),
+                                  placeholderHeight: widget.height * 0.28,
                                 ),
                               ),
                             ],
@@ -518,17 +513,10 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
                           Expanded(
                             child: ClipRRect(
                               borderRadius: BorderRadius.circular(14),
-                              child: Image.network(
-                                slide.imageUrl,
+                              child: _SlideImage(
+                                imageUrl: slide.imageUrl,
                                 fit: BoxFit.contain,
-                                errorBuilder: (context, error, stackTrace) => Container(
-                                  alignment: Alignment.center,
-                                  color: Colors.white.withValues(alpha: 0.16),
-                                  child: const Text(
-                                    'Rasmni yuklab bo\'lmadi',
-                                    style: TextStyle(color: Colors.white),
-                                  ),
-                                ),
+                                placeholderHeight: double.infinity,
                               ),
                             ),
                           ),
@@ -592,5 +580,75 @@ class _RenderedSlide {
   final String title;
   final String body;
   final String imageUrl;
+}
+
+class _SlideImage extends StatelessWidget {
+  const _SlideImage({
+    required this.imageUrl,
+    required this.fit,
+    this.width,
+    this.height,
+    required this.placeholderHeight,
+  });
+
+  final String imageUrl;
+  final BoxFit fit;
+  final double? width;
+  final double? height;
+  final double placeholderHeight;
+
+  @override
+  Widget build(BuildContext context) {
+    final raw = imageUrl.trim();
+    if (raw.isEmpty) return _placeholder();
+
+    if (raw.startsWith('data:image')) {
+      final commaIndex = raw.indexOf(',');
+      if (commaIndex > 0) {
+        final payload = raw.substring(commaIndex + 1);
+        try {
+          final bytes = base64Decode(payload);
+          return Image.memory(
+            bytes,
+            fit: fit,
+            width: width,
+            height: height,
+            errorBuilder: (_, _, _) => _placeholder(),
+          );
+        } catch (_) {
+          return _placeholder();
+        }
+      }
+      return _placeholder();
+    }
+
+    final normalized = _normalizeImageUrl(raw);
+    return Image.network(
+      normalized,
+      fit: fit,
+      width: width,
+      height: height,
+      errorBuilder: (_, _, _) => _placeholder(),
+    );
+  }
+
+  String _normalizeImageUrl(String value) {
+    if (value.startsWith('http://') || value.startsWith('https://')) return value;
+    final base = getApiBaseUrl().replaceAll(RegExp(r'/+$'), '');
+    final path = value.startsWith('/') ? value : '/$value';
+    return '$base$path';
+  }
+
+  Widget _placeholder() {
+    return Container(
+      height: placeholderHeight,
+      alignment: Alignment.center,
+      color: Colors.white.withValues(alpha: 0.16),
+      child: const Text(
+        'Rasmni yuklab bo\'lmadi',
+        style: TextStyle(color: Colors.white),
+      ),
+    );
+  }
 }
 

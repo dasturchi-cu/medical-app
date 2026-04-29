@@ -9,6 +9,7 @@ class CourseCard extends StatelessWidget {
     required this.visualKind,
     required this.title,
     required this.author,
+    required this.imageUrl,
     required this.priceText,
     required this.progress,
     required this.ratingText,
@@ -23,6 +24,7 @@ class CourseCard extends StatelessWidget {
   final String visualKind;
   final String title;
   final String author;
+  final String imageUrl;
   final String priceText;
   final double progress;
   final String ratingText;
@@ -58,7 +60,7 @@ class CourseCard extends StatelessWidget {
           child: Row(
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
-              CourseVisual(kind: visualKind),
+              CourseVisual(kind: visualKind, imageUrl: imageUrl),
               const SizedBox(width: AppSpacing.s12),
               Expanded(
                 child: Column(

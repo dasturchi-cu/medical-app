@@ -47,6 +47,14 @@ export default function UserDetailPage() {
 
   const user = useMemo(() => users.find((item) => item.id === userId), [users, userId]);
   const activeEntitlements = useMemo(() => entitlements.filter((item) => item.is_active), [entitlements]);
+  const selectedCourseData = useMemo(
+    () => courses.find((course) => course.id === selectedCourse),
+    [courses, selectedCourse],
+  );
+  const courseTitleById = useMemo(
+    () => new Map(courses.map((course) => [course.id, course.title_uz])),
+    [courses],
+  );
 
   if (loading) return <PageSkeleton />;
 
@@ -100,7 +108,9 @@ export default function UserDetailPage() {
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <Select value={selectedCourse} onValueChange={(value) => setSelectedCourse(value ?? "")}>
             <SelectTrigger className="h-10 rounded-xl border-slate-200 sm:max-w-sm">
-              <SelectValue placeholder="Kursni tanlang" />
+              <SelectValue placeholder="Kursni tanlang">
+                {selectedCourseData?.title_uz ?? "Kursni tanlang"}
+              </SelectValue>
             </SelectTrigger>
             <SelectContent>
               {courses.map((course) => (
@@ -139,7 +149,9 @@ export default function UserDetailPage() {
             activeEntitlements.map((item) => (
               <div key={item.id} className="flex flex-col gap-2 rounded-xl bg-slate-50 p-3 sm:flex-row sm:items-center sm:justify-between">
                 <div>
-                  <p className="text-sm font-medium text-slate-900">{item.course_title}</p>
+                  <p className="text-sm font-medium text-slate-900">
+                    {courseTitleById.get(item.course_id) || item.course_title || item.course_id}
+                  </p>
                   <p className="text-xs text-slate-500">{item.purchased_at ? item.purchased_at.slice(0, 16).replace("T", " ") : "Qo'lda berilgan"}</p>
                 </div>
                 <Button

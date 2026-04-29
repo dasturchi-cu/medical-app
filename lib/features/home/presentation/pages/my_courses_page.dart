@@ -81,6 +81,7 @@ class MyCoursesPage extends ConsumerWidget {
                       : 'brain',
                   title: c.titleUz,
                   author: c.authorUz,
+                  imageUrl: c.imageUrl,
                   priceText: c.priceUz,
                   progress: progressValue,
                   ratingText: c.rating.toStringAsFixed(1),

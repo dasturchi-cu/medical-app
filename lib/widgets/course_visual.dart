@@ -1,12 +1,14 @@
+import 'dart:convert';
 import 'dart:math';
 
 import 'package:flutter/material.dart';
 
 class CourseVisual extends StatefulWidget {
-  const CourseVisual({super.key, required this.kind});
+  const CourseVisual({super.key, required this.kind, this.imageUrl = ''});
 
   /// e.g. 'eeg', 'brain', 'medical', 'enmg'
   final String kind;
+  final String imageUrl;
 
   @override
   State<CourseVisual> createState() => _CourseVisualState();
@@ -33,6 +35,44 @@ class _CourseVisualState extends State<CourseVisual>
 
   @override
   Widget build(BuildContext context) {
+    final rawImage = widget.imageUrl.trim();
+    if (rawImage.isNotEmpty) {
+      if (rawImage.startsWith('data:image')) {
+        final comma = rawImage.indexOf(',');
+        if (comma > 0) {
+          try {
+            final bytes = base64Decode(rawImage.substring(comma + 1));
+            return Container(
+              width: 52,
+              height: 52,
+              decoration: BoxDecoration(
+                color: const Color(0xFFE9F0FF),
+                borderRadius: BorderRadius.circular(16),
+              ),
+              clipBehavior: Clip.antiAlias,
+              child: Image.memory(bytes, fit: BoxFit.cover),
+            );
+          } catch (_) {}
+        }
+      }
+      if (rawImage.startsWith('http://') || rawImage.startsWith('https://')) {
+        return Container(
+          width: 52,
+          height: 52,
+          decoration: BoxDecoration(
+            color: const Color(0xFFE9F0FF),
+            borderRadius: BorderRadius.circular(16),
+          ),
+          clipBehavior: Clip.antiAlias,
+          child: Image.network(
+            rawImage,
+            fit: BoxFit.cover,
+            errorBuilder: (_, _, _) => const Icon(Icons.image_outlined, color: Color(0xFF1E6BB8)),
+          ),
+        );
+      }
+    }
+
     if (widget.kind == 'umumiy_bachelor') {
       return Container(
         width: 52,

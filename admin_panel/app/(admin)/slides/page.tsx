@@ -109,17 +109,18 @@ export default function SlidesPage() {
       }
       try {
         const baseOrder = Number(values.order_no) || 1;
-        const created = await Promise.all(
-          urls.map((url, idx) =>
-            createLessonSlide({
-              lesson_id: resolvedLessonId,
-              title: values.title,
-              body: values.body,
-              image_url: url,
-              order_no: baseOrder + idx,
-            }),
-          ),
-        );
+        const created: LessonSlideItem[] = [];
+        for (let idx = 0; idx < urls.length; idx += 1) {
+          const url = urls[idx];
+          const item = await createLessonSlide({
+            lesson_id: resolvedLessonId,
+            title: values.title,
+            body: values.body,
+            image_url: url,
+            order_no: baseOrder + idx,
+          });
+          created.push(item);
+        }
         setSlides((prev) => [...prev, ...created].sort((a, b) => a.order_no - b.order_no));
         setValues({ title: "", body: "", image_url: "", image_urls: [], order_no: "1" });
         notifySuccess(`${created.length} ta slayd qo'shildi.`);

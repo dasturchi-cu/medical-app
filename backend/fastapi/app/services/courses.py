@@ -100,8 +100,9 @@ def get_course_enrolled_count(client: Client, *, course_id: str) -> int:
 
 
 def get_course_comments_count(client: Client, *, course_id: str) -> int:
-    response = client.table("comments").select("id", count="exact").eq("course_id", course_id).execute()
-    return int(response.count or 0)
+    legacy = client.table("comments").select("id", count="exact").eq("course_id", course_id).execute()
+    app = client.table("app_comments").select("id", count="exact").eq("course_key", course_id).execute()
+    return int(legacy.count or 0) + int(app.count or 0)
 
 
 def get_course_rating_summary(client: Client, *, course_id: str, user_id: str | None = None) -> tuple[float, int, int | None]:
