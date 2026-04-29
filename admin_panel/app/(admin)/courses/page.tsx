@@ -12,16 +12,19 @@ import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { adminActions, type Course, useAdminStore } from "@/lib/admin-store";
+import { notifySuccess } from "@/lib/notify";
 
 interface CourseFormValues {
   title: string;
   price: string;
+  admin_telegram: string;
   image: string;
 }
 
 const emptyCourseForm: CourseFormValues = {
   title: "",
   price: "",
+  admin_telegram: "Neuroscienceadmin",
   image: "",
 };
 
@@ -64,16 +67,17 @@ export default function CoursesPage() {
         key: "title",
         label: "Nomi",
         render: (item: Course) => (
-          <div>
-            <p className="font-medium text-slate-800">{item.title_uz}</p>
-            <p className="text-xs text-slate-500">RU: {item.title_ru}</p>
-            <p className="text-xs text-slate-500">EN: {item.title_en}</p>
-          </div>
+          <p className="font-medium text-slate-800">{item.title_uz}</p>
         ),
       },
       {
         key: "price",
         label: "Narx",
+      },
+      {
+        key: "admin_telegram",
+        label: "Admin",
+        render: (item: Course) => `@${item.admin_telegram}`,
       },
       {
         key: "actions",
@@ -94,6 +98,7 @@ export default function CoursesPage() {
                 setEditValues({
                   title: item.title_uz,
                   price: item.price,
+                  admin_telegram: item.admin_telegram,
                   image: item.image,
                 });
               }}
@@ -117,6 +122,7 @@ export default function CoursesPage() {
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     adminActions.addCourse({ ...formValues, has_modules: false, modules: [] });
+    notifySuccess("Kurs muvaffaqiyatli qo'shildi.");
     setFormValues(emptyCourseForm);
   };
 
@@ -124,6 +130,7 @@ export default function CoursesPage() {
     event.preventDefault();
     if (!editCourse) return;
     adminActions.updateCourse(editCourse.id, { ...editValues, has_modules: false, modules: [] });
+    notifySuccess("Kurs muvaffaqiyatli yangilandi.");
     setEditCourse(null);
   };
 
@@ -133,7 +140,6 @@ export default function CoursesPage() {
     <section className="admin-page">
       <AppForm
         title="Kurs yaratish"
-        description="Sarlavhani kiriting, tizim avtomatik UZ / RU / EN versiyalarini yaratadi."
         onSubmit={onSubmit}
         submitLabel="Kursni saqlash"
       >
@@ -178,6 +184,7 @@ export default function CoursesPage() {
         onConfirm={() => {
           if (!deleteCourseId) return;
           adminActions.deleteCourse(deleteCourseId);
+          notifySuccess("Kurs muvaffaqiyatli o'chirildi.");
           setDeleteCourseId(null);
         }}
       />
@@ -210,6 +217,16 @@ function LanguageFields({ values, onChange }: LanguageFieldsProps) {
           value={values.price}
           onChange={(event) => onChange((prev) => ({ ...prev, price: event.target.value }))}
           placeholder="Masalan: 299 000 so'm"
+          className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="admin_telegram">Kurs admini (Telegram)</Label>
+        <input
+          id="admin_telegram"
+          value={values.admin_telegram}
+          onChange={(event) => onChange((prev) => ({ ...prev, admin_telegram: event.target.value }))}
+          placeholder="Neuroscienceadmin"
           className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
         />
       </div>

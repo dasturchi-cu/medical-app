@@ -13,6 +13,9 @@ import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { adminActions, courseTitleByLanguage, type Banner, useAdminStore } from "@/lib/admin-store";
+import { notifySuccess } from "@/lib/notify";
+
+const DEFAULT_ADMIN_TELEGRAM = "Neuroscienceadmin";
 
 export default function BannersPage() {
   const { courses, banners } = useAdminStore((state) => state);
@@ -23,7 +26,6 @@ export default function BannersPage() {
     title: "",
     message: "",
     price: "",
-    telegram: "med_admin",
     image: "",
     course_id: (courses[0]?.id ?? "") as string | null,
   });
@@ -31,7 +33,6 @@ export default function BannersPage() {
     title: "",
     message: "",
     price: "",
-    telegram: "med_admin",
     image: "",
     course_id: (courses[0]?.id ?? "") as string | null,
   });
@@ -56,10 +57,10 @@ export default function BannersPage() {
             <BlueBanner />
           ),
       },
-      { key: "title", label: "Sarlavha" },
+      { key: "title", label: "Banner nomi" },
       {
         key: "message",
-        label: "Xabar",
+        label: "Nima haqida",
         render: (item: Banner) => <span className="line-clamp-2 max-w-[220px]">{item.message}</span>,
       },
       { key: "price", label: "Narx" },
@@ -74,38 +75,39 @@ export default function BannersPage() {
       {
         key: "actions",
         label: "Amallar",
-        render: (item: Banner) => (
-          <div className="flex flex-wrap gap-2">
-            <a
-              href={telegramLink(item.telegram, item.title, item.price)}
-              target="_blank"
-              rel="noreferrer"
-              className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-xs text-white"
-            >
-              Sotib olish
-            </a>
-            <Button
-              variant="outline"
-              className="h-8 rounded-lg border-slate-200 px-3 text-xs"
-              onClick={() => {
-                setEditBanner(item);
-                setEditValues({
-                  title: item.title,
-                  message: item.message,
+        render: (item: Banner) => {
+          return (
+            <div className="flex flex-wrap gap-2">
+              <a
+                href={telegramLink(courses.find((entry) => entry.id === item.courseId)?.admin_telegram, item.title, item.price)}
+                target="_blank"
+                rel="noreferrer"
+                className="inline-flex h-8 items-center rounded-lg bg-primary px-3 text-xs text-white"
+              >
+                Adminga yozish
+              </a>
+              <Button
+                variant="outline"
+                className="h-8 rounded-lg border-slate-200 px-3 text-xs"
+                onClick={() => {
+                  setEditBanner(item);
+                  setEditValues({
+                    title: item.title,
+                    message: item.message,
                   price: item.price,
-                  telegram: item.telegram,
-                  image: item.image,
-                  course_id: item.courseId,
-                });
-              }}
-            >
-              Tahrirlash
-            </Button>
-            <Button variant="destructive" className="h-8 rounded-lg px-3 text-xs" onClick={() => setDeleteBannerId(item.id)}>
-              O&apos;chirish
-            </Button>
-          </div>
-        ),
+                    image: item.image,
+                    course_id: item.courseId,
+                  });
+                }}
+              >
+                Tahrirlash
+              </Button>
+              <Button variant="destructive" className="h-8 rounded-lg px-3 text-xs" onClick={() => setDeleteBannerId(item.id)}>
+                O&apos;chirish
+              </Button>
+            </div>
+          );
+        },
       },
     ],
     [courses],
@@ -116,16 +118,16 @@ export default function BannersPage() {
     adminActions.addBanner({
       title: formValues.title,
       message: formValues.message,
-      price: formValues.price,
-      telegram: normalizeTelegram(formValues.telegram),
+      price: formValues.price.trim() || "Kelishiladi",
+      telegram: DEFAULT_ADMIN_TELEGRAM,
       image: formValues.image,
       courseId: formValues.course_id ?? "",
     });
+    notifySuccess("Kurs reklamasi muvaffaqiyatli qo'shildi.");
     setFormValues({
       title: "",
       message: "",
       price: "",
-      telegram: "med_admin",
       image: "",
       course_id: courses[0]?.id ?? "",
     });
@@ -137,11 +139,12 @@ export default function BannersPage() {
     adminActions.updateBanner(editBanner.id, {
       title: editValues.title,
       message: editValues.message,
-      price: editValues.price,
-      telegram: normalizeTelegram(editValues.telegram),
+      price: editValues.price.trim() || "Kelishiladi",
+      telegram: DEFAULT_ADMIN_TELEGRAM,
       image: editValues.image ?? "",
       courseId: editValues.course_id ?? "",
     });
+    notifySuccess("Kurs reklamasi muvaffaqiyatli yangilandi.");
     setEditBanner(null);
   };
 
@@ -149,24 +152,24 @@ export default function BannersPage() {
 
   return (
     <section className="admin-page">
-      <AppForm title="Banner yaratish" description="Kursga bog&apos;langan promo banner qo&apos;shing." onSubmit={onSubmit}>
+      <AppForm title="Kurs reklamasi yaratish" description="Reklama orqali foydalanuvchi onlayn kursga qiziqadi va adminga yozadi." onSubmit={onSubmit}>
         <div className="grid gap-2">
-          <Label htmlFor="title">Sarlavha - title</Label>
+          <Label htmlFor="title">Reklama sarlavhasi</Label>
           <Input
             id="title"
             value={formValues.title}
             onChange={(event) => setFormValues((prev) => ({ ...prev, title: event.target.value }))}
-            placeholder="Banner sarlavhasi"
+            placeholder="Masalan: Diqqat va fokus kursi"
             className="h-11 rounded-xl border-slate-200"
           />
         </div>
         <div className="grid gap-2">
-          <Label htmlFor="message">Reklama xabari</Label>
+          <Label htmlFor="message">Reklama matni (nima haqida?)</Label>
           <Input
             id="message"
             value={formValues.message}
             onChange={(event) => setFormValues((prev) => ({ ...prev, message: event.target.value }))}
-            placeholder="Masalan: Joylar cheklangan, hoziroq yoziling"
+            placeholder="Masalan: Bu banner diqqatni oshirish kursi haqida"
             className="h-11 rounded-xl border-slate-200"
           />
         </div>
@@ -181,18 +184,10 @@ export default function BannersPage() {
               className="h-11 rounded-xl border-slate-200"
             />
           </div>
-          <div className="grid gap-2">
-            <Label htmlFor="telegram">Telegram (admin)</Label>
-            <Input
-              id="telegram"
-              value={formValues.telegram}
-              onChange={(event) => setFormValues((prev) => ({ ...prev, telegram: event.target.value }))}
-              placeholder="med_admin"
-              className="h-11 rounded-xl border-slate-200"
-            />
+          <div className="rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2 text-xs text-blue-700">
+            Mijoz kurs adminiga yozadi. Admin kurs ichida sozlanadi.
           </div>
         </div>
-
         <ImagePicker
           label="Rasm (upload yoki link)"
           value={formValues.image}
@@ -201,11 +196,8 @@ export default function BannersPage() {
         />
 
         <div className="grid gap-2">
-          <Label htmlFor="course_id">Kurs</Label>
-          <Select
-            value={formValues.course_id ?? ""}
-            onValueChange={(value) => setFormValues((prev) => ({ ...prev, course_id: value }))}
-          >
+          <Label htmlFor="course_id">Qaysi onlayn kursga tegishli?</Label>
+          <Select value={formValues.course_id ?? ""} onValueChange={(value) => setFormValues((prev) => ({ ...prev, course_id: value }))}>
             <SelectTrigger id="course_id" className="h-11 rounded-xl border-slate-200">
               <SelectValue placeholder="Kursni tanlang">
                 {courses.find((course) => course.id === formValues.course_id)?.title_uz ?? "Kursni tanlang"}
@@ -227,25 +219,27 @@ export default function BannersPage() {
       <AppModal
         open={Boolean(editBanner)}
         onOpenChange={(open) => (!open ? setEditBanner(null) : undefined)}
-        title="Bannerni tahrirlash"
-        description="Banner ma&apos;lumotlarini yangilang."
+        title="Reklamani tahrirlash"
+        description="Reklama ma&apos;lumotlarini yangilang."
       >
-        <AppForm title="Bannerni yangilash" submitLabel="Saqlash" onSubmit={onEditSubmit}>
+        <AppForm title="Reklamani yangilash" submitLabel="Saqlash" onSubmit={onEditSubmit}>
           <div className="grid gap-2">
-            <Label htmlFor="edit_banner_title">Sarlavha</Label>
+            <Label htmlFor="edit_banner_title">Reklama sarlavhasi</Label>
             <Input
               id="edit_banner_title"
               value={editValues.title}
               onChange={(event) => setEditValues((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Masalan: Diqqat va fokus kursi"
               className="h-11 rounded-xl border-slate-200"
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="edit_banner_message">Reklama xabari</Label>
+            <Label htmlFor="edit_banner_message">Reklama matni (nima haqida?)</Label>
             <Input
               id="edit_banner_message"
               value={editValues.message}
               onChange={(event) => setEditValues((prev) => ({ ...prev, message: event.target.value }))}
+              placeholder="Masalan: Bu banner diqqatni oshirish kursi haqida"
               className="h-11 rounded-xl border-slate-200"
             />
           </div>
@@ -256,17 +250,12 @@ export default function BannersPage() {
                 id="edit_banner_price"
                 value={editValues.price}
                 onChange={(event) => setEditValues((prev) => ({ ...prev, price: event.target.value }))}
+                placeholder="Masalan: 299 000 so&apos;m"
                 className="h-11 rounded-xl border-slate-200"
               />
             </div>
-            <div className="grid gap-2">
-              <Label htmlFor="edit_banner_telegram">Telegram (admin)</Label>
-              <Input
-                id="edit_banner_telegram"
-                value={editValues.telegram}
-                onChange={(event) => setEditValues((prev) => ({ ...prev, telegram: event.target.value }))}
-                className="h-11 rounded-xl border-slate-200"
-              />
+            <div className="rounded-xl border border-blue-100 bg-blue-50/70 px-3 py-2 text-xs text-blue-700">
+              Mijoz kurs adminiga yozadi. Admin kurs ichida sozlanadi.
             </div>
           </div>
           <ImagePicker
@@ -276,11 +265,8 @@ export default function BannersPage() {
             onChange={(value) => setEditValues((prev) => ({ ...prev, image: value }))}
           />
           <div className="grid gap-2">
-            <Label htmlFor="edit_banner_course">Kurs</Label>
-            <Select
-              value={editValues.course_id ?? ""}
-              onValueChange={(value) => setEditValues((prev) => ({ ...prev, course_id: value }))}
-            >
+            <Label htmlFor="edit_banner_course">Qaysi onlayn kursga tegishli?</Label>
+            <Select value={editValues.course_id ?? ""} onValueChange={(value) => setEditValues((prev) => ({ ...prev, course_id: value }))}>
               <SelectTrigger id="edit_banner_course" className="h-11 rounded-xl border-slate-200">
                 <SelectValue placeholder="Kursni tanlang">
                   {courses.find((course) => course.id === editValues.course_id)?.title_uz ?? "Kursni tanlang"}
@@ -300,13 +286,14 @@ export default function BannersPage() {
 
       <ConfirmDialog
         open={Boolean(deleteBannerId)}
-        title="Bannerni o&apos;chirish"
-        description="Rostdan ham ushbu bannerni o&apos;chirmoqchimisiz?"
+        title="Reklamani o&apos;chirish"
+        description="Rostdan ham ushbu reklamani o&apos;chirmoqchimisiz?"
         confirmText="Ha, o&apos;chirish"
         onCancel={() => setDeleteBannerId(null)}
         onConfirm={() => {
           if (!deleteBannerId) return;
           adminActions.deleteBanner(deleteBannerId);
+          notifySuccess("Kurs reklamasi muvaffaqiyatli o'chirildi.");
           setDeleteBannerId(null);
         }}
       />
@@ -314,12 +301,8 @@ export default function BannersPage() {
   );
 }
 
-function normalizeTelegram(value: string) {
-  return value.replace(/^@/, "").trim();
-}
-
-function telegramLink(username: string, title: string, price: string) {
-  const handle = normalizeTelegram(username) || "med_admin";
+function telegramLink(adminTelegram: string | undefined, title: string, price: string) {
+  const handle = adminTelegram?.replace(/^@/, "").trim() || DEFAULT_ADMIN_TELEGRAM;
   const text = encodeURIComponent(`Salom, "${title}" kursini sotib olmoqchiman. Narx: ${price || "kelishiladi"}.`);
   return `https://t.me/${handle}?text=${text}`;
 }

@@ -18,6 +18,7 @@ import { PageSkeleton } from "@/components/page-skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { adminActions, courseTitleByLanguage, useAdminStore } from "@/lib/admin-store";
+import { notifySuccess } from "@/lib/notify";
 
 export default function UserDetailPage() {
   const params = useParams<{ id: string }>();
@@ -78,6 +79,7 @@ export default function UserDetailPage() {
       }),
     [courseRelations, state.courses],
   );
+  const selectedCourseEntry = state.courses.find((course) => course.id === selectedCourse);
 
   const focusMinutes = sessions.reduce((sum, item) => sum + item.focus_minutes, 0);
   const breakMinutes = sessions.reduce((sum, item) => sum + item.break_minutes, 0);
@@ -93,9 +95,9 @@ export default function UserDetailPage() {
   }
 
   return (
-    <section className="space-y-5">
-      <div className="surface-card p-6">
-        <h2 className="text-2xl font-semibold text-slate-900">{user.name}</h2>
+    <section className="admin-page">
+      <div className="surface-card p-4 sm:p-6">
+        <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">{user.name}</h2>
         <p className="mt-1 text-sm text-slate-500">{user.email}</p>
         <div className="mt-3 flex flex-wrap items-center gap-2">
           <span className="rounded-xl bg-slate-100 px-3 py-1 text-xs text-slate-600">{user.id}</span>
@@ -188,10 +190,12 @@ export default function UserDetailPage() {
       <SectionCard icon={ShoppingCart} title="Xaridlar va kurs ruxsati">
         <div className="rounded-xl border border-slate-100 p-3">
           <p className="mb-2 text-sm font-medium text-slate-700">Kursni ochish</p>
-          <div className="flex gap-2">
+          <div className="flex flex-col gap-2 sm:flex-row">
             <Select value={selectedCourse} onValueChange={(value) => setSelectedCourse(value ?? "")}>
               <SelectTrigger className="h-10 rounded-xl border-slate-200">
-                <SelectValue placeholder="Kursni tanlang" />
+                <SelectValue placeholder="Kursni tanlang">
+                  {selectedCourseEntry ? courseTitleByLanguage(selectedCourseEntry, "uz") : "Kursni tanlang"}
+                </SelectValue>
               </SelectTrigger>
               <SelectContent>
                 {state.courses.map((course) => (
@@ -202,14 +206,15 @@ export default function UserDetailPage() {
               </SelectContent>
             </Select>
             <Button
-              className="h-10 rounded-xl"
-              onClick={() =>
+              className="h-10 rounded-xl sm:px-4"
+              onClick={() => {
                 adminActions.grantCourse(
                   user.id,
                   selectedCourse,
                   null,
-                )
-              }
+                );
+                notifySuccess("Foydalanuvchiga kurs muvaffaqiyatli berildi.");
+              }}
             >
               Kursni ochish
             </Button>
@@ -222,7 +227,7 @@ export default function UserDetailPage() {
             <div className="space-y-2">
               {purchasedCourses.length > 0 ? (
                 purchasedCourses.map((item) => (
-                  <div key={item.course.id} className="flex items-center justify-between gap-2 rounded-lg bg-white px-2 py-2">
+                  <div key={item.course.id} className="flex flex-col gap-2 rounded-lg bg-white px-2 py-2 sm:flex-row sm:items-center sm:justify-between">
                     <div>
                       <p className="text-sm">{courseTitleByLanguage(item.course, "uz")}</p>
                       <p className="text-xs text-slate-500">
@@ -232,7 +237,10 @@ export default function UserDetailPage() {
                     <Button
                       variant="destructive"
                       className="h-8 rounded-lg px-3 text-xs"
-                      onClick={() => adminActions.revokeCourse(user.id, item.course.id, null)}
+                      onClick={() => {
+                        adminActions.revokeCourse(user.id, item.course.id, null);
+                        notifySuccess("Foydalanuvchidan kurs muvaffaqiyatli olib tashlandi.");
+                      }}
                     >
                       Olib tashlash
                     </Button>
@@ -276,6 +284,7 @@ export default function UserDetailPage() {
         onConfirm={() => {
           if (!deleteCommentId) return;
           adminActions.deleteComment(deleteCommentId);
+          notifySuccess("Izoh muvaffaqiyatli o'chirildi.");
           setDeleteCommentId(null);
         }}
       />
@@ -291,7 +300,7 @@ interface SectionCardProps {
 
 function SectionCard({ title, icon: Icon, children }: SectionCardProps) {
   return (
-    <div className="surface-card space-y-4 p-5">
+    <div className="surface-card space-y-4 p-4 sm:p-5">
       <div className="flex items-center gap-2">
         <Icon className="size-4 text-primary" />
         <h3 className="text-base font-semibold text-slate-900">{title}</h3>
@@ -310,7 +319,7 @@ function InfoGridItem({ label, value }: InfoGridItemProps) {
   return (
     <div className="rounded-xl bg-slate-50 p-3">
       <p className="text-xs uppercase tracking-wide text-slate-500">{label}</p>
-      <p className="mt-1 text-sm font-medium text-slate-800">{value}</p>
+      <p className="mt-1 break-words text-sm font-medium text-slate-800">{value}</p>
     </div>
   );
 }

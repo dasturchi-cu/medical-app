@@ -9,7 +9,9 @@ const titleByPath: Record<string, string> = {
   "/dashboard": "Boshqaruv paneli",
   "/courses": "Kurslar",
   "/lessons": "Darslar",
-  "/banners": "Bannerlar",
+  "/banners": "Reklamalar",
+  "/home-banners": "Home reklamalari",
+  "/subscriptions": "Kurs obunalari",
   "/users": "Foydalanuvchilar",
   "/comments": "Izohlar va reytinglar",
 };
@@ -28,7 +30,7 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
       : titleByPath[pathname] ?? "Boshqaruv paneli";
 
   return (
-    <header className="surface-card sticky top-3 z-30 mb-4 flex items-start justify-between gap-3 p-4 backdrop-blur sm:mb-6 sm:px-6 sm:py-4">
+    <header className="surface-card sticky top-2 z-30 mb-4 flex flex-wrap items-start justify-between gap-3 p-3 backdrop-blur sm:top-3 sm:mb-6 sm:px-6 sm:py-4">
       <div className="min-w-0">
         <div className="mb-2 flex items-center gap-2 lg:hidden">
           <button
@@ -40,10 +42,10 @@ export function Header({ onOpenMobileMenu }: HeaderProps) {
           </button>
           <span className="text-xs font-semibold uppercase text-slate-500">Menyu</span>
         </div>
-        <h1 className="truncate text-xl font-semibold text-slate-900 sm:text-2xl">{title}</h1>
+        <h1 className="truncate text-lg font-semibold text-slate-900 sm:text-2xl">{title}</h1>
         <p className="text-xs text-slate-500 sm:text-sm">Barcha kontentni bitta joydan boshqaring.</p>
       </div>
-      <div className="flex shrink-0 items-center gap-2">
+      <div className="flex w-full items-center justify-end gap-2 sm:w-auto">
         <span className="hidden rounded-xl bg-[#eff4ff] px-3 py-2 text-xs font-semibold uppercase tracking-wide text-primary sm:inline-flex">
           Administrator
         </span>

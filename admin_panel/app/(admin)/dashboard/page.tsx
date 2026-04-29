@@ -34,14 +34,14 @@ export default function DashboardPage() {
 
   return (
     <section className="admin-page">
-      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-4">
         {stats.map((stat) => (
           <Card key={stat.label} className="surface-card">
             <CardHeader className="pb-2">
               <CardTitle className="text-sm font-medium text-slate-500">{stat.label}</CardTitle>
             </CardHeader>
             <CardContent>
-              <p className="text-3xl font-semibold text-slate-900">{stat.value}</p>
+              <p className="text-2xl font-semibold text-slate-900 sm:text-3xl">{stat.value}</p>
             </CardContent>
           </Card>
         ))}
@@ -93,18 +93,20 @@ export default function DashboardPage() {
           <CardTitle>Foydalanuvchi faolligi (7 kun)</CardTitle>
         </CardHeader>
         <CardContent>
-          <div className="grid grid-cols-7 gap-3">
-            {userActivity.map((point) => (
-              <div key={point.label} className="flex flex-col items-center gap-2">
-                <div className="flex h-36 w-full items-end rounded-xl bg-slate-50 p-2">
-                  <div
-                    className="w-full rounded-lg bg-primary transition-all"
-                    style={{ height: `${(point.value / analytics.maxActivity) * 100}%` }}
-                  />
+          <div className="overflow-x-auto pb-1">
+            <div className="grid min-w-[430px] grid-cols-7 gap-2 sm:gap-3">
+              {userActivity.map((point) => (
+                <div key={point.label} className="flex flex-col items-center gap-2">
+                  <div className="flex h-32 w-full items-end rounded-xl bg-slate-50 p-2 sm:h-36">
+                    <div
+                      className="w-full rounded-lg bg-primary transition-all"
+                      style={{ height: `${(point.value / analytics.maxActivity) * 100}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-slate-500">{point.label}</span>
                 </div>
-                <span className="text-xs text-slate-500">{point.label}</span>
-              </div>
-            ))}
+              ))}
+            </div>
           </div>
         </CardContent>
       </Card>

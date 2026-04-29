@@ -2,14 +2,16 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, House, ImageIcon, MessageSquareText, PlayCircle, Users, X } from "lucide-react";
+import { BookOpen, House, ImageIcon, MessageSquareText, MonitorPlay, PlayCircle, ShoppingCart, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
   { href: "/dashboard", label: "Boshqaruv paneli", icon: House },
   { href: "/courses", label: "Kurslar", icon: BookOpen },
   { href: "/lessons", label: "Darslar", icon: PlayCircle },
-  { href: "/banners", label: "Bannerlar", icon: ImageIcon },
+  { href: "/banners", label: "Reklamalar", icon: ImageIcon },
+  { href: "/home-banners", label: "Home reklamalari", icon: MonitorPlay },
+  { href: "/subscriptions", label: "Kurs obunalari", icon: ShoppingCart },
   { href: "/users", label: "Foydalanuvchilar", icon: Users },
   { href: "/comments", label: "Izohlar", icon: MessageSquareText },
 ];
@@ -31,7 +33,7 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
       {mobileOpen ? (
         <div className="fixed inset-0 z-40 bg-slate-900/35 lg:hidden" onClick={onCloseMobile}>
           <aside
-            className="surface-card h-full w-[86%] max-w-xs rounded-none p-4"
+            className="surface-card h-full w-[90%] max-w-xs overflow-y-auto rounded-none p-4"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">

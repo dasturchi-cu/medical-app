@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import { Switch } from "@/components/ui/switch";
 import { adminActions, type Lesson, useAdminStore } from "@/lib/admin-store";
+import { notifySuccess } from "@/lib/notify";
 
 export default function LessonsPage() {
   const { courses, lessons } = useAdminStore((state) => state);
@@ -90,14 +91,16 @@ export default function LessonsPage() {
 
   const onSubmit = (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
+    const lessonOrder = Number(formValues.order);
     adminActions.addLesson({
       courseId: selectedCourse,
       title: formValues.title,
       videoId: formValues.videoId,
-      order: Number(formValues.order),
+      order: lessonOrder,
       module_id: null,
       isFree: formValues.isFree,
     });
+    notifySuccess(`${lessonOrder}-chi video muvaffaqiyatli qo'shildi.`);
     setFormValues((prev) => ({ ...prev, title: "", videoId: "", order: "1", isFree: false }));
   };
 
@@ -112,15 +115,16 @@ export default function LessonsPage() {
       module_id: null,
       isFree: editValues.isFree,
     });
+    notifySuccess("Dars muvaffaqiyatli yangilandi.");
     setEditLesson(null);
   };
 
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[1fr_390px]">
+    <section className="admin-page xl:grid xl:grid-cols-[1fr_390px] xl:items-start">
       <div className="space-y-4">
-        <div className="surface-card space-y-4 p-6">
+        <div className="surface-card space-y-4 p-4 sm:p-6">
           <div>
             <h3 className="text-base font-semibold text-slate-900">Filtrlar</h3>
             <p className="text-sm text-slate-500">Kursni tanlab, kerakli darslarni boshqaring.</p>
@@ -250,6 +254,7 @@ export default function LessonsPage() {
         onConfirm={() => {
           if (!deleteLessonId) return;
           adminActions.deleteLesson(deleteLessonId);
+          notifySuccess("Dars muvaffaqiyatli o'chirildi.");
           setDeleteLessonId(null);
         }}
       />

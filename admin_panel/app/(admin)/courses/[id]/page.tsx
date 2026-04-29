@@ -79,10 +79,9 @@ export default function CourseDetailPage() {
   }
 
   return (
-    <section className="space-y-5">
-      <div className="surface-card p-5">
-        <h2 className="text-2xl font-semibold text-slate-900">{course.title_uz}</h2>
-        <p className="mt-1 text-sm text-slate-500">RU: {course.title_ru} | EN: {course.title_en}</p>
+    <section className="admin-page">
+      <div className="surface-card p-4 sm:p-5">
+        <h2 className="text-xl font-semibold text-slate-900 sm:text-2xl">{course.title_uz}</h2>
       </div>
 
       <div className="grid gap-4 md:grid-cols-3">
@@ -128,14 +127,14 @@ export default function CourseDetailPage() {
         </div>
         <div className="space-y-2">
           {lessons.map((lesson) => (
-            <div key={lesson.id} className="flex flex-wrap items-center justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
-              <div>
+            <div key={lesson.id} className="flex flex-wrap items-start justify-between gap-3 rounded-xl bg-slate-50 px-3 py-2">
+              <div className="min-w-0">
                 <p className="font-medium text-slate-800">
                   {lesson.order}. {lesson.title}
                 </p>
-                <p className="text-xs text-slate-500">{lesson.videoId}</p>
+                <p className="break-all text-xs text-slate-500">{lesson.videoId}</p>
               </div>
-              <div className="flex gap-2">
+              <div className="flex w-full flex-wrap gap-2 sm:w-auto sm:justify-end">
                 <Button
                   variant="outline"
                   className="h-8 rounded-lg border-slate-200 px-3 text-xs"
@@ -180,14 +179,14 @@ export default function CourseDetailPage() {
             comments.map((comment) => {
               const user = state.users.find((entry) => entry.id === comment.user_id);
               return (
-                <div key={comment.id} className="flex items-center justify-between gap-2 rounded-xl bg-slate-50 px-3 py-2">
-                  <div>
+                <div key={comment.id} className="flex flex-col gap-2 rounded-xl bg-slate-50 px-3 py-2 sm:flex-row sm:items-center sm:justify-between">
+                  <div className="min-w-0">
                     <p className="text-sm font-medium text-slate-800">{user?.name ?? comment.user_id}</p>
                     <p className="text-sm text-slate-600">{comment.text}</p>
                   </div>
                   <Button
                     variant="destructive"
-                    className="h-8 rounded-lg px-3 text-xs"
+                    className="h-8 w-full rounded-lg px-3 text-xs sm:w-auto"
                     onClick={() => setDeleteCommentId(comment.id)}
                   >
                     O&apos;chirish

@@ -167,9 +167,9 @@ function CommentRow({
   onDelete,
 }: CommentRowProps) {
   return (
-    <div className="flex items-start justify-between gap-3">
+    <div className="flex flex-col gap-3 sm:flex-row sm:items-start sm:justify-between">
       <div className="min-w-0 flex-1">
-        <div className="mb-2 flex items-center gap-2">
+        <div className="mb-2 flex flex-wrap items-center gap-2">
           <div className="inline-flex size-9 items-center justify-center rounded-full bg-[#eff4ff] text-xs font-semibold text-primary">
             {username.slice(0, 1).toUpperCase()}
           </div>
@@ -200,7 +200,7 @@ function CommentRow({
           </Button>
         </div>
       </div>
-      <Button variant="destructive" className="h-8 rounded-lg px-3 text-xs" onClick={onDelete}>
+      <Button variant="destructive" className="h-8 w-full rounded-lg px-3 text-xs sm:w-auto" onClick={onDelete}>
         O&apos;chirish
       </Button>
     </div>

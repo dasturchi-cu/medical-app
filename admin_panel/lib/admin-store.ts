@@ -10,6 +10,7 @@ export interface Course {
   title_ru: string;
   title_en: string;
   price: string;
+  admin_telegram: string;
   image: string;
   views: number;
   sales: number;
@@ -40,6 +41,14 @@ export interface Banner {
   message: string;
   price: string;
   telegram: string;
+}
+
+export interface HomeBanner {
+  id: string;
+  title: string;
+  image: string;
+  courseId: string;
+  button_text: string;
 }
 
 export interface User {
@@ -116,6 +125,7 @@ interface AdminState {
   courseModules: CourseModule[];
   lessons: Lesson[];
   banners: Banner[];
+  homeBanners: HomeBanner[];
   users: User[];
   userActivityRows: UserActivity[];
   videoProgressRows: VideoProgress[];
@@ -136,6 +146,7 @@ let state: AdminState = {
       title_ru: "Клиническая анатомия",
       title_en: "Clinical Anatomy",
       price: "299 000 so'm",
+      admin_telegram: "Neuroscienceadmin",
       image: "",
       views: 3200,
       sales: 210,
@@ -147,6 +158,7 @@ let state: AdminState = {
       title_ru: "Основы фармакологии",
       title_en: "Pharmacology Basics",
       price: "349 000 so'm",
+      admin_telegram: "Neuroscienceadmin",
       image: "",
       views: 1900,
       sales: 124,
@@ -158,6 +170,7 @@ let state: AdminState = {
       title_ru: "Терапевтическая практика",
       title_en: "Therapeutic Practice",
       price: "259 000 so'm",
+      admin_telegram: "Neuroscienceadmin",
       image: "",
       views: 640,
       sales: 0,
@@ -195,6 +208,22 @@ let state: AdminState = {
       message: "Yangi oqim uchun maxsus narx.",
       price: "349 000 so'm",
       telegram: "med_admin",
+    },
+  ],
+  homeBanners: [
+    {
+      id: "home-banner-1",
+      title: "Miya va xotira",
+      image: "",
+      courseId: "course-1",
+      button_text: "Boshlash",
+    },
+    {
+      id: "home-banner-2",
+      title: "Nevron tarmoqlari",
+      image: "",
+      courseId: "course-2",
+      button_text: "Boshlash",
     },
   ],
   users: [
@@ -318,7 +347,7 @@ export function useAdminStore<T>(selector: (current: AdminState) => T): T {
 }
 
 export const adminActions = {
-  addCourse(course: { title: string; image: string; price: string; has_modules: boolean; modules: string[] }) {
+  addCourse(course: { title: string; image: string; price: string; admin_telegram: string; has_modules: boolean; modules: string[] }) {
     const translated = autoTranslateTitle(course.title);
     const courseId = `course-${Date.now()}`;
     const generatedModules = course.has_modules
@@ -339,6 +368,7 @@ export const adminActions = {
           id: courseId,
           image: course.image,
           price: course.price.trim() || "Kelishiladi",
+          admin_telegram: course.admin_telegram.replace(/^@/, "").trim() || "Neuroscienceadmin",
           views: 0,
           sales: 0,
           has_modules: course.has_modules,
@@ -351,7 +381,7 @@ export const adminActions = {
   },
   updateCourse(
     id: string,
-    payload: { title: string; image: string; price: string; has_modules: boolean; modules: string[] },
+    payload: { title: string; image: string; price: string; admin_telegram: string; has_modules: boolean; modules: string[] },
   ) {
     const translated = autoTranslateTitle(payload.title);
     const nextModules = payload.has_modules
@@ -373,10 +403,16 @@ export const adminActions = {
               ...course,
               image: payload.image,
               price: payload.price.trim() || "Kelishiladi",
+              admin_telegram: payload.admin_telegram.replace(/^@/, "").trim() || "Neuroscienceadmin",
               has_modules: payload.has_modules,
               ...translated,
             }
           : course,
+      ),
+      banners: current.banners.map((banner) =>
+        banner.courseId === id
+          ? { ...banner, price: payload.price.trim() || "Kelishiladi" }
+          : banner,
       ),
       courseModules: [
         ...current.courseModules.filter((module) => module.course_id !== id),
@@ -440,6 +476,24 @@ export const adminActions = {
     updateState((current) => ({
       ...current,
       banners: current.banners.filter((banner) => banner.id !== id),
+    }));
+  },
+  addHomeBanner(payload: Omit<HomeBanner, "id">) {
+    updateState((current) => ({
+      ...current,
+      homeBanners: [{ ...payload, id: `home-banner-${Date.now()}` }, ...current.homeBanners],
+    }));
+  },
+  updateHomeBanner(id: string, payload: Omit<HomeBanner, "id">) {
+    updateState((current) => ({
+      ...current,
+      homeBanners: current.homeBanners.map((item) => (item.id === id ? { ...item, ...payload } : item)),
+    }));
+  },
+  deleteHomeBanner(id: string) {
+    updateState((current) => ({
+      ...current,
+      homeBanners: current.homeBanners.filter((item) => item.id !== id),
     }));
   },
   grantCourse(userId: string, courseId: string, moduleId: string | null) {
@@ -540,21 +594,28 @@ export const adminActions = {
     updateState((current) => {
       const sameCourse = [...current.lessons]
         .filter((lesson) => lesson.courseId === courseId)
-        .sort((a, b) => a.order - b.order);
+        .sort((a, b) => (a.order === b.order ? a.id.localeCompare(b.id) : a.order - b.order));
       const index = sameCourse.findIndex((lesson) => lesson.id === lessonId);
       if (index === -1) return current;
 
       const swapIndex = direction === "up" ? index - 1 : index + 1;
       if (swapIndex < 0 || swapIndex >= sameCourse.length) return current;
 
-      const currentLesson = sameCourse[index];
-      const swapLesson = sameCourse[swapIndex];
+      const reordered = [...sameCourse];
+      const [moved] = reordered.splice(index, 1);
+      reordered.splice(swapIndex, 0, moved);
+
+      // Re-assign sequential order values so reordering works
+      // even when previous lessons had duplicate order numbers.
+      const nextOrderById = new Map<string, number>(
+        reordered.map((lesson, idx) => [lesson.id, idx + 1]),
+      );
 
       return {
         ...current,
         lessons: current.lessons.map((lesson) => {
-          if (lesson.id === currentLesson.id) return { ...lesson, order: swapLesson.order };
-          if (lesson.id === swapLesson.id) return { ...lesson, order: currentLesson.order };
+          const nextOrder = nextOrderById.get(lesson.id);
+          if (typeof nextOrder === "number") return { ...lesson, order: nextOrder };
           return lesson;
         }),
       };
