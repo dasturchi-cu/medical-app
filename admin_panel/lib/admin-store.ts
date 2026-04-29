@@ -51,6 +51,22 @@ export interface HomeBanner {
   button_text: string;
 }
 
+export interface MediaAsset {
+  id: string;
+  src: string;
+  created_at: string;
+}
+
+export interface NotificationCampaign {
+  id: string;
+  title: string;
+  message: string;
+  image: string;
+  sent_at: string;
+  recipients_count: number;
+  viewed_count: number;
+}
+
 export interface User {
   id: string;
   name: string;
@@ -126,6 +142,8 @@ interface AdminState {
   lessons: Lesson[];
   banners: Banner[];
   homeBanners: HomeBanner[];
+  mediaAssets: MediaAsset[];
+  notifications: NotificationCampaign[];
   users: User[];
   userActivityRows: UserActivity[];
   videoProgressRows: VideoProgress[];
@@ -224,6 +242,18 @@ let state: AdminState = {
       image: "",
       courseId: "course-2",
       button_text: "Boshlash",
+    },
+  ],
+  mediaAssets: [],
+  notifications: [
+    {
+      id: "notify-1",
+      title: "Yangi kurs: Klinik anatomiya",
+      message: "Yangi darslar joylandi, kirib ko'ring.",
+      image: "",
+      sent_at: "2026-04-27 10:30",
+      recipients_count: 120,
+      viewed_count: 84,
     },
   ],
   users: [
@@ -494,6 +524,57 @@ export const adminActions = {
     updateState((current) => ({
       ...current,
       homeBanners: current.homeBanners.filter((item) => item.id !== id),
+    }));
+  },
+  addMediaAsset(src: string) {
+    const normalized = src.trim();
+    if (!normalized) return;
+    updateState((current) => {
+      const alreadyExists = current.mediaAssets.some((item) => item.src === normalized);
+      if (alreadyExists) return current;
+      return {
+        ...current,
+        mediaAssets: [
+          { id: `media-${Date.now()}`, src: normalized, created_at: new Date().toISOString() },
+          ...current.mediaAssets,
+        ].slice(0, 30),
+      };
+    });
+  },
+  deleteMediaAsset(id: string) {
+    updateState((current) => ({
+      ...current,
+      mediaAssets: current.mediaAssets.filter((item) => item.id !== id),
+    }));
+  },
+  sendNotification(payload: { title: string; message: string; image: string }) {
+    const title = payload.title.trim();
+    const message = payload.message.trim();
+    if (!title || !message) return;
+    updateState((current) => {
+      const recipients = current.users.filter((user) => !user.is_blocked).length;
+      const viewed = Math.min(recipients, Math.round(recipients * (0.58 + Math.random() * 0.24)));
+      return {
+        ...current,
+        notifications: [
+          {
+            id: `notify-${Date.now()}`,
+            title,
+            message,
+            image: payload.image.trim(),
+            sent_at: new Date().toISOString().slice(0, 16).replace("T", " "),
+            recipients_count: recipients,
+            viewed_count: viewed,
+          },
+          ...current.notifications,
+        ],
+      };
+    });
+  },
+  deleteNotification(id: string) {
+    updateState((current) => ({
+      ...current,
+      notifications: current.notifications.filter((item) => item.id !== id),
     }));
   },
   grantCourse(userId: string, courseId: string, moduleId: string | null) {

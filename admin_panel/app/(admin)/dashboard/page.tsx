@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { useAdminStore } from "@/lib/admin-store";
 
 export default function DashboardPage() {
-  const { courses, lessons, banners, users, userActivity } = useAdminStore((state) => state);
+  const { courses, lessons, banners, users, userCourses, userActivity } = useAdminStore((state) => state);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
@@ -19,9 +19,31 @@ export default function DashboardPage() {
     const mostSold = [...courses].sort((a, b) => b.sales - a.sales)[0];
     const unsold = courses.filter((course) => course.sales === 0);
     const maxActivity = Math.max(...userActivity.map((point) => point.value), 1);
+    const totalViews = courses.reduce((sum, course) => sum + course.views, 0);
+    const totalSales = userCourses.filter((item) => item.is_active).length;
+    const conversion = totalViews > 0 ? (totalSales / totalViews) * 100 : 0;
 
-    return { mostViewed, mostSold, unsold, maxActivity };
-  }, [courses, userActivity]);
+    const now = new Date();
+    const nowTime = now.getTime();
+    const sevenDaysAgo = nowTime - 7 * 24 * 60 * 60 * 1000;
+    const activeUsersIn7Days = users.filter((user) => {
+      const time = Date.parse(user.last_active_at.replace(" ", "T"));
+      return Number.isFinite(time) && time >= sevenDaysAgo;
+    }).length;
+    const retention = users.length > 0 ? (activeUsersIn7Days / users.length) * 100 : 0;
+
+    const dailySales = Array.from({ length: 7 }).map((_, offset) => {
+      const date = new Date(nowTime - (6 - offset) * 24 * 60 * 60 * 1000);
+      const iso = date.toISOString().slice(0, 10);
+      const count = userCourses.filter(
+        (entry) => entry.is_active && entry.purchased_at && entry.purchased_at.slice(0, 10) === iso,
+      ).length;
+      return { label: iso.slice(5), value: count };
+    });
+    const maxDailySales = Math.max(...dailySales.map((point) => point.value), 1);
+
+    return { mostViewed, mostSold, unsold, maxActivity, conversion, retention, dailySales, maxDailySales };
+  }, [courses, userActivity, userCourses, users]);
 
   const stats = [
     { label: "Jami kurslar", value: courses.length },
@@ -87,6 +109,72 @@ export default function DashboardPage() {
           </CardContent>
         </Card>
       </div>
+
+      <div className="grid gap-4 sm:grid-cols-2 xl:grid-cols-4">
+        <Card className="surface-card">
+          <CardHeader>
+            <CardTitle className="text-sm text-slate-500">Conversion</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold text-slate-900">{analytics.conversion.toFixed(2)}%</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Kurs ko&apos;rganlardan nechtasi sotib olganini foizda ko&apos;rsatadi. Past bo&apos;lsa, sotuv past degani.
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="surface-card">
+          <CardHeader>
+            <CardTitle className="text-sm text-slate-500">Retention (7 kun)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold text-slate-900">{analytics.retention.toFixed(1)}%</p>
+            <p className="mt-1 text-xs text-slate-500">
+              Oxirgi 7 kunda faol bo&apos;lgan userlar ulushi. 100% bo&apos;lsa, hozircha hamma user faol deb chiqgan.
+            </p>
+          </CardContent>
+        </Card>
+        <Card className="surface-card">
+          <CardHeader>
+            <CardTitle className="text-sm text-slate-500">Top kurs</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-base font-semibold text-slate-900">{analytics.mostSold?.title_uz ?? "Ma&apos;lumot yo&apos;q"}</p>
+            <p className="text-sm text-slate-500">{analytics.mostSold?.sales ?? 0} ta sotuv</p>
+          </CardContent>
+        </Card>
+        <Card className="surface-card">
+          <CardHeader>
+            <CardTitle className="text-sm text-slate-500">Kunlik sotuv (bugun)</CardTitle>
+          </CardHeader>
+          <CardContent>
+            <p className="text-2xl font-semibold text-slate-900">{analytics.dailySales[6]?.value ?? 0}</p>
+          </CardContent>
+        </Card>
+      </div>
+
+      <Card className="surface-card">
+        <CardHeader>
+          <CardTitle>Kunlik sotuv trendi (7 kun)</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="overflow-x-auto pb-1">
+            <div className="grid min-w-[430px] grid-cols-7 gap-2 sm:gap-3">
+              {analytics.dailySales.map((point) => (
+                <div key={point.label} className="flex flex-col items-center gap-2">
+                  <div className="flex h-28 w-full items-end rounded-xl bg-slate-50 p-2 sm:h-32">
+                    <div
+                      className="w-full rounded-lg bg-emerald-500 transition-all"
+                      style={{ height: `${Math.max(8, (point.value / analytics.maxDailySales) * 100)}%` }}
+                    />
+                  </div>
+                  <span className="text-xs text-slate-500">{point.label}</span>
+                  <span className="text-xs font-medium text-slate-700">{point.value}</span>
+                </div>
+              ))}
+            </div>
+          </div>
+        </CardContent>
+      </Card>
 
       <Card className="surface-card">
         <CardHeader>

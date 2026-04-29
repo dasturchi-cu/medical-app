@@ -9,6 +9,7 @@ import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/mock/mock_data.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/services/in_app_notification.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../core/theme/design_system.dart';
@@ -123,10 +124,11 @@ class _HomePageState extends ConsumerState<HomePage> {
                     child: IconButton(
                       icon: const Icon(Icons.notifications_none),
                       onPressed: () {
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(context.tr('notifications_empty')),
-                          ),
+                        showInAppNotification(
+                          context,
+                          title: 'Test notification',
+                          message:
+                              'Yangi kurs va yangiliklar qo‘shildi. Dizayn shunday ko‘rinishda keladi.',
                         );
                       },
                     ),

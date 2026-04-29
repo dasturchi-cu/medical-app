@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { BookOpen, House, ImageIcon, MessageSquareText, MonitorPlay, PlayCircle, ShoppingCart, Users, X } from "lucide-react";
+import { Bell, BookOpen, House, ImageIcon, MessageSquareText, MonitorPlay, PlayCircle, ShoppingCart, Users, X } from "lucide-react";
 import { cn } from "@/lib/utils";
 
 const navItems = [
@@ -12,6 +12,7 @@ const navItems = [
   { href: "/banners", label: "Reklamalar", icon: ImageIcon },
   { href: "/home-banners", label: "Home reklamalari", icon: MonitorPlay },
   { href: "/subscriptions", label: "Kurs obunalari", icon: ShoppingCart },
+  { href: "/notifications", label: "Notification", icon: Bell },
   { href: "/users", label: "Foydalanuvchilar", icon: Users },
   { href: "/comments", label: "Izohlar", icon: MessageSquareText },
 ];
