@@ -13,6 +13,7 @@ class LoginPage extends ConsumerStatefulWidget {
 }
 
 class _LoginPageState extends ConsumerState<LoginPage> {
+  final _nameController = TextEditingController();
   final _phoneController = TextEditingController(text: '+998 ');
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
@@ -20,6 +21,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
 
   @override
   void dispose() {
+    _nameController.dispose();
     _phoneController.dispose();
     _passwordController.dispose();
     super.dispose();
@@ -30,9 +32,14 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() => _loading = true);
 
     final auth = ref.read(authControllerProvider.notifier);
+    final name = _nameController.text;
     final phone = _phoneController.text;
     final password = _passwordController.text;
-    final error = await auth.login(phone: phone, password: password);
+    final error = await auth.login(
+      phone: phone,
+      password: password,
+      displayName: name,
+    );
 
     if (!mounted) return;
     setState(() => _loading = false);
@@ -66,6 +73,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                     const SizedBox(height: 6),
                     const Text('Telefon raqam orqali kiring'),
                     const SizedBox(height: 20),
+                    TextFormField(
+                      controller: _nameController,
+                      textCapitalization: TextCapitalization.words,
+                      decoration: const InputDecoration(
+                        labelText: 'Ism (ixtiyoriy)',
+                        hintText: 'Masalan: Azizbek',
+                        prefixIcon: Icon(Icons.person_outline),
+                      ),
+                    ),
+                    const SizedBox(height: 12),
                     TextFormField(
                       controller: _phoneController,
                       keyboardType: TextInputType.phone,

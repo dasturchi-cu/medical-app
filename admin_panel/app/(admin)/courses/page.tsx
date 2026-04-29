@@ -4,8 +4,10 @@ import Link from "next/link";
 import { type Dispatch, type FormEvent, type SetStateAction, useEffect, useMemo, useState } from "react";
 import { BlueBanner } from "@/components/blue-banner";
 import { ConfirmDialog } from "@/components/confirm-dialog";
+import { CoursePreview } from "@/components/course-preview";
 import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
+import { MobilePreview } from "@/components/mobile-preview";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { AppTable } from "@/components/table";
@@ -132,31 +134,29 @@ export default function CoursesPage() {
 
   return (
     <section className="space-y-6">
-      <div className="flex flex-wrap items-center justify-between gap-3">
-        <div className="surface-card p-3">
-          <p className="text-sm text-slate-500">
-            Kurs sarlavhasini bir marta kiriting, tizim avtomatik `UZ / RU / EN` versiyalarini yaratadi.
-          </p>
-        </div>
-
-        <AppModal
-          trigger={
-            <Button className="h-11 rounded-xl bg-primary px-5 hover:bg-primary/90">
-              Kurs qo&apos;shish
-            </Button>
-          }
-          title="Kurs qo&apos;shish"
-          description="Platformaga yangi kurs kartasini qo&apos;shing."
+      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+        <AppForm
+          title="Kurs yaratish"
+          description="Sarlavhani kiriting, tizim avtomatik UZ / RU / EN versiyalarini yaratadi."
+          onSubmit={onSubmit}
+          submitLabel="Kursni saqlash"
         >
-          <AppForm title="Kurs ma&apos;lumotlari" onSubmit={onSubmit} submitLabel="Kursni saqlash">
-            <LanguageFields values={formValues} onChange={setFormValues} />
-            <ImagePicker
-              label="Rasm (upload yoki link)"
-              value={formValues.image}
-              onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
-            />
-          </AppForm>
-        </AppModal>
+          <LanguageFields values={formValues} onChange={setFormValues} />
+          <ImagePicker
+            label="Rasm (upload yoki link)"
+            value={formValues.image}
+            onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
+          />
+        </AppForm>
+
+        <MobilePreview title="Live Mobile Preview" subtitle="Kurs ma&apos;lumotlari real vaqtda">
+          <CoursePreview
+            title={formValues.title}
+            image={formValues.image}
+            videoCount={courseList[0] ? 12 : 0}
+            sampleCourses={courseList.map((course) => course.title_uz)}
+          />
+        </MobilePreview>
       </div>
 
       <div className="grid gap-4 lg:grid-cols-3">

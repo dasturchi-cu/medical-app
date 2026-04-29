@@ -98,7 +98,7 @@ export default function CommentsPage() {
                         setReplyValues((prev) => ({ ...prev, [root.id]: event.target.value }))
                       }
                       placeholder="Admin javobi..."
-                      className="h-10 min-w-[240px] flex-1 rounded-xl border-slate-200"
+                      className="h-10 w-full flex-1 rounded-xl border-slate-200 sm:min-w-[240px]"
                     />
                     <Button
                       className="h-10 rounded-xl px-4"

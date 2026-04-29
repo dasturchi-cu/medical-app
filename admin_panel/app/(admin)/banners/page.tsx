@@ -2,9 +2,11 @@
 
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { BlueBanner } from "@/components/blue-banner";
+import { BannerPreview } from "@/components/banner-preview";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
+import { MobilePreview } from "@/components/mobile-preview";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { AppTable } from "@/components/table";
@@ -116,49 +118,55 @@ export default function BannersPage() {
   if (loading) return <PageSkeleton />;
 
   return (
-    <section className="grid gap-6 lg:grid-cols-[1fr_390px]">
-      <AppTable columns={columns} data={banners} emptyText="Hali bannerlar qo&apos;shilmagan." />
+    <section className="space-y-6">
+      <div className="grid gap-6 lg:grid-cols-[1.5fr_1fr]">
+        <AppForm title="Banner yaratish" description="Kursga bog&apos;langan promo banner qo&apos;shing." onSubmit={onSubmit}>
+          <div className="grid gap-2">
+            <Label htmlFor="title">Sarlavha - title</Label>
+            <Input
+              id="title"
+              value={formValues.title}
+              onChange={(event) => setFormValues((prev) => ({ ...prev, title: event.target.value }))}
+              placeholder="Banner sarlavhasi"
+              className="h-11 rounded-xl border-slate-200"
+            />
+          </div>
 
-      <AppForm title="Banner yaratish" description="Kursga bog&apos;langan promo banner qo&apos;shing." onSubmit={onSubmit}>
-        <div className="grid gap-2">
-          <Label htmlFor="title">Sarlavha - title</Label>
-          <Input
-            id="title"
-            value={formValues.title}
-            onChange={(event) => setFormValues((prev) => ({ ...prev, title: event.target.value }))}
-            placeholder="Banner sarlavhasi"
-            className="h-11 rounded-xl border-slate-200"
+          <ImagePicker
+            label="Rasm (upload yoki link)"
+            value={formValues.image}
+            helperText="Rasm qo&apos;yilmasa, avtomatik ko&apos;k banner ishlatiladi."
+            onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
           />
-        </div>
 
-        <ImagePicker
-          label="Rasm (upload yoki link)"
-          value={formValues.image}
-          helperText="Rasm qo&apos;yilmasa, avtomatik ko&apos;k banner ishlatiladi."
-          onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
-        />
+          <div className="grid gap-2">
+            <Label htmlFor="course_id">Kurs</Label>
+            <Select
+              value={formValues.course_id ?? ""}
+              onValueChange={(value) => setFormValues((prev) => ({ ...prev, course_id: value }))}
+            >
+              <SelectTrigger id="course_id" className="h-11 rounded-xl border-slate-200">
+                <SelectValue placeholder="Kursni tanlang">
+                  {courses.find((course) => course.id === formValues.course_id)?.title_uz ?? "Kursni tanlang"}
+                </SelectValue>
+              </SelectTrigger>
+              <SelectContent>
+                {courses.map((course) => (
+                  <SelectItem key={course.id} value={course.id}>
+                    {course.title_uz}
+                  </SelectItem>
+                ))}
+              </SelectContent>
+            </Select>
+          </div>
+        </AppForm>
 
-        <div className="grid gap-2">
-          <Label htmlFor="course_id">Kurs</Label>
-          <Select
-            value={formValues.course_id ?? ""}
-            onValueChange={(value) => setFormValues((prev) => ({ ...prev, course_id: value }))}
-          >
-            <SelectTrigger id="course_id" className="h-11 rounded-xl border-slate-200">
-              <SelectValue placeholder="Kursni tanlang">
-                {courses.find((course) => course.id === formValues.course_id)?.title_uz ?? "Kursni tanlang"}
-              </SelectValue>
-            </SelectTrigger>
-            <SelectContent>
-              {courses.map((course) => (
-                <SelectItem key={course.id} value={course.id}>
-                  {course.title_uz}
-                </SelectItem>
-              ))}
-            </SelectContent>
-          </Select>
-        </div>
-      </AppForm>
+        <MobilePreview title="Live Mobile Preview" subtitle="Banner real vaqtda yangilanadi">
+          <BannerPreview title={formValues.title} image={formValues.image} />
+        </MobilePreview>
+      </div>
+
+      <AppTable columns={columns} data={banners} emptyText="Hali bannerlar qo&apos;shilmagan." />
 
       <AppModal
         open={Boolean(editBanner)}

@@ -25,9 +25,10 @@ class LessonListPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(courseRepositoryProvider);
     final section = repo.getSectionById(courseId, sectionId);
-    final purchased = ref
-        .watch(purchaseControllerProvider)
-        .isPurchased(courseId);
+    final isDoctorCourse = courseId == 'course_private_neuro';
+    final purchaseState = ref.watch(purchaseControllerProvider);
+    final purchased = purchaseState.isPurchased(courseId);
+    final basePurchased = purchaseState.isBasePurchased(courseId, sectionId);
 
     if (section == null) {
       return Scaffold(
@@ -56,7 +57,7 @@ class LessonListPage extends ConsumerWidget {
         separatorBuilder: (_, index) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
           final l = section.lessons[i];
-          final locked = !purchased && i > 0;
+          final locked = isDoctorCourse ? !basePurchased : (!purchased && i > 0);
 
           return LessonItem(
             animationDelayMs: (i % 10) * 45,
@@ -70,10 +71,16 @@ class LessonListPage extends ConsumerWidget {
                 if (course == null) return;
                 await showPurchaseModal(
                   context: context,
-                  courseName: course.titleUz,
-                  description: course.descriptionUz,
+                  courseName: isDoctorCourse
+                      ? '${course.titleUz} - ${section.titleUz}'
+                      : course.titleUz,
+                  description: isDoctorCourse
+                      ? 'Ushbu baza uchun alohida to‘lov qilinadi'
+                      : course.descriptionUz,
                   price: '299 000 so\'m',
-                  courseId: course.id,
+                  courseId: isDoctorCourse
+                      ? basePurchaseKey(course.id, section.id)
+                      : course.id,
                 );
                 return;
               }

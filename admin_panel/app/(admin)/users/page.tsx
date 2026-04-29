@@ -64,7 +64,7 @@ export default function UsersPage() {
         key: "actions",
         label: "Amallar",
         render: (user: (typeof filteredUsers)[number]) => (
-          <div className="flex gap-2">
+          <div className="flex flex-wrap gap-2">
             <Button
               variant="destructive"
               className="h-8 rounded-lg px-3 text-xs"
