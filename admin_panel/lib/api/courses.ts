@@ -8,6 +8,7 @@ export interface CourseItem {
   price_uzs: number;
   admin_telegram: string;
   image_url: string;
+  description_uz: string;
   is_active: boolean;
   views: number;
   sales: number;
@@ -44,6 +45,7 @@ export async function createCourse(payload: {
   price_uzs: number;
   admin_telegram: string;
   image_url: string;
+  description_uz: string;
 }) {
   const response = await apiFetch("/api/v1/courses", {
     method: "POST",

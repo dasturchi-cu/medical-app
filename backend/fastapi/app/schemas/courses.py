@@ -10,6 +10,7 @@ class CourseCreate(BaseModel):
     price_uzs: float = Field(default=0, ge=0)
     admin_telegram: str = "Neuroscienceadmin"
     image_url: str = ""
+    description_uz: str = ""
 
 
 class CourseUpdate(BaseModel):
@@ -19,6 +20,7 @@ class CourseUpdate(BaseModel):
     price_uzs: float | None = Field(default=None, ge=0)
     admin_telegram: str | None = None
     image_url: str | None = None
+    description_uz: str | None = None
     is_active: bool | None = None
 
 
@@ -30,6 +32,7 @@ class CourseItem(BaseModel):
     price_uzs: float
     admin_telegram: str
     image_url: str
+    description_uz: str = ""
     is_active: bool
     views: int = 0
     sales: int = 0

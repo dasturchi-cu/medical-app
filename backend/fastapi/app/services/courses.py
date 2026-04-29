@@ -28,6 +28,7 @@ def _to_item(row: dict[str, Any]) -> CourseItem:
         price_uzs=float(row.get("price_uzs") or 0),
         admin_telegram=str(row.get("admin_telegram") or "Neuroscienceadmin"),
         image_url=str(row.get("image_url") or ""),
+        description_uz=str(row.get("description_uz") or ""),
         is_active=bool(row.get("is_active")),
         views=int(row.get("views") or 0),
         sales=int(row.get("sales") or 0),
@@ -58,6 +59,7 @@ def create_course(client: Client, payload: CourseCreate) -> CourseItem:
                 "price_uzs": payload.price_uzs,
                 "admin_telegram": payload.admin_telegram.replace("@", "").strip() or "Neuroscienceadmin",
                 "image_url": payload.image_url.strip(),
+                "description_uz": payload.description_uz.strip(),
             }
         )
         .execute()
@@ -70,7 +72,7 @@ def create_course(client: Client, payload: CourseCreate) -> CourseItem:
 
 def update_course(client: Client, *, course_id: str, payload: CourseUpdate) -> CourseItem:
     patch: dict[str, Any] = {}
-    for key in ["title_uz", "title_ru", "title_en", "price_uzs", "image_url", "is_active"]:
+    for key in ["title_uz", "title_ru", "title_en", "price_uzs", "image_url", "description_uz", "is_active"]:
         value = getattr(payload, key)
         if value is not None:
             patch[key] = value.strip() if isinstance(value, str) else value

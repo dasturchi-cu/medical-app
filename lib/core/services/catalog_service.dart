@@ -57,7 +57,7 @@ class CatalogService {
       progress: 0,
       rating: 0,
       isPaid: true,
-      descriptionUz: '',
+      descriptionUz: (json['description_uz'] ?? '').toString(),
       sections: sections,
     );
   }

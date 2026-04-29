@@ -7,6 +7,7 @@ import 'core/localization/language_provider.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/catalog_service.dart';
 import 'core/theme/app_theme.dart';
+import 'core/widgets/startup_guard.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
@@ -48,7 +49,9 @@ class NeuroscienceApp extends ConsumerWidget {
             GlobalCupertinoLocalizations.delegate,
           ],
           builder: (context, child) {
-            return TrScope(state: st, child: child ?? const SizedBox.shrink());
+            return StartupGuard(
+              child: TrScope(state: st, child: child ?? const SizedBox.shrink()),
+            );
           },
         );
       },

@@ -4,6 +4,7 @@ import logging
 from datetime import datetime
 from typing import Any
 
+from postgrest.exceptions import APIError
 from supabase import Client
 
 from ..schemas.slides import SlideCreate, SlideItem, SlideUpdate
@@ -45,24 +46,39 @@ def list_slides(client: Client, *, active_only: bool = False) -> list[SlideItem]
 
 
 def create_slide(client: Client, payload: SlideCreate) -> SlideItem:
-    inserted = (
-        client.table("home_slides")
-        .insert(
-            {
-                "title": payload.title.strip(),
-                "subtitle": payload.subtitle.strip(),
-                "image_url": payload.image_url.strip(),
-                "button_text": payload.button_text.strip() or "Boshlash",
-                "course_id": payload.course_id,
-                "order_no": payload.order_no,
-            }
-        )
-        .execute()
-    )
-    item = (inserted.data or [None])[0]
-    if not item:
-        raise RuntimeError("Failed to create slide.")
-    return _to_item(item)
+    def next_order_no() -> int:
+        rows = (
+            client.table("home_slides")
+            .select("order_no")
+            .order("order_no", desc=True)
+            .limit(1)
+            .execute()
+        ).data or []
+        if not rows:
+            return 1
+        return int(rows[0].get("order_no") or 0) + 1
+
+    row = {
+        "title": payload.title.strip(),
+        "subtitle": payload.subtitle.strip(),
+        "image_url": payload.image_url.strip(),
+        "button_text": payload.button_text.strip() or "Boshlash",
+        "course_id": payload.course_id,
+    }
+    order_no = payload.order_no
+    for _ in range(3):
+        try:
+            inserted = client.table("home_slides").insert({**row, "order_no": order_no}).execute()
+            item = (inserted.data or [None])[0]
+            if not item:
+                raise RuntimeError("Failed to create slide.")
+            return _to_item(item)
+        except APIError as error:
+            if error.code == "23505":
+                order_no = next_order_no()
+                continue
+            raise
+    raise RuntimeError("Home reklama tartib raqami band. Qayta urinib ko'ring.")
 
 
 def update_slide(client: Client, *, slide_id: str, payload: SlideUpdate) -> SlideItem:

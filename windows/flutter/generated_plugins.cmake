@@ -4,7 +4,9 @@
 
 list(APPEND FLUTTER_PLUGIN_LIST
   audioplayers_windows
+  connectivity_plus
   flutter_inappwebview_windows
+  permission_handler_windows
   url_launcher_windows
 )
 

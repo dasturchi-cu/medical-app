@@ -25,6 +25,7 @@ class MobileCourse(BaseModel):
     admin_telegram: str
     price_uzs: float
     image_url: str
+    description_uz: str
     sections: list[MobileSection]
 
 

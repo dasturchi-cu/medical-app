@@ -16,6 +16,7 @@ import { notifyError, notifySuccess } from "@/lib/notify";
 
 interface CourseFormValues {
   title: string;
+  summary: string;
   price: string;
   admin_telegram: string;
   image: string;
@@ -29,12 +30,14 @@ interface CourseRow {
   price_uzs: number;
   admin_telegram: string;
   image_url: string;
+  description_uz: string;
   views: number;
   sales: number;
 }
 
 const emptyCourseForm: CourseFormValues = {
   title: "",
+  summary: "",
   price: "",
   admin_telegram: "Neuroscienceadmin",
   image: "",
@@ -126,6 +129,7 @@ export default function CoursesPage() {
                 setEditCourse(item);
                 setEditValues({
                   title: item.title_uz,
+                  summary: item.description_uz ?? "",
                   price: formatPrice(item.price_uzs),
                   admin_telegram: item.admin_telegram,
                   image: item.image_url,
@@ -162,6 +166,7 @@ export default function CoursesPage() {
         price_uzs: parsePrice(formValues.price),
         admin_telegram: normalizeTelegram(formValues.admin_telegram),
         image_url: formValues.image.trim(),
+        description_uz: formValues.summary.trim(),
       });
       setCourseList((prev) => [created, ...prev]);
       notifySuccess("Kurs muvaffaqiyatli qo'shildi.");
@@ -186,6 +191,7 @@ export default function CoursesPage() {
         price_uzs: parsePrice(editValues.price),
         admin_telegram: normalizeTelegram(editValues.admin_telegram),
         image_url: editValues.image.trim(),
+        description_uz: editValues.summary.trim(),
       });
       setCourseList((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       notifySuccess("Kurs muvaffaqiyatli yangilandi.");
@@ -274,6 +280,16 @@ function LanguageFields({ values, onChange }: LanguageFieldsProps) {
           onChange={(event) => onChange((prev) => ({ ...prev, title: event.target.value }))}
           placeholder="Masalan: Kardiologiya asoslari"
           className="h-11 rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
+        />
+      </div>
+      <div className="grid gap-2">
+        <Label htmlFor="summary">Qisqacha tavsif</Label>
+        <textarea
+          id="summary"
+          value={values.summary}
+          onChange={(event) => onChange((prev) => ({ ...prev, summary: event.target.value }))}
+          placeholder="Kurs haqida qisqacha yozing..."
+          className="min-h-[96px] rounded-xl border border-slate-200 px-3 py-2 text-sm outline-none focus:border-primary"
         />
       </div>
       <div className="grid gap-2">

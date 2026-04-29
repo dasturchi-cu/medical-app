@@ -12,7 +12,7 @@ def get_mobile_catalog(client: Client) -> MobileCatalogResponse:
     try:
         courses_rows = (
             client.table("courses")
-            .select("id,title_uz,title_ru,title_en,admin_telegram,price_uzs,image_url")
+            .select("id,title_uz,title_ru,title_en,admin_telegram,price_uzs,image_url,description_uz")
             .eq("is_active", True)
             .order("created_at", desc=False)
             .execute()
@@ -90,6 +90,7 @@ def get_mobile_catalog(client: Client) -> MobileCatalogResponse:
                     admin_telegram=str(row.get("admin_telegram") or ""),
                     price_uzs=float(row.get("price_uzs") or 0),
                     image_url=str(row.get("image_url") or ""),
+                    description_uz=str(row.get("description_uz") or ""),
                     sections=sections,
                 )
             )
