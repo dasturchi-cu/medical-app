@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter_beep/flutter_beep.dart';
 import 'package:flutter/services.dart';
 
 import '../../../../core/localization/language_provider.dart';
@@ -30,7 +31,7 @@ class _PomodoroScreenState extends ConsumerState<PomodoroScreen> {
       final sessionCompleted =
           (previous?.completedSessions ?? 0) < next.completedSessions;
       if (sessionCompleted && next.soundOn) {
-        SystemSound.play(SystemSoundType.alert);
+        _playCompletionAlert();
       }
     });
   }
@@ -39,6 +40,15 @@ class _PomodoroScreenState extends ConsumerState<PomodoroScreen> {
   void dispose() {
     _soundSubscription.close();
     super.dispose();
+  }
+
+  Future<void> _playCompletionAlert() async {
+    try {
+      await FlutterBeep.beep();
+    } catch (_) {
+      await SystemSound.play(SystemSoundType.alert);
+    }
+    HapticFeedback.mediumImpact();
   }
 
   @override
