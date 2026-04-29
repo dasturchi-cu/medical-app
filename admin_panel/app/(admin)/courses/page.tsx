@@ -160,13 +160,18 @@ export default function CoursesPage() {
         notifyError("Kurs nomini kiriting.");
         return;
       }
+      const summary = formValues.summary.trim();
+      if (!summary) {
+        notifyError("Qisqacha tavsifni kiriting.");
+        return;
+      }
       const translated = autoTranslateTitle(title);
       const created = await createCourse({
         ...translated,
         price_uzs: parsePrice(formValues.price),
         admin_telegram: normalizeTelegram(formValues.admin_telegram),
         image_url: formValues.image.trim(),
-        description_uz: formValues.summary.trim(),
+        description_uz: summary,
       });
       setCourseList((prev) => [created, ...prev]);
       notifySuccess("Kurs muvaffaqiyatli qo'shildi.");
@@ -185,13 +190,18 @@ export default function CoursesPage() {
         notifyError("Kurs nomini kiriting.");
         return;
       }
+      const summary = editValues.summary.trim();
+      if (!summary) {
+        notifyError("Qisqacha tavsifni kiriting.");
+        return;
+      }
       const translated = autoTranslateTitle(title);
       const updated = await updateCourse(editCourse.id, {
         ...translated,
         price_uzs: parsePrice(editValues.price),
         admin_telegram: normalizeTelegram(editValues.admin_telegram),
         image_url: editValues.image.trim(),
-        description_uz: editValues.summary.trim(),
+        description_uz: summary,
       });
       setCourseList((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       notifySuccess("Kurs muvaffaqiyatli yangilandi.");
