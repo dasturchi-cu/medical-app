@@ -93,10 +93,6 @@ export default function LoginPage() {
             <Button type="submit" className="h-11 w-full rounded-xl bg-primary hover:bg-primary/90">
               Kirish
             </Button>
-
-            <p className="text-center text-xs text-slate-500">
-              Test login: {ADMIN_PHONE_PREFIX} {ADMIN_PHONE_SUFFIX}, parol: {ADMIN_PASSWORD}
-            </p>
           </form>
         </CardContent>
       </Card>
