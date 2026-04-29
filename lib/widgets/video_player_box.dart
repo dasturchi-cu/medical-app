@@ -93,10 +93,17 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
               controller: _youtubeController!,
               showVideoProgressIndicator: true,
               progressIndicatorColor: const Color(0xFF1E6BB8),
+              topActions: const [],
               progressColors: const ProgressBarColors(
                 playedColor: Color(0xFF1E6BB8),
                 handleColor: Color(0xFF1E6BB8),
               ),
+              onEnterFullScreen: () {
+                SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+              },
+              onExitFullScreen: () {
+                SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
+              },
             ),
             builder: (context, player) => ColoredBox(
               color: Colors.black,
@@ -282,87 +289,27 @@ class _FullscreenVideoPageState extends State<_FullscreenVideoPage> {
     final c = _controller;
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          alignment: Alignment.center,
-          children: [
-            if (c == null || !c.value.isInitialized)
-              const Center(
-                child: CircularProgressIndicator(
-                  valueColor: AlwaysStoppedAnimation(Colors.white),
-                ),
-              )
-            else
-              SizedBox.expand(
-                child: FittedBox(
-                  fit: BoxFit.contain,
-                  child: SizedBox(
-                    width: c.value.size.width,
-                    height: c.value.size.height,
-                    child: VideoPlayer(c),
-                  ),
-                ),
+      body: Stack(
+        alignment: Alignment.center,
+        children: [
+          if (c == null || !c.value.isInitialized)
+            const Center(
+              child: CircularProgressIndicator(
+                valueColor: AlwaysStoppedAnimation(Colors.white),
               ),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: IconButton.filledTonal(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_fullscreen),
-                tooltip: 'Chiqish',
-              ),
-            ),
-            Positioned(
-              top: 8,
-              right: 8,
-              child: ClipRRect(
-                borderRadius: BorderRadius.circular(999),
-                child: Material(
-                  color: Colors.black.withValues(alpha: 0.35),
-                  child: PopupMenuButton<double>(
-                    initialValue: _speed,
-                    tooltip: 'Tezlik',
-                    onSelected: (speed) async {
-                      final ctrl = _controller;
-                      if (ctrl == null) return;
-                      await ctrl.setPlaybackSpeed(speed);
-                      if (!mounted) return;
-                      setState(() => _speed = speed);
-                    },
-                    itemBuilder: (context) => const [
-                      PopupMenuItem(value: 0.5, child: Text('0.5x')),
-                      PopupMenuItem(value: 1.0, child: Text('1.0x')),
-                      PopupMenuItem(value: 1.25, child: Text('1.25x')),
-                      PopupMenuItem(value: 1.5, child: Text('1.5x')),
-                      PopupMenuItem(value: 2.0, child: Text('2.0x')),
-                    ],
-                    child: Padding(
-                      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                      child: Text(
-                        '${_speed.toStringAsFixed(_speed == _speed.roundToDouble() ? 0 : 2)}x',
-                        style: const TextStyle(
-                          color: Colors.white,
-                          fontWeight: FontWeight.w800,
-                        ),
-                      ),
-                    ),
-                  ),
+            )
+          else
+            SizedBox.expand(
+              child: FittedBox(
+                fit: BoxFit.contain,
+                child: SizedBox(
+                  width: c.value.size.width,
+                  height: c.value.size.height,
+                  child: VideoPlayer(c),
                 ),
               ),
             ),
-            if (c != null && c.value.isInitialized)
-              IconButton(
-                iconSize: 72,
-                color: Colors.white,
-                onPressed: () {
-                  setState(() {
-                    c.value.isPlaying ? c.pause() : c.play();
-                  });
-                },
-                icon: Icon(c.value.isPlaying ? Icons.pause_circle : Icons.play_circle),
-              ),
-          ],
-        ),
+        ],
       ),
     );
   }
