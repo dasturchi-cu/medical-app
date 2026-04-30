@@ -1,3 +1,5 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -12,7 +14,9 @@ import 'core/widgets/startup_guard.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AuthService.bootstrap();
-  await CatalogService.bootstrap();
+  try {
+    await CatalogService.bootstrap().timeout(const Duration(seconds: 8));
+  } catch (_) {}
   runApp(const ProviderScope(child: NeuroscienceApp()));
 }
 
@@ -28,7 +32,9 @@ class NeuroscienceApp extends ConsumerWidget {
       loading: () => MaterialApp(
         debugShowCheckedModeBanner: false,
         theme: AppTheme.light(),
-        home: const Scaffold(body: Center(child: CircularProgressIndicator())),
+        home: StartupLoadingScreen(
+          onRetry: () => ref.invalidate(localizationProvider),
+        ),
       ),
       error: (e, _) => MaterialApp(
         debugShowCheckedModeBanner: false,
@@ -55,6 +61,59 @@ class NeuroscienceApp extends ConsumerWidget {
           },
         );
       },
+    );
+  }
+}
+
+class StartupLoadingScreen extends StatefulWidget {
+  const StartupLoadingScreen({super.key, required this.onRetry});
+
+  final VoidCallback onRetry;
+
+  @override
+  State<StartupLoadingScreen> createState() => _StartupLoadingScreenState();
+}
+
+class _StartupLoadingScreenState extends State<StartupLoadingScreen> {
+  bool _showFallback = false;
+
+  @override
+  void initState() {
+    super.initState();
+    Future<void>.delayed(const Duration(seconds: 3), () {
+      if (!mounted) return;
+      setState(() => _showFallback = true);
+    });
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Scaffold(
+      body: Center(
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              const CircularProgressIndicator(),
+              const SizedBox(height: 14),
+              Text(
+                _showFallback
+                    ? "Ilova sekin yuklanmoqda. Internetni tekshirib qayta urinib ko'ring."
+                    : "Ilova yuklanmoqda...",
+                textAlign: TextAlign.center,
+              ),
+              if (_showFallback) ...[
+                const SizedBox(height: 14),
+                FilledButton(
+                  onPressed: widget.onRetry,
+                  child: const Text("Qayta urinish"),
+                ),
+              ],
+            ],
+          ),
+        ),
+      ),
     );
   }
 }
