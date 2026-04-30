@@ -14,9 +14,7 @@ import 'core/widgets/startup_guard.dart';
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AuthService.bootstrap();
-  try {
-    await CatalogService.bootstrap().timeout(const Duration(seconds: 8));
-  } catch (_) {}
+  await CatalogService.bootstrap(maxAttempts: 2);
   runApp(const ProviderScope(child: NeuroscienceApp()));
 }
 

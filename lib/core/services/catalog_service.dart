@@ -7,27 +7,38 @@ import '../models/course_models.dart';
 
 class CatalogService {
   static List<Course> _courses = const [];
-  static const Duration _requestTimeout = Duration(seconds: 8);
+  static const Duration _requestTimeout = Duration(seconds: 12);
 
   static List<Course> get courses => _courses;
 
-  static Future<void> bootstrap() async {
+  static Future<void> bootstrap({int maxAttempts = 3}) async {
     final baseUrl = getApiBaseUrl();
     if (baseUrl.isEmpty) return;
-    try {
-      final response = await http
-          .get(Uri.parse('$baseUrl/api/v1/mobile/courses'))
-          .timeout(_requestTimeout);
-      if (response.statusCode < 200 || response.statusCode >= 300) return;
-      final body = jsonDecode(response.body);
-      if (body is! Map<String, dynamic>) return;
-      final raw = body['items'];
-      if (raw is! List) return;
-      _courses = raw
-          .whereType<Map<String, dynamic>>()
-          .map(_toCourse)
-          .toList(growable: false);
-    } catch (_) {}
+    final attempts = maxAttempts < 1 ? 1 : maxAttempts;
+    for (var i = 0; i < attempts; i++) {
+      try {
+        final response = await http
+            .get(Uri.parse('$baseUrl/api/v1/mobile/courses'))
+            .timeout(_requestTimeout);
+        if (response.statusCode < 200 || response.statusCode >= 300) {
+          if (i == attempts - 1) return;
+          await Future<void>.delayed(Duration(milliseconds: 800 * (i + 1)));
+          continue;
+        }
+        final body = jsonDecode(response.body);
+        if (body is! Map<String, dynamic>) return;
+        final raw = body['items'];
+        if (raw is! List) return;
+        _courses = raw
+            .whereType<Map<String, dynamic>>()
+            .map(_toCourse)
+            .toList(growable: false);
+        return;
+      } catch (_) {
+        if (i == attempts - 1) return;
+        await Future<void>.delayed(Duration(milliseconds: 800 * (i + 1)));
+      }
+    }
   }
 
   static Course _toCourse(Map<String, dynamic> json) {
