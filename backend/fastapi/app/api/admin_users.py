@@ -2,14 +2,22 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from ..config import Settings, get_settings
 from ..db import get_supabase_client
-from ..schemas.admin_users import AdminUsersResponse, GrantCourseRequest, UserEntitlementsResponse, UserOverviewResponse
+from ..schemas.admin_users import (
+    AdminUsersResponse,
+    AdminUserUpdateRequest,
+    GrantCourseRequest,
+    UserEntitlementsResponse,
+    UserOverviewResponse,
+)
 from ..services.admin_users import (
+    delete_admin_user,
     get_user_overview,
     grant_user_course,
     list_admin_users,
     list_user_entitlements,
     revoke_user_course,
     set_user_blocked,
+    update_admin_user,
 )
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
@@ -38,6 +46,16 @@ def block_user(user_id: str, _: None = Depends(_require_admin_key)):
 @router.post("/{user_id}/unblock", status_code=status.HTTP_204_NO_CONTENT)
 def unblock_user(user_id: str, _: None = Depends(_require_admin_key)):
     set_user_blocked(get_supabase_client(), user_id=user_id, blocked=False)
+
+
+@router.patch("/{user_id}")
+def patch_user(user_id: str, payload: AdminUserUpdateRequest, _: None = Depends(_require_admin_key)):
+    return update_admin_user(get_supabase_client(), user_id=user_id, payload=payload)
+
+
+@router.delete("/{user_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_user(user_id: str, _: None = Depends(_require_admin_key)):
+    delete_admin_user(get_supabase_client(), user_id=user_id)
 
 
 @router.post("/{user_id}/grant-course", status_code=status.HTTP_204_NO_CONTENT)

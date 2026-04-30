@@ -5,11 +5,13 @@ import { useEffect, useMemo, useState } from "react";
 import { Heart, MessageCircle } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { StatusModal } from "@/components/status-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { deleteAdminComment, fetchAdminComments, replyAdminComment, toggleAdminCommentHeart, type AdminCommentItem } from "@/lib/api/admin-comments";
 import { fetchCourses } from "@/lib/api/courses";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function CommentsPage() {
   const [comments, setComments] = useState<AdminCommentItem[]>([]);
@@ -18,6 +20,7 @@ export default function CommentsPage() {
   const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
   const [replyOpenId, setReplyOpenId] = useState<string | null>(null);
   const [replyValues, setReplyValues] = useState<Record<string, string>>({});
+  const statusModal = useStatusModal();
 
   useEffect(() => {
     let mounted = true;
@@ -79,7 +82,12 @@ export default function CommentsPage() {
                   hearted={root.hearted_by_admin}
                   onHeart={async () => {
                     try {
-                      const updated = await toggleAdminCommentHeart(root.id);
+                      const updated = await statusModal.run({
+                        loadingMessage: "Reaksiya yangilanmoqda...",
+                        successMessage: "Muvaffaqiyatli yangilandi",
+                        errorMessage: "Yurakcha bosishda xatolik.",
+                        action: async () => toggleAdminCommentHeart(root.id),
+                      });
                       setComments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
                     } catch (error) {
                       notifyError(error instanceof Error ? error.message : "Yurakcha bosishda xatolik.");
@@ -104,7 +112,12 @@ export default function CommentsPage() {
                         hearted={reply.hearted_by_admin}
                         onHeart={async () => {
                           try {
-                            const updated = await toggleAdminCommentHeart(reply.id);
+                            const updated = await statusModal.run({
+                              loadingMessage: "Reaksiya yangilanmoqda...",
+                              successMessage: "Muvaffaqiyatli yangilandi",
+                              errorMessage: "Yurakcha bosishda xatolik.",
+                              action: async () => toggleAdminCommentHeart(reply.id),
+                            });
                             setComments((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
                           } catch (error) {
                             notifyError(error instanceof Error ? error.message : "Yurakcha bosishda xatolik.");
@@ -130,7 +143,12 @@ export default function CommentsPage() {
                       onClick={async () => {
                         if (!replyValue.trim()) return;
                         try {
-                          const inserted = await replyAdminComment(root.id, replyValue);
+                          const inserted = await statusModal.run({
+                            loadingMessage: "Javob saqlanmoqda...",
+                            successMessage: "Javob muvaffaqiyatli yuborildi",
+                            errorMessage: "Javob yuborishda xatolik.",
+                            action: async () => replyAdminComment(root.id, replyValue),
+                          });
                           setComments((prev) => [inserted, ...prev]);
                           setReplyValues((prev) => ({ ...prev, [root.id]: "" }));
                           setReplyOpenId(null);
@@ -162,7 +180,12 @@ export default function CommentsPage() {
           const submitDelete = async () => {
             if (!deleteCommentId) return;
             try {
-              await deleteAdminComment(deleteCommentId);
+              await statusModal.run({
+                loadingMessage: "Izoh o'chirilmoqda...",
+                successMessage: "Muvaffaqiyatli o'chirildi",
+                errorMessage: "Izohni o'chirishda xatolik.",
+                action: async () => deleteAdminComment(deleteCommentId),
+              });
               setComments((prev) => prev.filter((item) => item.id !== deleteCommentId));
               notifySuccess("Izoh o'chirildi.");
               setDeleteCommentId(null);
@@ -173,6 +196,7 @@ export default function CommentsPage() {
           void submitDelete();
         }}
       />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

@@ -108,6 +108,24 @@ export async function unblockUser(userId: string) {
   if (!response.ok) throw new Error(await parseError(response, "Foydalanuvchini blokdan chiqarishda xatolik."));
 }
 
+export async function updateUser(userId: string, payload: { name?: string; email?: string; is_blocked?: boolean }) {
+  const response = await apiFetch(`/api/v1/admin/users/${userId}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Foydalanuvchini yangilashda xatolik."));
+  return (await response.json()) as AdminUserItem;
+}
+
+export async function removeUser(userId: string) {
+  const response = await apiFetch(`/api/v1/admin/users/${userId}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Foydalanuvchini o'chirishda xatolik."));
+}
+
 export async function grantCourse(userId: string, courseId: string) {
   const response = await apiFetch(`/api/v1/admin/users/${userId}/grant-course`, {
     method: "POST",

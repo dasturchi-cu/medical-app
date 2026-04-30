@@ -35,7 +35,7 @@ export default function DashboardPage() {
         );
       } catch (error) {
         if (!mounted) return;
-        notifyError(error instanceof Error ? error.message : "Dashboard ma'lumotlarini olishda xatolik.");
+        notifyError(error instanceof Error ? error.message : "Boshqaruv paneli ma'lumotlarini olishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
@@ -157,7 +157,7 @@ export default function DashboardPage() {
           <CardTitle>Backend holati</CardTitle>
         </CardHeader>
         <CardContent className="text-sm text-slate-600">
-          Dashboard endi real APIdan o&apos;qiydi. Agar qiymatlar 0 bo&apos;lsa, Supabase jadvalida hali ma&apos;lumot yo&apos;qligini bildiradi.
+          Boshqaruv paneli endi real APIdan o&apos;qiydi. Agar qiymatlar 0 bo&apos;lsa, Supabase jadvalida hali ma&apos;lumot yo&apos;qligini bildiradi.
         </CardContent>
       </Card>
     </section>

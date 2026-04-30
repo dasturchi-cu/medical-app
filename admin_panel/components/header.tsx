@@ -9,14 +9,14 @@ const titleByPath: Record<string, string> = {
   "/dashboard": "Boshqaruv paneli",
   "/courses": "Kurslar",
   "/lessons": "Darslar",
-  "/banners": "Reklamalar",
-  "/home-banners": "Home reklamalari",
-  "/slides": "Slaydlar",
-  "/subscriptions": "Kurs obunalari",
-  "/notifications": "Notification markazi",
-  "/tests": "Testlar",
   "/users": "Foydalanuvchilar",
-  "/comments": "Izohlar va reytinglar",
+  "/comments": "Izohlar",
+  "/ratings": "Baholar",
+  "/purchases": "Xaridlar",
+  "/banners": "Bannerlar",
+  "/ads": "Reklamalar",
+  "/notifications": "Bildirishnomalar",
+  "/tests": "Testlar",
 };
 
 interface HeaderProps {

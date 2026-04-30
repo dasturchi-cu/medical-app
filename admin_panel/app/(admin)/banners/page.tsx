@@ -7,12 +7,14 @@ import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { StatusModal } from "@/components/status-modal";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { createBanner, fetchBanners, removeBanner, updateBanner, type BannerItem } from "@/lib/api/banners";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 const DEFAULT_ADMIN_TELEGRAM = "Neuroscienceadmin";
 
@@ -33,6 +35,7 @@ export default function BannersPage() {
     price: "",
     image: "",
   });
+  const statusModal = useStatusModal();
 
   useEffect(() => {
     let mounted = true;
@@ -111,13 +114,18 @@ export default function BannersPage() {
   const onSubmit = async (event: FormEvent<HTMLFormElement>) => {
     event.preventDefault();
     try {
-      const created = await createBanner({
-        title: formValues.title.trim(),
-        message: formValues.message.trim(),
-        price_label: formValues.price.trim() || "Kelishiladi",
-        telegram: DEFAULT_ADMIN_TELEGRAM,
-        image_url: formValues.image.trim(),
-        course_id: null,
+      const created = await statusModal.run({
+        loadingMessage: "Banner saqlanmoqda...",
+        successMessage: "Banner muvaffaqiyatli saqlandi",
+        errorMessage: "Kurs reklamasi qo'shilmadi.",
+        action: async () => createBanner({
+          title: formValues.title.trim(),
+          message: formValues.message.trim(),
+          price_label: formValues.price.trim() || "Kelishiladi",
+          telegram: DEFAULT_ADMIN_TELEGRAM,
+          image_url: formValues.image.trim(),
+          course_id: null,
+        }),
       });
       setBanners((prev) => [created, ...prev]);
       notifySuccess("Kurs reklamasi muvaffaqiyatli qo'shildi.");
@@ -136,13 +144,18 @@ export default function BannersPage() {
     event.preventDefault();
     if (!editBanner) return;
     try {
-      const updated = await updateBanner(editBanner.id, {
-        title: editValues.title.trim(),
-        message: editValues.message.trim(),
-        price_label: editValues.price.trim() || "Kelishiladi",
-        telegram: DEFAULT_ADMIN_TELEGRAM,
-        image_url: editValues.image ?? "",
-        course_id: null,
+      const updated = await statusModal.run({
+        loadingMessage: "Banner yangilanmoqda...",
+        successMessage: "Banner muvaffaqiyatli yangilandi",
+        errorMessage: "Kurs reklamasi yangilanmadi.",
+        action: async () => updateBanner(editBanner.id, {
+          title: editValues.title.trim(),
+          message: editValues.message.trim(),
+          price_label: editValues.price.trim() || "Kelishiladi",
+          telegram: DEFAULT_ADMIN_TELEGRAM,
+          image_url: editValues.image ?? "",
+          course_id: null,
+        }),
       });
       setBanners((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       notifySuccess("Kurs reklamasi muvaffaqiyatli yangilandi.");
@@ -252,7 +265,12 @@ export default function BannersPage() {
         onConfirm={async () => {
           if (!deleteBannerId) return;
           try {
-            await removeBanner(deleteBannerId);
+            await statusModal.run({
+              loadingMessage: "Banner o'chirilmoqda...",
+              successMessage: "Muvaffaqiyatli o'chirildi",
+              errorMessage: "Kurs reklamasi o'chirilmadi.",
+              action: async () => removeBanner(deleteBannerId),
+            });
             setBanners((prev) => prev.filter((item) => item.id !== deleteBannerId));
             notifySuccess("Kurs reklamasi muvaffaqiyatli o'chirildi.");
             setDeleteBannerId(null);
@@ -261,6 +279,7 @@ export default function BannersPage() {
           }
         }}
       />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

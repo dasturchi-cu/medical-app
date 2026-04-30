@@ -1,9 +1,14 @@
  "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { useParams } from "next/navigation";
+import { useParams, useRouter } from "next/navigation";
+import { ConfirmModal } from "@/components/confirm-modal";
+import { FormModal } from "@/components/form-modal";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { StatusModal } from "@/components/status-modal";
 import { Button } from "@/components/ui/button";
+import { Input } from "@/components/ui/input";
+import { Label } from "@/components/ui/label";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
 import {
   blockUser,
@@ -11,16 +16,20 @@ import {
   fetchUserOverview,
   fetchUsers,
   grantCourse,
+  removeUser,
   revokeCourse,
   type AdminUserItem,
   type UserEntitlementItem,
   type UserOverviewResponse,
   unblockUser,
+  updateUser,
 } from "@/lib/api/users";
 import { fetchCourses } from "@/lib/api/courses";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function UserDetailPage() {
+  const router = useRouter();
   const params = useParams<{ id: string }>();
   const userId = params.id;
   const [loading, setLoading] = useState(true);
@@ -29,6 +38,11 @@ export default function UserDetailPage() {
   const [entitlements, setEntitlements] = useState<UserEntitlementItem[]>([]);
   const [overview, setOverview] = useState<UserOverviewResponse | null>(null);
   const [selectedCourse, setSelectedCourse] = useState("");
+  const [editOpen, setEditOpen] = useState(false);
+  const [deleteOpen, setDeleteOpen] = useState(false);
+  const [editValues, setEditValues] = useState({ name: "", email: "" });
+  const statusModal = useStatusModal();
+  const runStatus = statusModal.run;
 
   useEffect(() => {
     let mounted = true;
@@ -91,14 +105,19 @@ export default function UserDetailPage() {
         <h2 className="text-xl font-semibold text-slate-900">{user.name}</h2>
         <p className="mt-1 text-sm text-slate-500">{user.email || "-"}</p>
         <p className="mt-2 text-xs text-slate-500">Ro&apos;yxatdan o&apos;tgan: {user.registration_date || "-"}</p>
-        <p className="mt-1 text-xs text-slate-500">User ID: {user.id}</p>
+        <p className="mt-1 text-xs text-slate-500">Foydalanuvchi ID: {user.id}</p>
         <div className="mt-4 flex flex-wrap gap-2">
           <Button
             variant="destructive"
             disabled={user.is_blocked}
             onClick={async () => {
               try {
-                await blockUser(user.id);
+                await runStatus({
+                  loadingMessage: "Foydalanuvchi bloklanmoqda...",
+                  successMessage: "Foydalanuvchi muvaffaqiyatli bloklandi",
+                  errorMessage: "Bloklashda xatolik.",
+                  action: async () => blockUser(user.id),
+                });
                 setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, is_blocked: true } : item)));
                 notifySuccess("Foydalanuvchi bloklandi.");
               } catch (error) {
@@ -106,14 +125,19 @@ export default function UserDetailPage() {
               }
             }}
           >
-            Block user
+            Bloklash
           </Button>
           <Button
             variant="outline"
             disabled={!user.is_blocked}
             onClick={async () => {
               try {
-                await unblockUser(user.id);
+                await runStatus({
+                  loadingMessage: "Foydalanuvchi blokdan chiqarilmoqda...",
+                  successMessage: "Foydalanuvchi muvaffaqiyatli blokdan chiqarildi",
+                  errorMessage: "Unblockda xatolik.",
+                  action: async () => unblockUser(user.id),
+                });
                 setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, is_blocked: false } : item)));
                 notifySuccess("Foydalanuvchi blokdan chiqarildi.");
               } catch (error) {
@@ -121,8 +145,25 @@ export default function UserDetailPage() {
               }
             }}
           >
-            Unblock user
+            Blokdan chiqarish
           </Button>
+          <Button
+            variant="outline"
+            onClick={() => {
+              setEditValues({ name: user.name, email: user.email });
+              setEditOpen(true);
+            }}
+          >
+            Tahrirlash
+          </Button>
+          <Button variant="destructive" onClick={() => setDeleteOpen(true)}>
+            O&apos;chirish
+          </Button>
+        </div>
+        <div className="mt-4 grid gap-3 sm:grid-cols-3">
+          <StatItem label="Roli" value="Talaba" />
+          <StatItem label="Holati" value={user.is_blocked ? "Bloklangan" : "Faol"} />
+          <StatItem label="Sotib olingan kurslar" value={String(activeEntitlements.length)} />
         </div>
       </div>
 
@@ -269,6 +310,69 @@ export default function UserDetailPage() {
           )}
         </div>
       </div>
+
+      <FormModal
+        open={editOpen}
+        onOpenChange={(open) => setEditOpen(open)}
+        title="Foydalanuvchini tahrirlash"
+        description="Foydalanuvchi ma'lumotlarini yangilang."
+      >
+        <form
+          className="space-y-3"
+          onSubmit={async (event) => {
+            event.preventDefault();
+            try {
+              const updated = await runStatus({
+                loadingMessage: "Foydalanuvchi saqlanmoqda...",
+                successMessage: "Foydalanuvchi muvaffaqiyatli yangilandi",
+                errorMessage: "Foydalanuvchini yangilashda xatolik.",
+                action: async () => updateUser(user.id, { name: editValues.name.trim(), email: editValues.email.trim() }),
+              });
+              setUsers((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
+              setEditOpen(false);
+              notifySuccess("Foydalanuvchi yangilandi.");
+            } catch (error) {
+              notifyError(error instanceof Error ? error.message : "Foydalanuvchini yangilashda xatolik.");
+            }
+          }}
+        >
+          <div className="grid gap-2">
+            <Label htmlFor="user-name">Name</Label>
+            <Input id="user-name" value={editValues.name} onChange={(event) => setEditValues((prev) => ({ ...prev, name: event.target.value }))} />
+          </div>
+          <div className="grid gap-2">
+            <Label htmlFor="user-email">Email / phone</Label>
+            <Input id="user-email" value={editValues.email} onChange={(event) => setEditValues((prev) => ({ ...prev, email: event.target.value }))} />
+          </div>
+          <Button type="submit" className="h-10 rounded-xl">
+            Saqlash
+          </Button>
+        </form>
+      </FormModal>
+
+      <ConfirmModal
+        open={deleteOpen}
+        onCancel={() => setDeleteOpen(false)}
+        onConfirm={async () => {
+          try {
+            await runStatus({
+              loadingMessage: "Foydalanuvchi o'chirilmoqda...",
+              successMessage: "Muvaffaqiyatli o'chirildi",
+              errorMessage: "Foydalanuvchini o'chirishda xatolik.",
+              action: async () => removeUser(user.id),
+            });
+            notifySuccess("Foydalanuvchi o'chirildi.");
+            setDeleteOpen(false);
+            router.replace("/users");
+          } catch (error) {
+            notifyError(error instanceof Error ? error.message : "Foydalanuvchini o'chirishda xatolik.");
+          }
+        }}
+        title="Foydalanuvchini o'chirish"
+        description="Ushbu foydalanuvchini o'chirishni tasdiqlaysizmi? Bu amal ortga qaytmaydi."
+        confirmText="O'chirish"
+      />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

@@ -5,6 +5,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { StatusModal } from "@/components/status-modal";
 import { AppTable } from "@/components/table";
 import { Badge } from "@/components/ui/badge";
 import { Button } from "@/components/ui/button";
@@ -15,6 +16,7 @@ import { Switch } from "@/components/ui/switch";
 import { fetchCourses, type CourseItem } from "@/lib/api/courses";
 import { createLesson, fetchLessons, removeLesson, updateLesson, type LessonItem } from "@/lib/api/lessons";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function LessonsPage() {
   const [courses, setCourses] = useState<CourseItem[]>([]);
@@ -35,6 +37,7 @@ export default function LessonsPage() {
     order: "1",
     isFree: false,
   });
+  const statusModal = useStatusModal();
 
   useEffect(() => {
     let mounted = true;
@@ -133,12 +136,17 @@ export default function LessonsPage() {
       return;
     }
     try {
-      const created = await createLesson({
-        course_id: selectedCourse,
-        title: formValues.title.trim(),
-        video_url: formValues.videoId.trim(),
-        order_no: lessonOrder,
-        is_free: formValues.isFree,
+      const created = await statusModal.run({
+        loadingMessage: "Dars saqlanmoqda...",
+        successMessage: "Dars muvaffaqiyatli saqlandi",
+        errorMessage: "Dars qo'shilmadi.",
+        action: async () => createLesson({
+          course_id: selectedCourse,
+          title: formValues.title.trim(),
+          video_url: formValues.videoId.trim(),
+          order_no: lessonOrder,
+          is_free: formValues.isFree,
+        }),
       });
       setLessons((prev) => [...prev, created]);
       notifySuccess(`${lessonOrder}-chi video muvaffaqiyatli qo'shildi.`);
@@ -161,12 +169,17 @@ export default function LessonsPage() {
       return;
     }
     try {
-      const updated = await updateLesson(editLesson.id, {
-        course_id: selectedCourse || editLesson.course_id,
-        title: editValues.title.trim(),
-        video_url: editValues.videoId.trim(),
-        order_no: lessonOrder,
-        is_free: editValues.isFree,
+      const updated = await statusModal.run({
+        loadingMessage: "Dars yangilanmoqda...",
+        successMessage: "Dars muvaffaqiyatli yangilandi",
+        errorMessage: "Dars yangilanmadi.",
+        action: async () => updateLesson(editLesson.id, {
+          course_id: selectedCourse || editLesson.course_id,
+          title: editValues.title.trim(),
+          video_url: editValues.videoId.trim(),
+          order_no: lessonOrder,
+          is_free: editValues.isFree,
+        }),
       });
       setLessons((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       notifySuccess("Dars muvaffaqiyatli yangilandi.");
@@ -311,7 +324,12 @@ export default function LessonsPage() {
         onConfirm={async () => {
           if (!deleteLessonId) return;
           try {
-            await removeLesson(deleteLessonId);
+            await statusModal.run({
+              loadingMessage: "Dars o'chirilmoqda...",
+              successMessage: "Muvaffaqiyatli o'chirildi",
+              errorMessage: "Dars o'chirilmadi.",
+              action: async () => removeLesson(deleteLessonId),
+            });
             setLessons((prev) => prev.filter((item) => item.id !== deleteLessonId));
             notifySuccess("Dars muvaffaqiyatli o'chirildi.");
             setDeleteLessonId(null);
@@ -320,6 +338,7 @@ export default function LessonsPage() {
           }
         }}
       />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

@@ -1,5 +1,4 @@
-import { Button } from "@/components/ui/button";
-import { AppModal } from "@/components/modal";
+import { ConfirmModal } from "@/components/confirm-modal";
 
 interface ConfirmDialogProps {
   open: boolean;
@@ -20,16 +19,5 @@ export function ConfirmDialog({
   onConfirm,
   onCancel,
 }: ConfirmDialogProps) {
-  return (
-    <AppModal open={open} onOpenChange={(nextOpen) => (!nextOpen ? onCancel() : undefined)} title={title} description={description}>
-      <div className="flex justify-end gap-2">
-        <Button variant="outline" className="h-10 rounded-xl" onClick={onCancel}>
-          {cancelText}
-        </Button>
-        <Button variant="destructive" className="h-10 rounded-xl" onClick={onConfirm}>
-          {confirmText}
-        </Button>
-      </div>
-    </AppModal>
-  );
+  return <ConfirmModal open={open} title={title} description={description} confirmText={confirmText} cancelText={cancelText} onConfirm={onConfirm} onCancel={onCancel} />;
 }

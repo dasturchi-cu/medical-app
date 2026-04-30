@@ -126,7 +126,7 @@ export default function CourseDetailPage() {
 
       <div className="grid gap-4 md:grid-cols-3">
         <InfoCard icon={Video} title="Videolar soni" value={String(lessons.length)} />
-        <InfoCard icon={Users} title="Sotib olgan userlar" value={String(buyers.length)} />
+        <InfoCard icon={Users} title="Sotib olgan foydalanuvchilar" value={String(buyers.length)} />
         <InfoCard icon={BarChart3} title="Ko'rishlar soni" value={String(course.views)} />
       </div>
 

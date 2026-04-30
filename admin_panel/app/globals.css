@@ -150,4 +150,38 @@
   .section-caption {
     @apply text-sm text-slate-500;
   }
+
+  .status-spinner {
+    width: 2.25rem;
+    height: 2.25rem;
+    border-radius: 9999px;
+    border: 3px solid rgba(47, 107, 255, 0.22);
+    border-top-color: #2f6bff;
+    animation: status-spin 0.8s linear infinite;
+  }
+
+  .status-icon-enter {
+    animation: status-enter 380ms ease-out;
+  }
+}
+
+@keyframes status-spin {
+  to {
+    transform: rotate(360deg);
+  }
+}
+
+@keyframes status-enter {
+  0% {
+    opacity: 0;
+    transform: scale(0.5);
+  }
+  70% {
+    opacity: 1;
+    transform: scale(1.06);
+  }
+  100% {
+    opacity: 1;
+    transform: scale(1);
+  }
 }

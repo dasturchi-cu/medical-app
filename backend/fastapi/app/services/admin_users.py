@@ -8,6 +8,7 @@ from supabase import Client
 
 from ..schemas.admin_users import (
     AdminUserItem,
+    AdminUserUpdateRequest,
     UserEntitlementItem,
     UserOverviewMetrics,
     UserOverviewResponse,
@@ -44,6 +45,37 @@ def list_admin_users(client: Client) -> list[AdminUserItem]:
 
 def set_user_blocked(client: Client, *, user_id: str, blocked: bool) -> None:
     client.table("users").update({"is_blocked": blocked, "updated_at": datetime.utcnow().isoformat()}).eq("id", user_id).execute()
+
+
+def update_admin_user(client: Client, *, user_id: str, payload: AdminUserUpdateRequest) -> AdminUserItem:
+    patch: dict[str, Any] = {"updated_at": datetime.utcnow().isoformat()}
+    if payload.name is not None:
+        patch["full_name"] = payload.name.strip()
+    if payload.email is not None:
+        patch["phone"] = payload.email.strip()
+    if payload.is_blocked is not None:
+        patch["is_blocked"] = payload.is_blocked
+    if len(patch) == 1:
+        raise RuntimeError("No fields to update.")
+
+    result = client.table("users").update(patch).eq("id", user_id).execute()
+    row = (result.data or [None])[0]
+    if not row:
+        raise RuntimeError("User not found.")
+    created = str(row.get("created_at") or "")
+    return AdminUserItem(
+        id=str(row.get("id") or ""),
+        name=str(row.get("full_name") or "Foydalanuvchi"),
+        email=str(row.get("phone") or ""),
+        registration_date=created[:10] if created else "",
+        login_count=0,
+        app_open_count=0,
+        is_blocked=bool(row.get("is_blocked")),
+    )
+
+
+def delete_admin_user(client: Client, *, user_id: str) -> None:
+    client.table("users").delete().eq("id", user_id).execute()
 
 
 def grant_user_course(client: Client, *, user_id: str, course_id: str) -> None:

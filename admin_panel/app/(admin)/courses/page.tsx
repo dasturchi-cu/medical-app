@@ -8,11 +8,13 @@ import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { StatusModal } from "@/components/status-modal";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Label } from "@/components/ui/label";
 import { createCourse, fetchCourses, removeCourse, updateCourse } from "@/lib/api/courses";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 interface CourseFormValues {
   title: string;
@@ -50,6 +52,7 @@ export default function CoursesPage() {
   const [deleteCourseId, setDeleteCourseId] = useState<string | null>(null);
   const [formValues, setFormValues] = useState<CourseFormValues>(emptyCourseForm);
   const [editValues, setEditValues] = useState<CourseFormValues>(emptyCourseForm);
+  const statusModal = useStatusModal();
 
   useEffect(() => {
     let mounted = true;
@@ -162,12 +165,18 @@ export default function CoursesPage() {
       }
       const summary = formValues.summary.trim();
       const translated = autoTranslateTitle(title);
-      const created = await createCourse({
-        ...translated,
-        price_uzs: parsePrice(formValues.price),
-        admin_telegram: normalizeTelegram(formValues.admin_telegram),
-        image_url: formValues.image.trim(),
-        description_uz: summary,
+      const created = await statusModal.run({
+        loadingMessage: "Kurs saqlanmoqda...",
+        successMessage: "Kurs muvaffaqiyatli saqlandi",
+        errorMessage: "Kurs qo'shilmadi.",
+        action: async () =>
+          createCourse({
+            ...translated,
+            price_uzs: parsePrice(formValues.price),
+            admin_telegram: normalizeTelegram(formValues.admin_telegram),
+            image_url: formValues.image.trim(),
+            description_uz: summary,
+          }),
       });
       setCourseList((prev) => [created, ...prev]);
       notifySuccess("Kurs muvaffaqiyatli qo'shildi.");
@@ -188,12 +197,18 @@ export default function CoursesPage() {
       }
       const summary = editValues.summary.trim();
       const translated = autoTranslateTitle(title);
-      const updated = await updateCourse(editCourse.id, {
-        ...translated,
-        price_uzs: parsePrice(editValues.price),
-        admin_telegram: normalizeTelegram(editValues.admin_telegram),
-        image_url: editValues.image.trim(),
-        description_uz: summary,
+      const updated = await statusModal.run({
+        loadingMessage: "Kurs yangilanmoqda...",
+        successMessage: "Kurs muvaffaqiyatli yangilandi",
+        errorMessage: "Kurs yangilanmadi.",
+        action: async () =>
+          updateCourse(editCourse.id, {
+            ...translated,
+            price_uzs: parsePrice(editValues.price),
+            admin_telegram: normalizeTelegram(editValues.admin_telegram),
+            image_url: editValues.image.trim(),
+            description_uz: summary,
+          }),
       });
       setCourseList((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       notifySuccess("Kurs muvaffaqiyatli yangilandi.");
@@ -253,7 +268,12 @@ export default function CoursesPage() {
         onConfirm={async () => {
           if (!deleteCourseId) return;
           try {
-            await removeCourse(deleteCourseId);
+            await statusModal.run({
+              loadingMessage: "Kurs o'chirilmoqda...",
+              successMessage: "Muvaffaqiyatli o'chirildi",
+              errorMessage: "Kurs o'chirilmadi.",
+              action: async () => removeCourse(deleteCourseId),
+            });
             setCourseList((prev) => prev.filter((course) => course.id !== deleteCourseId));
             notifySuccess("Kurs muvaffaqiyatli o'chirildi.");
             setDeleteCourseId(null);
@@ -262,6 +282,7 @@ export default function CoursesPage() {
           }
         }}
       />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

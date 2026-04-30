@@ -9,10 +9,10 @@ import {
   House,
   ImageIcon,
   MessageSquareText,
-  MonitorPlay,
-  PanelsTopLeft,
   PlayCircle,
+  Shield,
   ShoppingCart,
+  Sparkles,
   Users,
   X,
 } from "lucide-react";
@@ -22,14 +22,14 @@ const navItems = [
   { href: "/dashboard", label: "Boshqaruv paneli", icon: House },
   { href: "/courses", label: "Kurslar", icon: BookOpen },
   { href: "/lessons", label: "Darslar", icon: PlayCircle },
-  { href: "/banners", label: "Reklamalar", icon: ImageIcon },
-  { href: "/home-banners", label: "Home reklamalari", icon: MonitorPlay },
-  { href: "/slides", label: "Slaydlar", icon: PanelsTopLeft },
-  { href: "/subscriptions", label: "Kurs obunalari", icon: ShoppingCart },
-  { href: "/notifications", label: "Notification", icon: Bell },
-  { href: "/tests", label: "Testlar", icon: FileQuestion },
   { href: "/users", label: "Foydalanuvchilar", icon: Users },
   { href: "/comments", label: "Izohlar", icon: MessageSquareText },
+  { href: "/ratings", label: "Baholar", icon: Shield },
+  { href: "/purchases", label: "Xaridlar", icon: ShoppingCart },
+  { href: "/banners", label: "Bannerlar", icon: ImageIcon },
+  { href: "/ads", label: "Reklamalar", icon: Sparkles },
+  { href: "/notifications", label: "Bildirishnomalar", icon: Bell },
+  { href: "/tests", label: "Testlar", icon: FileQuestion },
 ];
 
 interface SidebarProps {

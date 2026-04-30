@@ -15,6 +15,12 @@ class AdminUsersResponse(BaseModel):
     items: list[AdminUserItem]
 
 
+class AdminUserUpdateRequest(BaseModel):
+    name: str | None = None
+    email: str | None = None
+    is_blocked: bool | None = None
+
+
 class GrantCourseRequest(BaseModel):
     course_id: str = Field(min_length=1)
 
