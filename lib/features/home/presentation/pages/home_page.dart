@@ -10,6 +10,7 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/services/catalog_service.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/banners_state.dart';
 import '../../../../core/state/progress_controller.dart';
@@ -28,7 +29,7 @@ class HomePage extends ConsumerStatefulWidget {
   ConsumerState<HomePage> createState() => _HomePageState();
 }
 
-class _HomePageState extends ConsumerState<HomePage> {
+class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver {
   final _pageController = PageController(viewportFraction: 0.92);
   Timer? _timer;
   Timer? _loadingTimer;
@@ -38,6 +39,7 @@ class _HomePageState extends ConsumerState<HomePage> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _loadingTimer = Timer(const Duration(milliseconds: 650), () {
       if (mounted) setState(() => _loading = false);
     });
@@ -55,10 +57,26 @@ class _HomePageState extends ConsumerState<HomePage> {
 
   @override
   void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
     _loadingTimer?.cancel();
     _pageController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshCatalog());
+    }
+  }
+
+  Future<void> _refreshCatalog() async {
+    await CatalogService.bootstrap();
+    if (!mounted) return;
+    ref.invalidate(slidesFeedProvider);
+    ref.invalidate(bannersFeedProvider);
+    setState(() {});
   }
 
   @override
@@ -155,8 +173,10 @@ class _HomePageState extends ConsumerState<HomePage> {
     final progress = ref.watch(progressControllerProvider);
 
     return SafeArea(
-      child: CustomScrollView(
-        slivers: [
+      child: RefreshIndicator(
+        onRefresh: _refreshCatalog,
+        child: CustomScrollView(
+          slivers: [
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 10, 16, 10),
@@ -518,6 +538,7 @@ class _HomePageState extends ConsumerState<HomePage> {
                       : 'brain',
                   title: c.titleUz,
                   author: c.authorUz,
+                  summary: c.descriptionUz,
                   imageUrl: c.imageUrl,
                   priceText: c.priceUz,
                   progress: progressValue,
@@ -562,6 +583,7 @@ class _HomePageState extends ConsumerState<HomePage> {
             ),
           const SliverToBoxAdapter(child: SizedBox(height: 10)),
         ],
+      ),
       ),
     );
   }

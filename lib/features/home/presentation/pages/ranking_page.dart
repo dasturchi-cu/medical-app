@@ -28,22 +28,30 @@ class _RankingPageState extends ConsumerState<RankingPage>
   }
 
   Future<void> _load() async {
-    final currentUserId = ref.read(authControllerProvider).userId ?? "";
-    final items = await ref.read(rankingRepositoryProvider).fetchRanking(limit: 50);
     if (!mounted) return;
-    setState(() {
-      _users = items
-          .map(
-            (item) => _RankingUser(
-              rank: item.rank,
-              name: item.fullName,
-              studyMinutes: item.quizMinutes.round(),
-              me: item.userId == currentUserId,
-            ),
-          )
-          .toList(growable: false);
-      _loading = false;
-    });
+    setState(() => _loading = true);
+    try {
+      final currentUserId = ref.read(authControllerProvider).userId ?? "";
+      final items = await ref.read(rankingRepositoryProvider).fetchRanking(limit: 50);
+      if (!mounted) return;
+      setState(() {
+        _users = items
+            .map(
+              (item) => _RankingUser(
+                rank: item.rank,
+                name: item.fullName,
+                studyMinutes: item.quizMinutes.round(),
+                me: item.userId == currentUserId,
+              ),
+            )
+            .toList(growable: false);
+      });
+    } catch (_) {
+      if (!mounted) return;
+      setState(() => _users = const []);
+    } finally {
+      if (mounted) setState(() => _loading = false);
+    }
   }
 
   @override

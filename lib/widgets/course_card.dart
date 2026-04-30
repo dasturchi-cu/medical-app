@@ -9,6 +9,7 @@ class CourseCard extends StatelessWidget {
     required this.visualKind,
     required this.title,
     required this.author,
+    required this.summary,
     required this.imageUrl,
     required this.priceText,
     required this.progress,
@@ -24,6 +25,7 @@ class CourseCard extends StatelessWidget {
   final String visualKind;
   final String title;
   final String author;
+  final String summary;
   final String imageUrl;
   final String priceText;
   final double progress;
@@ -81,6 +83,17 @@ class CourseCard extends StatelessWidget {
                         color: AppColors.textSecondary,
                       ),
                     ),
+                    if (summary.trim().isNotEmpty) ...[
+                      const SizedBox(height: AppSpacing.s4),
+                      Text(
+                        summary.trim(),
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: AppColors.textSecondary,
+                        ),
+                      ),
+                    ],
                     const SizedBox(height: AppSpacing.s4),
                     Text(
                       priceText,

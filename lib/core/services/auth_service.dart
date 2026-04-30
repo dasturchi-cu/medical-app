@@ -117,15 +117,21 @@ class AuthService {
   Future<UserAccessStatus?> checkUserAccess(String userId) async {
     final baseUrl = getApiBaseUrl();
     if (baseUrl.isEmpty || userId.trim().isEmpty) return null;
-    final response = await http.get(Uri.parse('$baseUrl/api/v1/auth/user-status/$userId'));
-    if (response.statusCode < 200 || response.statusCode >= 300) return null;
-    final body = jsonDecode(response.body);
-    if (body is! Map<String, dynamic>) return null;
-    return UserAccessStatus(
-      userId: (body['user_id'] ?? userId).toString(),
-      isBlocked: body['is_blocked'] == true,
-      adminContact: (body['admin_contact'] ?? 'Neuroscienceadmin').toString(),
-    );
+    try {
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/v1/auth/user-status/$userId'))
+          .timeout(const Duration(seconds: 8));
+      if (response.statusCode < 200 || response.statusCode >= 300) return null;
+      final body = jsonDecode(response.body);
+      if (body is! Map<String, dynamic>) return null;
+      return UserAccessStatus(
+        userId: (body['user_id'] ?? userId).toString(),
+        isBlocked: body['is_blocked'] == true,
+        adminContact: (body['admin_contact'] ?? 'Neuroscienceadmin').toString(),
+      );
+    } catch (_) {
+      return null;
+    }
   }
 
   Future<LocalAuthUser?> updateCurrentUserName(String name) async {

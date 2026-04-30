@@ -76,7 +76,11 @@ class SearchPage extends ConsumerWidget {
                             ),
                       ),
                       subtitle: Text(
-                        c.authorUz,
+                        c.descriptionUz.trim().isNotEmpty
+                            ? c.descriptionUz
+                            : c.authorUz,
+                        maxLines: 2,
+                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                               color: Colors.black54,
                             ),
