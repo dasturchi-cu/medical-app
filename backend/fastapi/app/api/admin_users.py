@@ -2,8 +2,15 @@ from fastapi import APIRouter, Depends, Header, HTTPException, status
 
 from ..config import Settings, get_settings
 from ..db import get_supabase_client
-from ..schemas.admin_users import AdminUsersResponse, GrantCourseRequest, UserEntitlementsResponse
-from ..services.admin_users import grant_user_course, list_admin_users, list_user_entitlements, revoke_user_course, set_user_blocked
+from ..schemas.admin_users import AdminUsersResponse, GrantCourseRequest, UserEntitlementsResponse, UserOverviewResponse
+from ..services.admin_users import (
+    get_user_overview,
+    grant_user_course,
+    list_admin_users,
+    list_user_entitlements,
+    revoke_user_course,
+    set_user_blocked,
+)
 
 router = APIRouter(prefix="/admin/users", tags=["admin-users"])
 
@@ -41,6 +48,11 @@ def grant_course(user_id: str, payload: GrantCourseRequest, _: None = Depends(_r
 @router.get("/{user_id}/entitlements", response_model=UserEntitlementsResponse)
 def get_user_entitlements(user_id: str, _: None = Depends(_require_admin_key)):
     return UserEntitlementsResponse(items=list_user_entitlements(get_supabase_client(), user_id=user_id))
+
+
+@router.get("/{user_id}/overview", response_model=UserOverviewResponse)
+def get_overview(user_id: str, _: None = Depends(_require_admin_key)):
+    return get_user_overview(get_supabase_client(), user_id=user_id)
 
 
 @router.post("/{user_id}/revoke-course", status_code=status.HTTP_204_NO_CONTENT)

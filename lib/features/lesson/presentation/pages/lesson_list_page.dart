@@ -57,7 +57,7 @@ class LessonListPage extends ConsumerWidget {
         separatorBuilder: (_, index) => const SizedBox(height: 10),
         itemBuilder: (context, i) {
           final l = section.lessons[i];
-          final locked = isDoctorCourse ? !basePurchased : (!purchased && i > 0);
+          final locked = isDoctorCourse ? !(purchased || basePurchased) : (!purchased && i > 0);
 
           return LessonItem(
             animationDelayMs: (i % 10) * 45,

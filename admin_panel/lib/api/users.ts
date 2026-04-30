@@ -18,6 +18,53 @@ export interface UserEntitlementItem {
   is_active: boolean;
 }
 
+export interface UserOverviewMetrics {
+  active_courses: number;
+  total_entitlements: number;
+  ratings_count: number;
+  comments_count: number;
+  likes_given_count: number;
+  replies_count: number;
+  watched_lessons_count: number;
+  completed_lessons_count: number;
+  watched_seconds_total: number;
+  purchases_count: number;
+  paid_total_uzs: number;
+}
+
+export interface UserRecentRatingItem {
+  course_id: string;
+  course_title: string;
+  stars: number;
+  created_at: string;
+}
+
+export interface UserRecentCommentItem {
+  id: string;
+  course_key: string;
+  text: string;
+  likes_count: number;
+  replies_count: number;
+  created_at: string;
+}
+
+export interface UserProgressItem {
+  lesson_id: string;
+  course_id: string;
+  course_title: string;
+  watched_sec: number;
+  completed: boolean;
+  updated_at: string;
+}
+
+export interface UserOverviewResponse {
+  user_id: string;
+  metrics: UserOverviewMetrics;
+  recent_ratings: UserRecentRatingItem[];
+  recent_comments: UserRecentCommentItem[];
+  progress_items: UserProgressItem[];
+}
+
 function headers() {
   const { adminApiKey } = getApiConfig();
   return {
@@ -87,4 +134,13 @@ export async function revokeCourse(userId: string, courseId: string) {
     body: JSON.stringify({ course_id: courseId }),
   });
   if (!response.ok) throw new Error(await parseError(response, "Kursni olib tashlashda xatolik."));
+}
+
+export async function fetchUserOverview(userId: string) {
+  const response = await apiFetch(`/api/v1/admin/users/${userId}/overview`, {
+    cache: "no-store",
+    headers: headers(),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Foydalanuvchi overview olishda xatolik."));
+  return (await response.json()) as UserOverviewResponse;
 }

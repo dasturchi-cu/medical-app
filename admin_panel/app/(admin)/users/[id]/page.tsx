@@ -5,7 +5,18 @@ import { useParams } from "next/navigation";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { Button } from "@/components/ui/button";
 import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@/components/ui/select";
-import { blockUser, fetchUserEntitlements, fetchUsers, grantCourse, revokeCourse, type AdminUserItem, type UserEntitlementItem, unblockUser } from "@/lib/api/users";
+import {
+  blockUser,
+  fetchUserEntitlements,
+  fetchUserOverview,
+  fetchUsers,
+  grantCourse,
+  revokeCourse,
+  type AdminUserItem,
+  type UserEntitlementItem,
+  type UserOverviewResponse,
+  unblockUser,
+} from "@/lib/api/users";
 import { fetchCourses } from "@/lib/api/courses";
 import { notifyError, notifySuccess } from "@/lib/notify";
 
@@ -16,6 +27,7 @@ export default function UserDetailPage() {
   const [users, setUsers] = useState<AdminUserItem[]>([]);
   const [courses, setCourses] = useState<Array<{ id: string; title_uz: string }>>([]);
   const [entitlements, setEntitlements] = useState<UserEntitlementItem[]>([]);
+  const [overview, setOverview] = useState<UserOverviewResponse | null>(null);
   const [selectedCourse, setSelectedCourse] = useState("");
 
   useEffect(() => {
@@ -32,6 +44,16 @@ export default function UserDetailPage() {
         setCourses(courseItems.map((item) => ({ id: item.id, title_uz: item.title_uz })));
         setEntitlements(entitlementItems);
         setSelectedCourse(courseItems[0]?.id ?? "");
+
+        // Keep page usable even if backend has not deployed /overview yet.
+        try {
+          const overviewData = await fetchUserOverview(userId);
+          if (!mounted) return;
+          setOverview(overviewData);
+        } catch {
+          if (!mounted) return;
+          setOverview(null);
+        }
       } catch (error) {
         if (!mounted) return;
         notifyError(error instanceof Error ? error.message : "Foydalanuvchi ma'lumotlarini olishda xatolik.");
@@ -55,6 +77,7 @@ export default function UserDetailPage() {
     () => new Map(courses.map((course) => [course.id, course.title_uz])),
     [courses],
   );
+  const metrics = overview?.metrics;
 
   if (loading) return <PageSkeleton />;
 
@@ -100,6 +123,23 @@ export default function UserDetailPage() {
           >
             Unblock user
           </Button>
+        </div>
+      </div>
+
+      <div className="surface-card p-5">
+        <h3 className="text-base font-semibold text-slate-900">Foydalanuvchi analytics</h3>
+        <div className="mt-3 grid gap-3 md:grid-cols-3">
+          <StatItem label="Faol kurslar" value={String(metrics?.active_courses ?? 0)} />
+          <StatItem label="Jami entitlement" value={String(metrics?.total_entitlements ?? 0)} />
+          <StatItem label="Reytinglar" value={String(metrics?.ratings_count ?? 0)} />
+          <StatItem label="Izohlar" value={String(metrics?.comments_count ?? 0)} />
+          <StatItem label="Like bosganlar" value={String(metrics?.likes_given_count ?? 0)} />
+          <StatItem label="Replylar" value={String(metrics?.replies_count ?? 0)} />
+          <StatItem label="Ko'rilgan darslar" value={String(metrics?.watched_lessons_count ?? 0)} />
+          <StatItem label="Yakunlangan darslar" value={String(metrics?.completed_lessons_count ?? 0)} />
+          <StatItem label="Ko'rilgan sekund" value={String(metrics?.watched_seconds_total ?? 0)} />
+          <StatItem label="Xaridlar soni" value={String(metrics?.purchases_count ?? 0)} />
+          <StatItem label="To'langan summa" value={`${Math.round(metrics?.paid_total_uzs ?? 0).toLocaleString("ru-RU")} so'm`} />
         </div>
       </div>
 
@@ -177,6 +217,67 @@ export default function UserDetailPage() {
           )}
         </div>
       </div>
+
+      <div className="surface-card p-5">
+        <h3 className="text-base font-semibold text-slate-900">So&apos;nggi baholar</h3>
+        <div className="mt-3 space-y-2">
+          {(overview?.recent_ratings ?? []).length > 0 ? (
+            overview!.recent_ratings.map((item, idx) => (
+              <div key={`${item.course_id}-${idx}`} className="rounded-xl bg-slate-50 p-3 text-sm">
+                <p className="font-medium text-slate-900">{item.course_title || item.course_id}</p>
+                <p className="text-slate-600">⭐ {item.stars} · {(item.created_at || "").replace("T", " ").slice(0, 16)}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500">Baholar yo&apos;q.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="surface-card p-5">
+        <h3 className="text-base font-semibold text-slate-900">So&apos;nggi izohlar</h3>
+        <div className="mt-3 space-y-2">
+          {(overview?.recent_comments ?? []).length > 0 ? (
+            overview!.recent_comments.map((item) => (
+              <div key={item.id} className="rounded-xl bg-slate-50 p-3 text-sm">
+                <p className="font-medium text-slate-900">{item.course_key}</p>
+                <p className="text-slate-700">{item.text}</p>
+                <p className="text-slate-500">Like: {item.likes_count} · Reply: {item.replies_count}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500">Izohlar yo&apos;q.</p>
+          )}
+        </div>
+      </div>
+
+      <div className="surface-card p-5">
+        <h3 className="text-base font-semibold text-slate-900">Video progress</h3>
+        <div className="mt-3 space-y-2">
+          {(overview?.progress_items ?? []).length > 0 ? (
+            overview!.progress_items.map((item, idx) => (
+              <div key={`${item.lesson_id}-${idx}`} className="rounded-xl bg-slate-50 p-3 text-sm">
+                <p className="font-medium text-slate-900">{item.course_title || item.course_id}</p>
+                <p className="text-slate-600">
+                  Lesson: {item.lesson_id} · {item.watched_sec}s · {item.completed ? "Tugagan" : "Jarayonda"}
+                </p>
+                <p className="text-slate-500">{(item.updated_at || "").replace("T", " ").slice(0, 16)}</p>
+              </div>
+            ))
+          ) : (
+            <p className="text-sm text-slate-500">Progress yo&apos;q.</p>
+          )}
+        </div>
+      </div>
     </section>
+  );
+}
+
+function StatItem({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="rounded-xl bg-slate-50 p-3">
+      <p className="text-xs text-slate-500">{label}</p>
+      <p className="mt-1 text-lg font-semibold text-slate-900">{value}</p>
+    </div>
   );
 }

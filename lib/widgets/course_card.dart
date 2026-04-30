@@ -14,6 +14,7 @@ class CourseCard extends StatelessWidget {
     required this.priceText,
     required this.progress,
     required this.ratingText,
+    required this.commentCountText,
     required this.videoCountText,
     required this.buttonText,
     required this.buttonColor,
@@ -30,6 +31,7 @@ class CourseCard extends StatelessWidget {
   final String priceText;
   final double progress;
   final String ratingText;
+  final String commentCountText;
   final String videoCountText;
   final String buttonText;
   final Color buttonColor;
@@ -133,38 +135,85 @@ class CourseCard extends StatelessWidget {
                     ),
                     const SizedBox(height: AppSpacing.s8),
                     Row(
+                      crossAxisAlignment: CrossAxisAlignment.end,
                       children: [
-                        const Icon(
-                          Icons.star,
-                          size: 16,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: AppSpacing.s4),
-                        Text(
-                          ratingText,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textPrimary,
+                        Expanded(
+                          child: Wrap(
+                            spacing: 10,
+                            runSpacing: 6,
+                            crossAxisAlignment: WrapCrossAlignment.center,
+                            children: [
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.star,
+                                    size: 16,
+                                    color: Colors.amber,
+                                  ),
+                                  const SizedBox(width: AppSpacing.s4),
+                                  Text(
+                                    ratingText,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                  ),
+                                ],
                               ),
-                        ),
-                        const SizedBox(width: 8),
-                        const Icon(
-                          Icons.videocam_outlined,
-                          size: 16,
-                          color: AppColors.textSecondary,
-                        ),
-                        const SizedBox(width: AppSpacing.s4),
-                        Text(
-                          videoCountText,
-                          style: Theme.of(context).textTheme.bodySmall
-                              ?.copyWith(
-                                fontWeight: FontWeight.w600,
-                                color: AppColors.textSecondary,
+                              InkWell(
+                                onTap: onMessagePressed,
+                                borderRadius: BorderRadius.circular(8),
+                                child: Padding(
+                                  padding: const EdgeInsets.symmetric(
+                                    horizontal: 4,
+                                    vertical: 2,
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      const Icon(
+                                        Icons.chat_bubble_outline,
+                                        size: 16,
+                                        color: AppColors.textSecondary,
+                                      ),
+                                      const SizedBox(width: 4),
+                                      Text(
+                                        commentCountText,
+                                        style: Theme.of(context).textTheme.bodySmall
+                                            ?.copyWith(
+                                              fontWeight: FontWeight.w600,
+                                              color: AppColors.textSecondary,
+                                            ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
                               ),
+                              Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  const Icon(
+                                    Icons.videocam_outlined,
+                                    size: 16,
+                                    color: AppColors.textSecondary,
+                                  ),
+                                  const SizedBox(width: AppSpacing.s4),
+                                  Text(
+                                    videoCountText,
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                  ),
+                                ],
+                              ),
+                            ],
+                          ),
                         ),
                         const SizedBox(width: AppSpacing.s8),
-                        const Spacer(),
                         SizedBox(
                           height: 34,
                           child: FilledButton(

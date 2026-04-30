@@ -1,4 +1,5 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/foundation.dart';
 
 import '../di/providers.dart';
 
@@ -7,10 +8,13 @@ class PurchaseState {
 
   const PurchaseState({required this.purchasedCourseIds});
 
-  bool isPurchased(String courseId) => purchasedCourseIds.contains(courseId);
+  String _normalizeKey(String value) => value.trim().toLowerCase();
 
-  bool isBasePurchased(String courseId, String sectionId) =>
-      purchasedCourseIds.contains(basePurchaseKey(courseId, sectionId));
+  bool isPurchased(String courseId) => purchasedCourseIds.contains(_normalizeKey(courseId));
+
+  bool isBasePurchased(String courseId, String sectionId) => purchasedCourseIds.contains(
+    _normalizeKey(basePurchaseKey(courseId, sectionId)),
+  );
 }
 
 String basePurchaseKey(String courseId, String sectionId) =>
@@ -25,16 +29,24 @@ class PurchaseController extends Notifier<PurchaseState> {
 
   Future<void> syncFromBackend(String userId) async {
     if (userId.isEmpty) return;
-    final items = await ref.read(purchasesRepositoryProvider).fetchUserEntitlements(userId: userId);
-    final keys = <String>{};
-    for (final item in items) {
-      if (item.sectionId != null && item.sectionId!.isNotEmpty && item.courseId != null && item.courseId!.isNotEmpty) {
-        keys.add(basePurchaseKey(item.courseId!, item.sectionId!));
-      } else if (item.courseId != null && item.courseId!.isNotEmpty) {
-        keys.add(item.courseId!);
+    try {
+      final items = await ref.read(purchasesRepositoryProvider).fetchUserEntitlements(userId: userId);
+      final keys = <String>{};
+      for (final item in items) {
+        if (item.sectionId != null &&
+            item.sectionId!.isNotEmpty &&
+            item.courseId != null &&
+            item.courseId!.isNotEmpty) {
+          keys.add(basePurchaseKey(item.courseId!, item.sectionId!).trim().toLowerCase());
+        } else if (item.courseId != null && item.courseId!.isNotEmpty) {
+          keys.add(item.courseId!.trim().toLowerCase());
+        }
       }
+      state = PurchaseState(purchasedCourseIds: keys);
+    } catch (error, stack) {
+      debugPrint('[API][purchases.sync][error] $error\n$stack');
+      // Keep previous purchase state on transient network/backend failures.
     }
-    state = PurchaseState(purchasedCourseIds: keys);
   }
 
   void clear() {
@@ -42,7 +54,9 @@ class PurchaseController extends Notifier<PurchaseState> {
   }
 
   void purchaseCourse(String courseId) {
-    state = PurchaseState(purchasedCourseIds: {...state.purchasedCourseIds, courseId});
+    state = PurchaseState(
+      purchasedCourseIds: {...state.purchasedCourseIds, courseId.trim().toLowerCase()},
+    );
   }
 
   void purchaseBase(String courseId, String sectionId) {

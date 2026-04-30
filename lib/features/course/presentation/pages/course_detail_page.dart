@@ -172,14 +172,16 @@ class _CourseDetailPageState extends ConsumerState<CourseDetailPage> {
             ),
             const SizedBox(height: 10),
             ...course.sections.map((s) {
-              final basePurchased = ref.watch(purchaseControllerProvider).isBasePurchased(course.id, s.id);
+              final purchaseState = ref.watch(purchaseControllerProvider);
+              final basePurchased = purchaseState.isBasePurchased(course.id, s.id);
+              final sectionUnlocked = purchaseState.isPurchased(course.id) || basePurchased;
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: BaseCard(
-                  title: basePurchased ? '${s.titleUz} (sotib olingan)' : s.titleUz,
+                  title: sectionUnlocked ? '${s.titleUz} (sotib olingan)' : s.titleUz,
                   videoCountText: '${s.lessons.length} ta video',
                   onTap: () async {
-                    if (!basePurchased) {
+                    if (!sectionUnlocked) {
                       await showPurchaseModal(
                         context: context,
                         courseName: '${course.titleUz} - ${s.titleUz}',

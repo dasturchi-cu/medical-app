@@ -4,10 +4,12 @@ import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/state/course_stats_state.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../core/state/purchase_controller.dart';
 import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/course_card.dart';
+import '../../../../widgets/course_stats_comments_sheet.dart';
 
 class MyCoursesPage extends ConsumerWidget {
   const MyCoursesPage({super.key});
@@ -20,8 +22,7 @@ class MyCoursesPage extends ConsumerWidget {
 
     final all = repo.getCourses();
     final enrolled = all.where((c) {
-      final p = progress.byCourseId[c.id];
-      return (p?.enrolled ?? false) || purchased.isPurchased(c.id);
+      return purchased.isPurchased(c.id);
     }).toList();
 
     return SafeArea(
@@ -56,6 +57,8 @@ class MyCoursesPage extends ConsumerWidget {
               itemCount: enrolled.length,
               itemBuilder: (context, index) {
                 final c = enrolled[index];
+                final cardStatsAsync = ref.watch(courseCardStatsProvider(c.id));
+                final cardStats = cardStatsAsync.valueOrNull;
                 final p = progress.byCourseId[c.id];
                 final totalLessons = repo.getFlattenLessons(c.id).length;
                 final completed = p?.completedLessonIds.length ?? 0;
@@ -86,10 +89,22 @@ class MyCoursesPage extends ConsumerWidget {
                   imageUrl: c.imageUrl,
                   priceText: c.priceUz,
                   progress: progressValue,
-                  ratingText: c.rating.toStringAsFixed(1),
+                  ratingText: (cardStats?.ratingAvg ?? c.rating).toStringAsFixed(1),
+                  commentCountText: '${cardStats?.commentsCount ?? 0} ta sharh',
                   videoCountText: '$totalLessons ta video',
                   buttonText: buttonText,
                   buttonColor: AppColors.primary,
+                  onMessagePressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      showDragHandle: false,
+                      builder: (_) => CourseStatsCommentsSheet(
+                        courseId: c.id,
+                        courseTitleUz: c.titleUz,
+                      ),
+                    );
+                  },
                   onPressed: () {
                     final firstSection = c.sections.isNotEmpty
                         ? c.sections.first

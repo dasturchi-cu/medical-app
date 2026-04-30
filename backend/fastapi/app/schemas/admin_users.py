@@ -29,3 +29,50 @@ class UserEntitlementItem(BaseModel):
 
 class UserEntitlementsResponse(BaseModel):
     items: list[UserEntitlementItem]
+
+
+class UserOverviewMetrics(BaseModel):
+    active_courses: int = 0
+    total_entitlements: int = 0
+    ratings_count: int = 0
+    comments_count: int = 0
+    likes_given_count: int = 0
+    replies_count: int = 0
+    watched_lessons_count: int = 0
+    completed_lessons_count: int = 0
+    watched_seconds_total: int = 0
+    purchases_count: int = 0
+    paid_total_uzs: float = 0
+
+
+class UserRecentRatingItem(BaseModel):
+    course_id: str
+    course_title: str
+    stars: int
+    created_at: str
+
+
+class UserRecentCommentItem(BaseModel):
+    id: str
+    course_key: str
+    text: str
+    likes_count: int
+    replies_count: int
+    created_at: str
+
+
+class UserProgressItem(BaseModel):
+    lesson_id: str
+    course_id: str
+    course_title: str
+    watched_sec: int
+    completed: bool
+    updated_at: str
+
+
+class UserOverviewResponse(BaseModel):
+    user_id: str
+    metrics: UserOverviewMetrics
+    recent_ratings: list[UserRecentRatingItem]
+    recent_comments: list[UserRecentCommentItem]
+    progress_items: list[UserProgressItem]

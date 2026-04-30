@@ -13,6 +13,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/services/catalog_service.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/banners_state.dart';
+import '../../../../core/state/course_stats_state.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../core/state/slides_state.dart';
 import '../../../../core/theme/design_system.dart';
@@ -125,6 +126,13 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       return c.titleUz.toLowerCase().contains(query) ||
           c.authorUz.toLowerCase().contains(query);
     }).toList();
+    String? catalogLoadError;
+    try {
+      catalogLoadError = CatalogService.lastLoadError;
+    } catch (_) {
+      // Hot-reload paytida eski state qolib ketsa build crash bo'lmasin.
+      catalogLoadError = null;
+    }
     final remoteBanners = bannersAsync.valueOrNull ?? const [];
     final newsItems = remoteBanners
         .map(
@@ -407,14 +415,14 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: CatalogService.lastLoadError != null && allCourses.isEmpty
+              child: catalogLoadError != null && allCourses.isEmpty
                   ? Material(
                       color: const Color(0xFFFFF4E5),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
                         child: Text(
-                          'Kurslar yuklanmadi: ${CatalogService.lastLoadError}\n'
+                          'Kurslar yuklanmadi: $catalogLoadError\n'
                           'Internet va API_BASE_URL ni tekshiring. Pastga torting (yangilash).',
                           style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                 color: const Color(0xFF92400E),
@@ -458,8 +466,16 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                         separatorBuilder: (_, index) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final news = newsItems[index];
+                          final newsStatsAsync = ref.watch(
+                            contentCardStatsProvider(
+                              (key: news.relatedCourseId, useFeedbackApi: news.useFeedbackApi),
+                            ),
+                          );
+                          final newsStats = newsStatsAsync.valueOrNull;
                           return _NewsCard(
                             item: news,
+                            ratingValue: newsStats?.ratingAvg ?? news.rating,
+                            commentCountValue: newsStats?.commentsCount ?? news.commentCount,
                             onCommentsTap: () {
                               showModalBottomSheet(
                                 context: context,
@@ -503,6 +519,8 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
               itemCount: courses.length,
               itemBuilder: (context, index) {
                 final c = courses[index];
+                final cardStatsAsync = ref.watch(courseCardStatsProvider(c.id));
+                final cardStats = cardStatsAsync.valueOrNull;
                 final p = progress.byCourseId[c.id];
                 final totalLessons = repo.getFlattenLessons(c.id).length;
                 final completed = p?.completedLessonIds.length ?? 0;
@@ -546,10 +564,22 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                   imageUrl: c.imageUrl,
                   priceText: c.priceUz,
                   progress: progressValue,
-                  ratingText: c.rating.toStringAsFixed(1),
+                  ratingText: (cardStats?.ratingAvg ?? c.rating).toStringAsFixed(1),
+                  commentCountText: '${cardStats?.commentsCount ?? 0} ta sharh',
                   videoCountText: '$totalLessons ta video',
                   buttonText: buttonText,
                   buttonColor: buttonColor,
+                  onMessagePressed: () {
+                    showModalBottomSheet(
+                      context: context,
+                      isScrollControlled: true,
+                      showDragHandle: false,
+                      builder: (_) => CourseStatsCommentsSheet(
+                        courseId: c.id,
+                        courseTitleUz: c.titleUz,
+                      ),
+                    );
+                  },
                   onPressed: () {
                     ref.read(selectedCourseIdProvider.notifier).state = c.id;
                     ref.read(progressControllerProvider.notifier).enroll(c.id);
@@ -596,11 +626,15 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
 class _NewsCard extends StatelessWidget {
   const _NewsCard({
     required this.item,
+    required this.ratingValue,
+    required this.commentCountValue,
     required this.onCommentsTap,
     required this.onBuyTap,
   });
 
   final _NewsItem item;
+  final double ratingValue;
+  final int commentCountValue;
   final VoidCallback onCommentsTap;
   final VoidCallback onBuyTap;
 
@@ -666,7 +700,7 @@ class _NewsCard extends StatelessWidget {
                       const Icon(Icons.star, size: 16, color: Colors.amber),
                       const SizedBox(width: 4),
                       Text(
-                        item.rating.toStringAsFixed(1),
+                        ratingValue.toStringAsFixed(1),
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           fontWeight: FontWeight.w700,
                         ),
@@ -679,7 +713,7 @@ class _NewsCard extends StatelessWidget {
                       ),
                       const SizedBox(width: 4),
                       Text(
-                        '${item.commentCount} ta sharh',
+                        '$commentCountValue ta sharh',
                         style: Theme.of(context).textTheme.bodySmall?.copyWith(
                           color: AppColors.textSecondary,
                           fontWeight: FontWeight.w700,

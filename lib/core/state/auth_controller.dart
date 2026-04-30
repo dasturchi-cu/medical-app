@@ -72,8 +72,9 @@ class AuthController extends Notifier<AuthState> {
 
   void _startAccessTimer(String userId) {
     _accessTimer?.cancel();
-    _accessTimer = Timer.periodic(const Duration(seconds: 12), (_) {
-      _verifyUserAccess(userId);
+    _accessTimer = Timer.periodic(const Duration(seconds: 12), (_) async {
+      await ref.read(purchaseControllerProvider.notifier).syncFromBackend(userId);
+      await _verifyUserAccess(userId);
     });
     ref.onDispose(() {
       _accessTimer?.cancel();
