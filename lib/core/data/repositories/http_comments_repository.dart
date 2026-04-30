@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/comment_models.dart';
@@ -15,18 +16,31 @@ class HttpCommentsRepository implements CommentsRepository {
   http.Client get _client => client ?? http.Client();
   static const _timeout = Duration(seconds: 8);
 
+  String _errorMessage(String fallback, String body) {
+    try {
+      final parsed = jsonDecode(body);
+      if (parsed is Map<String, dynamic>) {
+        final detail = parsed['detail']?.toString().trim() ?? '';
+        if (detail.isNotEmpty) return detail;
+      }
+    } catch (_) {}
+    return fallback;
+  }
+
   @override
   Future<List<AppCommentItem>> fetchComments({
     required String courseKey,
     required String userId,
   }) async {
     if (baseUrl.isEmpty || courseKey.isEmpty) return const [];
+    debugPrint('[API][comments.fetch][request] courseKey=$courseKey userId=$userId');
     final uri = Uri.parse(
       '$baseUrl/api/v1/comments?course_key=$courseKey&user_id=$userId',
     );
     final response = await _client.get(uri).timeout(_timeout);
+    debugPrint('[API][comments.fetch][response] status=${response.statusCode}');
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Izohlarni olishda xatolik (${response.statusCode}).');
+      throw Exception(_errorMessage('Izohlarni olishda xatolik (${response.statusCode}).', response.body));
     }
     final body = jsonDecode(response.body);
     if (body is! Map<String, dynamic>) {
@@ -50,6 +64,7 @@ class HttpCommentsRepository implements CommentsRepository {
     required String text,
   }) async {
     if (baseUrl.isEmpty || courseKey.isEmpty || userId.isEmpty) return;
+    debugPrint('[API][comments.add][request] courseKey=$courseKey userId=$userId');
     final uri = Uri.parse('$baseUrl/api/v1/comments');
     final response = await _client
         .post(
@@ -63,8 +78,36 @@ class HttpCommentsRepository implements CommentsRepository {
       }),
     )
         .timeout(_timeout);
+    debugPrint('[API][comments.add][response] status=${response.statusCode}');
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Izoh yuborilmadi (${response.statusCode}).');
+      throw Exception(_errorMessage('Izoh yuborilmadi (${response.statusCode}).', response.body));
+    }
+  }
+
+  @override
+  Future<void> addReply({
+    required String commentId,
+    required String userId,
+    required String authorName,
+    required String text,
+  }) async {
+    if (baseUrl.isEmpty || commentId.isEmpty || userId.isEmpty) return;
+    debugPrint('[API][comments.reply][request] commentId=$commentId userId=$userId');
+    final uri = Uri.parse('$baseUrl/api/v1/comments/$commentId/reply');
+    final response = await _client
+        .post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'author_name': authorName,
+        'text': text,
+      }),
+    )
+        .timeout(_timeout);
+    debugPrint('[API][comments.reply][response] status=${response.statusCode}');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(_errorMessage('Javob yuborilmadi (${response.statusCode}).', response.body));
     }
   }
 
@@ -74,6 +117,7 @@ class HttpCommentsRepository implements CommentsRepository {
     required String userId,
   }) async {
     if (baseUrl.isEmpty || commentId.isEmpty || userId.isEmpty) return;
+    debugPrint('[API][comments.like][request] commentId=$commentId userId=$userId');
     final uri = Uri.parse('$baseUrl/api/v1/comments/$commentId/like');
     final response = await _client
         .post(
@@ -82,8 +126,9 @@ class HttpCommentsRepository implements CommentsRepository {
       body: jsonEncode({'user_id': userId}),
     )
         .timeout(_timeout);
+    debugPrint('[API][comments.like][response] status=${response.statusCode}');
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      throw Exception('Like amalida xatolik (${response.statusCode}).');
+      throw Exception(_errorMessage('Like amalida xatolik (${response.statusCode}).', response.body));
     }
   }
 

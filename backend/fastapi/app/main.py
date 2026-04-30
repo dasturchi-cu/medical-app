@@ -1,4 +1,7 @@
-from fastapi import FastAPI
+import logging
+import time
+
+from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.auth import router as auth_router
@@ -20,6 +23,7 @@ from .config import get_settings
 
 settings = get_settings()
 app = FastAPI(title=settings.app_name)
+logger = logging.getLogger(__name__)
 
 app.add_middleware(
     CORSMiddleware,
@@ -44,6 +48,27 @@ app.include_router(ranking_router, prefix=settings.api_prefix)
 app.include_router(mobile_router, prefix=settings.api_prefix)
 app.include_router(courses_router, prefix=settings.api_prefix)
 app.include_router(banners_router, prefix=settings.api_prefix)
+
+
+@app.middleware("http")
+async def log_requests(request: Request, call_next):
+    started = time.perf_counter()
+    logger.info(
+        "api.request method=%s path=%s query=%s",
+        request.method,
+        request.url.path,
+        request.url.query,
+    )
+    response = await call_next(request)
+    elapsed_ms = int((time.perf_counter() - started) * 1000)
+    logger.info(
+        "api.response method=%s path=%s status=%s elapsed_ms=%s",
+        request.method,
+        request.url.path,
+        response.status_code,
+        elapsed_ms,
+    )
+    return response
 
 
 @app.get("/health")

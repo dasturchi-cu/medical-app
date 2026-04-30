@@ -55,3 +55,24 @@ class CourseStatsResponse(BaseModel):
 class CourseRateRequest(BaseModel):
     user_id: str = Field(min_length=1)
     stars: int = Field(ge=1, le=5)
+
+
+class CourseViewTrackRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+    lesson_id: str = Field(min_length=1)
+    watched_sec: int = Field(default=0, ge=0)
+    completed: bool = False
+
+
+class CourseViewTrackResponse(BaseModel):
+    course_id: str
+    views: int
+
+
+class CourseCatalogOpenRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+
+
+class CourseCatalogOpenResponse(BaseModel):
+    course_id: str
+    views: int

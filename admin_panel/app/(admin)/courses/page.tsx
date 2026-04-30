@@ -161,10 +161,6 @@ export default function CoursesPage() {
         return;
       }
       const summary = formValues.summary.trim();
-      if (!summary) {
-        notifyError("Qisqacha tavsifni kiriting.");
-        return;
-      }
       const translated = autoTranslateTitle(title);
       const created = await createCourse({
         ...translated,
@@ -191,10 +187,6 @@ export default function CoursesPage() {
         return;
       }
       const summary = editValues.summary.trim();
-      if (!summary) {
-        notifyError("Qisqacha tavsifni kiriting.");
-        return;
-      }
       const translated = autoTranslateTitle(title);
       const updated = await updateCourse(editCourse.id, {
         ...translated,

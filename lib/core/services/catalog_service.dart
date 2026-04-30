@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
@@ -9,32 +10,61 @@ class CatalogService {
   static List<Course> _courses = const [];
   static const Duration _requestTimeout = Duration(seconds: 12);
 
+  /// Last bootstrap error message (non-null if the last fetch failed or returned no courses).
+  static String? lastLoadError;
+
+  /// True after a successful fetch with a parseable `items` list (may be empty).
+  static bool lastLoadOk = false;
+
   static List<Course> get courses => _courses;
 
   static Future<void> bootstrap({int maxAttempts = 3}) async {
+    lastLoadError = null;
+    lastLoadOk = false;
     final baseUrl = getApiBaseUrl();
-    if (baseUrl.isEmpty) return;
+    if (baseUrl.isEmpty) {
+      lastLoadError = 'API_BASE_URL bo\'sh.';
+      return;
+    }
     final attempts = maxAttempts < 1 ? 1 : maxAttempts;
     for (var i = 0; i < attempts; i++) {
       try {
+        debugPrint('[API][mobile.courses][request] attempt=${i + 1} baseUrl=$baseUrl');
         final response = await http
             .get(Uri.parse('$baseUrl/api/v1/mobile/courses'))
             .timeout(_requestTimeout);
+        debugPrint('[API][mobile.courses][response] status=${response.statusCode}');
         if (response.statusCode < 200 || response.statusCode >= 300) {
+          lastLoadError = 'Katalog HTTP ${response.statusCode}';
           if (i == attempts - 1) return;
           await Future<void>.delayed(Duration(milliseconds: 800 * (i + 1)));
           continue;
         }
         final body = jsonDecode(response.body);
-        if (body is! Map<String, dynamic>) return;
+        if (body is! Map<String, dynamic>) {
+          lastLoadError = 'Katalog javobi JSON emas.';
+          return;
+        }
         final raw = body['items'];
-        if (raw is! List) return;
+        if (raw is! List) {
+          lastLoadError = 'Katalogda items ro\'yxati yo\'q.';
+          return;
+        }
         _courses = raw
             .whereType<Map<String, dynamic>>()
             .map(_toCourse)
             .toList(growable: false);
+        debugPrint('[API][mobile.courses][parsed] courses=${_courses.length}');
+        lastLoadOk = true;
+        if (_courses.isEmpty) {
+          lastLoadError = 'Serverdan faol kurslar ro\'yxati bo\'sh.';
+        } else {
+          lastLoadError = null;
+        }
         return;
-      } catch (_) {
+      } catch (e, st) {
+        lastLoadError = e.toString();
+        debugPrint('[API][mobile.courses][error] $e\n$st');
         if (i == attempts - 1) return;
         await Future<void>.delayed(Duration(milliseconds: 800 * (i + 1)));
       }

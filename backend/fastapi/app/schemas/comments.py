@@ -9,6 +9,8 @@ class AppCommentItem(BaseModel):
     user_id: str
     author_name: str
     text: str
+    parent_id: str | None = None
+    replies_count: int = 0
     likes_count: int
     liked_by_me: bool
     created_at: datetime
@@ -20,6 +22,13 @@ class AppCommentsResponse(BaseModel):
 
 class AddCommentRequest(BaseModel):
     course_key: str = Field(min_length=1)
+    user_id: str = Field(min_length=1)
+    author_name: str = Field(min_length=1, max_length=120)
+    text: str = Field(min_length=1, max_length=2000)
+    parent_id: str | None = None
+
+
+class AddCommentReplyRequest(BaseModel):
     user_id: str = Field(min_length=1)
     author_name: str = Field(min_length=1, max_length=120)
     text: str = Field(min_length=1, max_length=2000)

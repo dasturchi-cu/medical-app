@@ -1,31 +1,70 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 
+import '../../../../core/config/api_config.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
+import '../../../../core/state/auth_controller.dart';
 import '../../../../core/state/purchase_controller.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../widgets/base_card.dart';
 import '../../../../widgets/lesson_item.dart';
 import '../widgets/purchase_modal.dart';
 
-class CourseDetailPage extends ConsumerWidget {
+class CourseDetailPage extends ConsumerStatefulWidget {
   const CourseDetailPage({super.key, required this.courseId});
 
   final String courseId;
 
   @override
-  Widget build(BuildContext context, WidgetRef ref) {
+  ConsumerState<CourseDetailPage> createState() => _CourseDetailPageState();
+}
+
+class _CourseDetailPageState extends ConsumerState<CourseDetailPage> {
+  bool _catalogOpenSent = false;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) => _recordCatalogOpen());
+  }
+
+  Future<void> _recordCatalogOpen() async {
+    if (_catalogOpenSent) return;
+    final auth = ref.read(authControllerProvider);
+    final userId = auth.userId;
+    if (userId == null || userId.isEmpty) return;
+    final baseUrl = getApiBaseUrl();
+    if (baseUrl.isEmpty || widget.courseId.trim().isEmpty) return;
+    _catalogOpenSent = true;
+    try {
+      debugPrint(
+        '[API][courses.catalog_open][request] courseId=${widget.courseId} userId=$userId',
+      );
+      final response = await http
+          .post(
+            Uri.parse('$baseUrl/api/v1/courses/${widget.courseId}/catalog-open'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({'user_id': userId}),
+          )
+          .timeout(const Duration(seconds: 10));
+      debugPrint('[API][courses.catalog_open][response] status=${response.statusCode}');
+    } catch (e) {
+      debugPrint('[API][courses.catalog_open][error] $e');
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
     final repo = ref.watch(courseRepositoryProvider);
-    final course = repo.getCourseById(courseId);
-    final purchased = ref
-        .watch(purchaseControllerProvider)
-        .isPurchased(courseId);
-    final lessons = course == null
-        ? const []
-        : repo.getFlattenLessons(courseId);
+    final course = repo.getCourseById(widget.courseId);
+    final purchased = ref.watch(purchaseControllerProvider).isPurchased(widget.courseId);
+    final lessons = course == null ? const [] : repo.getFlattenLessons(widget.courseId);
     final isDoctorCourse = course?.id == 'course_private_neuro';
 
     if (course == null) {
@@ -58,9 +97,8 @@ class CourseDetailPage extends ConsumerWidget {
                   end: Alignment.bottomRight,
                 ),
               ),
-              child: Stack(
-                children: [
-                ],
+              child: const Stack(
+                children: [],
               ),
             ),
           ),
@@ -75,9 +113,9 @@ class CourseDetailPage extends ConsumerWidget {
           Text(
             course.descriptionUz,
             style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-              color: Colors.black54,
-              height: 1.35,
-            ),
+                  color: Colors.black54,
+                  height: 1.35,
+                ),
           ),
           const SizedBox(height: 10),
           Wrap(
@@ -134,9 +172,7 @@ class CourseDetailPage extends ConsumerWidget {
             ),
             const SizedBox(height: 10),
             ...course.sections.map((s) {
-              final basePurchased = ref
-                  .watch(purchaseControllerProvider)
-                  .isBasePurchased(course.id, s.id);
+              final basePurchased = ref.watch(purchaseControllerProvider).isBasePurchased(course.id, s.id);
               return Padding(
                 padding: const EdgeInsets.only(bottom: 10),
                 child: BaseCard(
@@ -154,9 +190,7 @@ class CourseDetailPage extends ConsumerWidget {
                       return;
                     }
                     ref.read(selectedCourseIdProvider.notifier).state = course.id;
-                    ref
-                        .read(progressControllerProvider.notifier)
-                        .enroll(course.id);
+                    ref.read(progressControllerProvider.notifier).enroll(course.id);
                     context.push(
                       '${AppRoutes.lessonList}?courseId=${course.id}&sectionId=${s.id}',
                     );
@@ -193,11 +227,11 @@ class CourseDetailPage extends ConsumerWidget {
                       );
                       return;
                     }
-                    ref.read(selectedCourseIdProvider.notifier).state =
-                        course.id;
-                    ref
-                        .read(progressControllerProvider.notifier)
-                        .openedLesson(courseId: course.id, lessonId: l.id);
+                    ref.read(selectedCourseIdProvider.notifier).state = course.id;
+                    ref.read(progressControllerProvider.notifier).openedLesson(
+                          courseId: course.id,
+                          lessonId: l.id,
+                        );
                     context.push('${AppRoutes.lesson}?id=${l.id}');
                   },
                 ),
@@ -227,9 +261,7 @@ class CourseDetailPage extends ConsumerWidget {
                 }
                 ref.read(selectedCourseIdProvider.notifier).state = course.id;
                 ref.read(progressControllerProvider.notifier).enroll(course.id);
-                final firstSection = course.sections.isNotEmpty
-                    ? course.sections.first
-                    : null;
+                final firstSection = course.sections.isNotEmpty ? course.sections.first : null;
                 if (firstSection != null) {
                   context.push(
                     '${AppRoutes.lessonList}?courseId=${course.id}&sectionId=${firstSection.id}',

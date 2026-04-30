@@ -10,7 +10,7 @@ import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchAdminComments, deleteAdminComment, type AdminCommentItem } from "@/lib/api/admin-comments";
-import { fetchCourses, type CourseItem } from "@/lib/api/courses";
+import { fetchCourseStats, fetchCourses, type CourseItem, type CourseStatsItem } from "@/lib/api/courses";
 import { fetchLessons, removeLesson, updateLesson, type LessonItem } from "@/lib/api/lessons";
 import { fetchSubscriptionsOverview } from "@/lib/api/subscriptions";
 import { notifyError, notifySuccess } from "@/lib/notify";
@@ -21,6 +21,7 @@ export default function CourseDetailPage() {
   const [lessons, setLessons] = useState<LessonItem[]>([]);
   const [buyers, setBuyers] = useState<Array<{ user_name: string; purchased_at: string }>>([]);
   const [comments, setComments] = useState<AdminCommentItem[]>([]);
+  const [stats, setStats] = useState<CourseStatsItem | null>(null);
   const [loading, setLoading] = useState(true);
   const [editLesson, setEditLesson] = useState<LessonItem | null>(null);
   const [deleteLessonId, setDeleteLessonId] = useState<string | null>(null);
@@ -31,16 +32,18 @@ export default function CourseDetailPage() {
     let mounted = true;
     const load = async () => {
       try {
-        const [courseItems, lessonItems, subscriptions, commentItems] = await Promise.all([
+        const [courseItems, lessonItems, subscriptions, commentItems, courseStats] = await Promise.all([
           fetchCourses(),
           fetchLessons(id),
           fetchSubscriptionsOverview(),
           fetchAdminComments(),
+          fetchCourseStats(id),
         ]);
         if (!mounted) return;
         setCourse(courseItems.find((item) => item.id === id) ?? null);
         setLessons([...lessonItems].sort((a, b) => a.order_no - b.order_no));
         setComments(commentItems.filter((item) => item.course_id === id));
+        setStats(courseStats);
         const buyersForCourse = subscriptions.items.find((item) => item.course_id === id)?.buyers ?? [];
         setBuyers(buyersForCourse.map((item) => ({ user_name: item.user_name, purchased_at: item.purchased_at })));
       } catch (error) {
@@ -56,7 +59,7 @@ export default function CourseDetailPage() {
     };
   }, [id]);
 
-  const avgRating = "0.0";
+  const avgRating = stats ? stats.rating_avg.toFixed(1) : "0.0";
 
   const onEditLesson = (lesson: LessonItem) => {
     setEditLesson(lesson);
@@ -134,7 +137,7 @@ export default function CourseDetailPage() {
             <h3 className="font-semibold text-slate-800">Reyting</h3>
           </div>
           <p className="text-lg font-semibold text-slate-900">{avgRating} ⭐</p>
-          <p className="text-sm text-slate-500">Hozircha alohida ratings API ulanmagan</p>
+          <p className="text-sm text-slate-500">{stats?.rating_count ?? 0} ta baho, {stats?.comments_count ?? 0} ta izoh</p>
         </div>
 
         <div className="surface-card p-4">

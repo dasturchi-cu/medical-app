@@ -22,6 +22,8 @@ def _to_item(row: dict[str, Any], *, liked_by_me: bool) -> AppCommentItem:
         user_id=str(row.get("user_id") or ""),
         author_name=str(row.get("author_name") or ""),
         text=str(row.get("text") or ""),
+        parent_id=str(row.get("parent_id")) if row.get("parent_id") else None,
+        replies_count=int(row.get("replies_count") or 0),
         likes_count=int(row.get("likes_count") or 0),
         liked_by_me=liked_by_me,
         created_at=created,
@@ -33,7 +35,7 @@ def list_comments(client: Client, *, course_key: str, user_id: str | None = None
         client.table("app_comments")
         .select("*")
         .eq("course_key", course_key)
-        .order("created_at", desc=True)
+        .order("created_at", desc=False)
         .limit(200)
         .execute()
     ).data or []
@@ -56,14 +58,31 @@ def list_comments(client: Client, *, course_key: str, user_id: str | None = None
 
 
 def add_comment(client: Client, payload: AddCommentRequest) -> AppCommentItem:
+    parent_id = (payload.parent_id or "").strip() or None
+    resolved_course_key = payload.course_key
+    if parent_id:
+        parent = (
+            client.table("app_comments")
+            .select("id,course_key")
+            .eq("id", parent_id)
+            .limit(1)
+            .execute()
+        ).data or []
+        if not parent:
+            raise RuntimeError("Reply uchun ota izoh topilmadi.")
+        resolved_course_key = str(parent[0].get("course_key") or payload.course_key or "")
+        if not resolved_course_key:
+            raise RuntimeError("Reply uchun course_key aniqlanmadi.")
+
     inserted = (
         client.table("app_comments")
         .insert(
             {
-                "course_key": payload.course_key,
+                "course_key": resolved_course_key,
                 "user_id": payload.user_id,
                 "author_name": payload.author_name.strip(),
                 "text": payload.text.strip(),
+                "parent_id": parent_id,
             }
         )
         .execute()
@@ -71,6 +90,17 @@ def add_comment(client: Client, payload: AddCommentRequest) -> AppCommentItem:
     row = (inserted.data or [None])[0]
     if not row:
         raise RuntimeError("Failed to add comment.")
+    if parent_id:
+        replies_count = int(
+            (
+                client.table("app_comments")
+                .select("id", count="exact")
+                .eq("parent_id", parent_id)
+                .execute()
+            ).count
+            or 0
+        )
+        client.table("app_comments").update({"replies_count": replies_count}).eq("id", parent_id).execute()
     return _to_item(row, liked_by_me=False)
 
 
@@ -86,11 +116,9 @@ def toggle_like(client: Client, *, comment_id: str, user_id: str) -> AppCommentI
 
     if existing:
         client.table("app_comment_likes").delete().eq("comment_id", comment_id).eq("user_id", user_id).execute()
-        delta = -1
         liked = False
     else:
         client.table("app_comment_likes").insert({"comment_id": comment_id, "user_id": user_id}).execute()
-        delta = 1
         liked = True
 
     row_resp = client.table("app_comments").select("*").eq("id", comment_id).limit(1).execute()
@@ -98,7 +126,15 @@ def toggle_like(client: Client, *, comment_id: str, user_id: str) -> AppCommentI
     if not row:
         raise RuntimeError("Comment not found.")
 
-    next_likes = max(0, int(row.get("likes_count") or 0) + delta)
-    updated = client.table("app_comments").update({"likes_count": next_likes}).eq("id", comment_id).execute()
+    likes_count = int(
+        (
+            client.table("app_comment_likes")
+            .select("id", count="exact")
+            .eq("comment_id", comment_id)
+            .execute()
+        ).count
+        or 0
+    )
+    updated = client.table("app_comments").update({"likes_count": likes_count}).eq("id", comment_id).execute()
     updated_row = (updated.data or [row])[0]
     return _to_item(updated_row, liked_by_me=liked)

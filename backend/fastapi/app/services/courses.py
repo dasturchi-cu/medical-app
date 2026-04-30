@@ -37,15 +37,11 @@ def _to_item(row: dict[str, Any]) -> CourseItem:
 
 
 def list_courses(client: Client, *, active_only: bool = False) -> list[CourseItem]:
-    try:
-        query = client.table("courses").select("*").order("created_at", desc=True)
-        if active_only:
-            query = query.eq("is_active", True)
-        rows = query.execute().data or []
-        return [_to_item(row) for row in rows]
-    except Exception as error:
-        logger.warning("Failed to list courses from Supabase: %s", error)
-        return []
+    query = client.table("courses").select("*").order("created_at", desc=True)
+    if active_only:
+        query = query.eq("is_active", True)
+    rows = query.execute().data or []
+    return [_to_item(row) for row in rows]
 
 
 def create_course(client: Client, payload: CourseCreate) -> CourseItem:
@@ -78,6 +74,9 @@ def update_course(client: Client, *, course_id: str, payload: CourseUpdate) -> C
             patch[key] = value.strip() if isinstance(value, str) else value
     if payload.admin_telegram is not None:
         patch["admin_telegram"] = payload.admin_telegram.replace("@", "").strip() or "Neuroscienceadmin"
+
+    if not patch:
+        raise RuntimeError("No fields to update.")
 
     updated = client.table("courses").update(patch).eq("id", course_id).execute()
     row = (updated.data or [None])[0]
@@ -124,15 +123,118 @@ def get_course_rating_summary(client: Client, *, course_id: str, user_id: str | 
 
 
 def upsert_course_rating(client: Client, *, course_id: str, user_id: str, stars: int) -> None:
-    existing = (
-        client.table("ratings")
-        .select("id")
+    try:
+        client.table("ratings").upsert(
+            {"course_id": course_id, "user_id": user_id, "stars": stars},
+            on_conflict="course_id,user_id",
+        ).execute()
+    except Exception as error:
+        logger.warning("ratings upsert failed, falling back to manual update: %s", error)
+        existing = (
+            client.table("ratings")
+            .select("id")
+            .eq("course_id", course_id)
+            .eq("user_id", user_id)
+            .limit(1)
+            .execute()
+        ).data or []
+        if existing:
+            client.table("ratings").update({"stars": stars}).eq("course_id", course_id).eq("user_id", user_id).execute()
+        else:
+            client.table("ratings").insert({"course_id": course_id, "user_id": user_id, "stars": stars}).execute()
+
+
+def recompute_course_views(client: Client, *, course_id: str) -> int:
+    """Unique viewers = users who opened the course (catalog) OR watched >=30s of any lesson."""
+    lesson_rows = client.table("lessons").select("id").eq("course_id", course_id).execute().data or []
+    lesson_ids = [str(row.get("id") or "") for row in lesson_rows if row.get("id")]
+    video_users: set[str] = set()
+    if lesson_ids:
+        rows = (
+            client.table("video_progress")
+            .select("user_id")
+            .in_("lesson_id", lesson_ids)
+            .gte("watched_sec", 30)
+            .execute()
+        ).data or []
+        video_users = {str(row.get("user_id") or "") for row in rows if row.get("user_id")}
+
+    catalog_users: set[str] = set()
+    try:
+        catalog_rows = (
+            client.table("course_catalog_views").select("user_id").eq("course_id", course_id).execute().data or []
+        )
+        catalog_users = {str(row.get("user_id") or "") for row in catalog_rows if row.get("user_id")}
+    except Exception as error:
+        logger.warning("course_catalog_views not available (run migrations?): %s", error)
+
+    viewers = video_users | catalog_users
+    views = len(viewers)
+    client.table("courses").update({"views": views}).eq("id", course_id).execute()
+    return views
+
+
+def record_catalog_view(client: Client, *, course_id: str, user_id: str) -> int:
+    try:
+        client.table("course_catalog_views").upsert(
+            {"course_id": course_id, "user_id": user_id},
+            on_conflict="course_id,user_id",
+        ).execute()
+    except Exception as error:
+        logger.warning("record_catalog_view upsert failed: %s", error)
+    return recompute_course_views(client, course_id=course_id)
+
+
+def track_course_view(
+    client: Client,
+    *,
+    course_id: str,
+    lesson_id: str,
+    user_id: str,
+    watched_sec: int,
+    completed: bool,
+) -> int:
+    lesson = (
+        client.table("lessons")
+        .select("id,course_id")
+        .eq("id", lesson_id)
         .eq("course_id", course_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not lesson:
+        raise RuntimeError("Lesson does not belong to this course.")
+
+    existing = (
+        client.table("video_progress")
+        .select("id,watched_sec,completed")
+        .eq("lesson_id", lesson_id)
         .eq("user_id", user_id)
         .limit(1)
         .execute()
     ).data or []
+    next_watched_sec = watched_sec
+    next_completed = completed
     if existing:
-        client.table("ratings").update({"stars": stars}).eq("course_id", course_id).eq("user_id", user_id).execute()
+        current = existing[0]
+        next_watched_sec = max(int(current.get("watched_sec") or 0), watched_sec)
+        next_completed = bool(current.get("completed")) or completed
+        client.table("video_progress").update(
+            {"watched_sec": next_watched_sec, "completed": next_completed}
+        ).eq("lesson_id", lesson_id).eq("user_id", user_id).execute()
     else:
-        client.table("ratings").insert({"course_id": course_id, "user_id": user_id, "stars": stars}).execute()
+        client.table("video_progress").insert(
+            {"lesson_id": lesson_id, "user_id": user_id, "watched_sec": next_watched_sec, "completed": next_completed}
+        ).execute()
+
+    views = recompute_course_views(client, course_id=course_id)
+    logger.info(
+        "courses.view tracked course_id=%s lesson_id=%s user_id=%s watched_sec=%s completed=%s views=%s",
+        course_id,
+        lesson_id,
+        user_id,
+        next_watched_sec,
+        next_completed,
+        views,
+    )
+    return views

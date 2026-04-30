@@ -5,6 +5,8 @@ class AppCommentItem {
     required this.userId,
     required this.authorName,
     required this.text,
+    required this.parentId,
+    required this.repliesCount,
     required this.likesCount,
     required this.likedByMe,
     required this.createdAt,
@@ -15,6 +17,8 @@ class AppCommentItem {
   final String userId;
   final String authorName;
   final String text;
+  final String? parentId;
+  final int repliesCount;
   final int likesCount;
   final bool likedByMe;
   final DateTime createdAt;
@@ -27,6 +31,8 @@ class AppCommentItem {
       userId: (json['user_id'] ?? '').toString(),
       authorName: (json['author_name'] ?? '').toString(),
       text: (json['text'] ?? '').toString(),
+      parentId: json['parent_id'] == null ? null : (json['parent_id'] ?? '').toString(),
+      repliesCount: int.tryParse((json['replies_count'] ?? '0').toString()) ?? 0,
       likesCount: int.tryParse((json['likes_count'] ?? '0').toString()) ?? 0,
       likedByMe: json['liked_by_me'] == true,
       createdAt: DateTime.tryParse(rawCreated)?.toLocal() ?? DateTime.now(),

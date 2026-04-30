@@ -25,7 +25,7 @@ import '../services/activation_service.dart';
 import '../services/auth_service.dart';
 
 final courseRepositoryProvider = Provider<CourseRepository>((ref) {
-  return MockCourseRepository();
+  return CatalogCourseRepository();
 });
 
 final quizRepositoryProvider = Provider<QuizRepository>((ref) {

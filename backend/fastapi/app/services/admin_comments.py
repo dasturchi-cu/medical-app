@@ -26,6 +26,7 @@ def list_admin_comments(client: Client, *, configured_admin_user_id: str | None 
     if not legacy_comments and not app_comments:
         return []
     comments = list(legacy_comments) + list(app_comments)
+    comments.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
     user_ids = list({str(row.get("user_id")) for row in comments if row.get("user_id")})
     users = (
         client.table("users").select("id,full_name,phone").in_("id", user_ids).execute().data
@@ -105,8 +106,6 @@ def add_admin_reply(client: Client, *, comment_id: str, text: str, configured_ad
             .execute()
         ).data or []
     else:
-        # app_comments jadvalida parent/reply ustuni bo'lmasligi mumkin;
-        # admin javobini shu kursga oddiy izoh sifatida saqlaymiz.
         inserted = (
             client.table("app_comments")
             .insert(
@@ -116,6 +115,7 @@ def add_admin_reply(client: Client, *, comment_id: str, text: str, configured_ad
                     "author_name": "Admin",
                     "text": text.strip(),
                     "likes_count": 0,
+                    "parent_id": comment_id,
                 }
             )
             .execute()
@@ -125,6 +125,17 @@ def add_admin_reply(client: Client, *, comment_id: str, text: str, configured_ad
     item = inserted[0]
     user_name = client.table("users").select("full_name,phone").eq("id", admin_user_id).limit(1).execute().data or []
     author = str((user_name[0].get("full_name") if user_name else "") or (user_name[0].get("phone") if user_name else "") or "Admin")
+    if parent_source == "app_comments":
+        replies_count = int(
+            (
+                client.table("app_comments")
+                .select("id", count="exact")
+                .eq("parent_id", comment_id)
+                .execute()
+            ).count
+            or 0
+        )
+        client.table("app_comments").update({"replies_count": replies_count}).eq("id", comment_id).execute()
     return AdminCommentItem(
         id=str(item.get("id") or ""),
         course_id=str(item.get("course_id") or item.get("course_key") or ""),
@@ -132,7 +143,7 @@ def add_admin_reply(client: Client, *, comment_id: str, text: str, configured_ad
         user_name=author,
         text=str(item.get("text") or ""),
         hearts=int(item.get("hearts_count") or item.get("likes_count") or 0),
-        parent_id=(str(item.get("parent_id") or comment_id) if parent_source == "comments" else None),
+        parent_id=str(item.get("parent_id") or comment_id) if parent_source in {"comments", "app_comments"} else None,
         created_at=str(item.get("created_at") or datetime.utcnow().isoformat()),
         hearted_by_admin=False,
     )
@@ -199,4 +210,19 @@ def delete_admin_comment(client: Client, *, comment_id: str) -> None:
     deleted = client.table("comments").delete().eq("id", comment_id).execute().data or []
     if deleted:
         return
+    target = client.table("app_comments").select("id,parent_id").eq("id", comment_id).limit(1).execute().data or []
+    if not target:
+        return
+    parent_id = str(target[0].get("parent_id") or "")
     client.table("app_comments").delete().eq("id", comment_id).execute()
+    if parent_id:
+        replies_count = int(
+            (
+                client.table("app_comments")
+                .select("id", count="exact")
+                .eq("parent_id", parent_id)
+                .execute()
+            ).count
+            or 0
+        )
+        client.table("app_comments").update({"replies_count": replies_count}).eq("id", parent_id).execute()

@@ -33,6 +33,14 @@ def get_mobile_catalog(client: Client) -> MobileCatalogResponse:
             .execute()
         ).data or []
 
+        ratings_rows = client.table("ratings").select("course_id,stars").execute().data or []
+        ratings_map: dict[str, list[int]] = {}
+        for row in ratings_rows:
+            course_id = str(row.get("course_id") or "")
+            if not course_id:
+                continue
+            ratings_map.setdefault(course_id, []).append(int(row.get("stars") or 0))
+
         lessons_by_section: dict[str, list[MobileLesson]] = {}
         root_lessons_by_course: dict[str, list[MobileLesson]] = {}
         for row in lessons_rows:
@@ -82,6 +90,7 @@ def get_mobile_catalog(client: Client) -> MobileCatalogResponse:
                     ),
                 )
             items.append(
+                # Ratings are resolved on backend to keep mobile/admin in sync.
                 MobileCourse(
                     id=course_id,
                     title_uz=str(row.get("title_uz") or ""),
@@ -91,6 +100,10 @@ def get_mobile_catalog(client: Client) -> MobileCatalogResponse:
                     price_uzs=float(row.get("price_uzs") or 0),
                     image_url=str(row.get("image_url") or ""),
                     description_uz=str(row.get("description_uz") or ""),
+                    rating_avg=round(sum(ratings_map.get(course_id, [])) / len(ratings_map.get(course_id, [])), 2)
+                    if ratings_map.get(course_id)
+                    else 0,
+                    rating_count=len(ratings_map.get(course_id, [])),
                     sections=sections,
                 )
             )

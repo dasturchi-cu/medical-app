@@ -13,6 +13,13 @@ abstract class CommentsRepository {
     required String text,
   });
 
+  Future<void> addReply({
+    required String commentId,
+    required String userId,
+    required String authorName,
+    required String text,
+  });
+
   Future<void> toggleLike({
     required String commentId,
     required String userId,

@@ -2,7 +2,8 @@ import '../../models/course_models.dart';
 import '../../services/catalog_service.dart';
 import 'course_repository.dart';
 
-class MockCourseRepository implements CourseRepository {
+/// Reads the live catalog loaded from `GET /api/v1/mobile/courses` ([CatalogService]).
+class CatalogCourseRepository implements CourseRepository {
   @override
   List<Course> getCourses() => CatalogService.courses;
 

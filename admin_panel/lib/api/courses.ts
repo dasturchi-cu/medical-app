@@ -14,6 +14,15 @@ export interface CourseItem {
   sales: number;
 }
 
+export interface CourseStatsItem {
+  course_id: string;
+  enrolled_count: number;
+  comments_count: number;
+  rating_avg: number;
+  rating_count: number;
+  my_rating: number | null;
+}
+
 function headers() {
   const { adminApiKey } = getApiConfig();
   return {
@@ -72,4 +81,10 @@ export async function removeCourse(courseId: string) {
     headers: headers(),
   });
   if (!response.ok) throw new Error(await parseError(response, "Kurs o'chirilmadi."));
+}
+
+export async function fetchCourseStats(courseId: string) {
+  const response = await apiFetch(`/api/v1/courses/${courseId}/stats`, { cache: "no-store" });
+  if (!response.ok) throw new Error(await parseError(response, "Kurs statistikasi olinmadi."));
+  return (await response.json()) as CourseStatsItem;
 }

@@ -25,11 +25,9 @@ function resolveApiBaseCandidates() {
   if (typeof window !== "undefined") {
     const host = window.location.hostname?.trim();
     if (host) {
-      // Network host (e.g. 192.168.x.x) should be first to avoid remote localhost fetch errors.
       pushCandidate(`http://${host}:8000`);
       if (fromEnv) {
         if (isLocalBase(fromEnv) && host !== "localhost" && host !== "127.0.0.1") {
-          // Deprioritize localhost env on non-local host.
           localhostCandidates.forEach(pushCandidate);
           pushCandidate(fromEnv);
           return candidates;
@@ -62,25 +60,32 @@ export async function apiFetch(path: string, init?: RequestInit) {
   let lastResponse: Response | null = null;
 
   for (const baseUrl of apiBaseCandidates) {
+    const url = `${baseUrl}${normalizedPath}`;
+    console.log("API START", url, init?.method ?? "GET");
     try {
-      const response = await fetch(`${baseUrl}${normalizedPath}`, init);
-      // If one candidate returns server error, try other candidates before failing.
+      const response = await fetch(url, init);
+      let responseData: unknown;
+      try {
+        const text = await response.clone().text();
+        responseData = text ? JSON.parse(text) : null;
+      } catch {
+        responseData = { _nonJson: true };
+      }
+      console.log("API RESPONSE", responseData);
       if (response.status >= 500) {
         lastResponse = response;
         continue;
       }
       return response;
     } catch (error) {
+      console.log("API ERROR", error);
       lastError = error;
     }
   }
   if (lastResponse) return lastResponse;
   const message = lastError instanceof Error ? lastError.message : "Backendga ulanishda xatolik.";
-  return new Response(
-    JSON.stringify({ detail: `Backendga ulanishda xatolik: ${message}` }),
-    {
-      status: 503,
-      headers: { "Content-Type": "application/json" },
-    },
-  );
+  return new Response(JSON.stringify({ detail: `Backendga ulanishda xatolik: ${message}` }), {
+    status: 503,
+    headers: { "Content-Type": "application/json" },
+  });
 }

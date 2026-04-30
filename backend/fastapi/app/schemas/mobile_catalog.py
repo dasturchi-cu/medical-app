@@ -26,6 +26,8 @@ class MobileCourse(BaseModel):
     price_uzs: float
     image_url: str
     description_uz: str
+    rating_avg: float = 0
+    rating_count: int = 0
     sections: list[MobileSection]
 
 

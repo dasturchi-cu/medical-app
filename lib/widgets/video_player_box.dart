@@ -8,10 +8,12 @@ class VideoPlayerBox extends StatefulWidget {
     super.key,
     required this.url,
     required this.height,
+    this.onWatchProgress,
   });
 
   final String url;
   final double height;
+  final void Function(int watchedSec, bool completed)? onWatchProgress;
 
   @override
   State<VideoPlayerBox> createState() => _VideoPlayerBoxState();
@@ -22,6 +24,8 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
   YoutubePlayerController? _youtubeController;
   String? _youtubeId;
   double _speed = 1.0;
+  int _lastReportedSec = 0;
+  bool _completedReported = false;
 
   @override
   void initState() {
@@ -36,20 +40,75 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
           enableCaption: true,
         ),
       );
+      _youtubeController?.addListener(_handleYoutubeProgress);
     } else {
       _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
         ..initialize().then((_) {
           if (!mounted) return;
           setState(() {});
-        });
+        })
+        ..addListener(_handleVideoProgress);
     }
   }
 
   @override
   void dispose() {
+    _emitLatestProgress();
+    _controller?.removeListener(_handleVideoProgress);
+    _youtubeController?.removeListener(_handleYoutubeProgress);
     _controller?.dispose();
     _youtubeController?.dispose();
     super.dispose();
+  }
+
+  void _emitProgress(int watchedSec, bool completed) {
+    final shouldReport = completed
+        ? !_completedReported
+        : watchedSec - _lastReportedSec >= 10;
+    if (!shouldReport || watchedSec <= 0) return;
+    _lastReportedSec = watchedSec;
+    if (completed) _completedReported = true;
+    widget.onWatchProgress?.call(watchedSec, completed);
+  }
+
+  void _handleVideoProgress() {
+    final c = _controller;
+    if (c == null || !c.value.isInitialized) return;
+    final watchedSec = c.value.position.inSeconds;
+    final durationSec = c.value.duration.inSeconds;
+    final completed = durationSec > 0 && watchedSec >= durationSec - 1;
+    _emitProgress(watchedSec, completed);
+  }
+
+  void _handleYoutubeProgress() {
+    final c = _youtubeController;
+    if (c == null) return;
+    final watchedSec = c.value.position.inSeconds;
+    final durationSec = c.metadata.duration.inSeconds;
+    final completed = durationSec > 0 && watchedSec >= durationSec - 1;
+    _emitProgress(watchedSec, completed);
+  }
+
+  void _emitLatestProgress() {
+    final c = _controller;
+    if (c != null && c.value.isInitialized) {
+      final watchedSec = c.value.position.inSeconds;
+      final durationSec = c.value.duration.inSeconds;
+      final completed = durationSec > 0 && watchedSec >= durationSec - 1;
+      if (watchedSec > 0) {
+        widget.onWatchProgress?.call(watchedSec, completed);
+      }
+      return;
+    }
+    final yc = _youtubeController;
+    if (yc != null) {
+      final watchedSec = yc.value.position.inSeconds;
+      final durationSec = yc.metadata.duration.inSeconds;
+      final completed = durationSec > 0 && watchedSec >= durationSec - 1;
+      if (watchedSec > 0) {
+        widget.onWatchProgress?.call(watchedSec, completed);
+      }
+    }
   }
 
   Future<void> _setSpeed(double speed) async {

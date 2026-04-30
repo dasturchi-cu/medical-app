@@ -4,12 +4,14 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
 import '../../../../core/config/api_config.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
+import '../../../../core/state/auth_controller.dart';
 import '../../../../core/state/lesson_slides_state.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../widgets/video_player_box.dart';
@@ -27,6 +29,8 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
   final _slidesController = PageController();
+  int _lastSyncedWatchSec = 0;
+  bool _syncingWatch = false;
 
   @override
   void initState() {
@@ -114,7 +118,18 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
             animation: _tabController,
             builder: (context, _) {
               if (_tabController.index == 0) {
-                return VideoPlayerBox(url: lesson.videoUrl, height: mediaHeight);
+                return VideoPlayerBox(
+                  url: lesson.videoUrl,
+                  height: mediaHeight,
+                  onWatchProgress: (watchedSec, completed) {
+                    if (courseId == null) return;
+                    _syncWatchProgress(
+                      courseId: courseId,
+                      watchedSec: watchedSec,
+                      completed: completed,
+                    );
+                  },
+                );
               }
               return _SlideViewer(
                 slides: renderedSlides,
@@ -223,6 +238,41 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
         ],
       ),
     );
+  }
+
+  Future<void> _syncWatchProgress({
+    required String courseId,
+    required int watchedSec,
+    required bool completed,
+  }) async {
+    final auth = ref.read(authControllerProvider);
+    final userId = auth.userId ?? '';
+    final baseUrl = getApiBaseUrl();
+    if (userId.isEmpty || baseUrl.isEmpty) return;
+    final shouldSync = completed || watchedSec >= _lastSyncedWatchSec + 20;
+    if (!shouldSync || _syncingWatch) return;
+    _syncingWatch = true;
+    _lastSyncedWatchSec = watchedSec;
+    try {
+      debugPrint(
+        '[API][courses.view][request] courseId=$courseId lessonId=${widget.lessonId} userId=$userId watchedSec=$watchedSec completed=$completed',
+      );
+      final response = await http.post(
+        Uri.parse('$baseUrl/api/v1/courses/$courseId/views'),
+        headers: const {'Content-Type': 'application/json'},
+        body: jsonEncode({
+          'user_id': userId,
+          'lesson_id': widget.lessonId,
+          'watched_sec': watchedSec,
+          'completed': completed,
+        }),
+      );
+      debugPrint('[API][courses.view][response] status=${response.statusCode}');
+    } catch (error) {
+      debugPrint('[API][courses.view][error] $error');
+    } finally {
+      _syncingWatch = false;
+    }
   }
 }
 

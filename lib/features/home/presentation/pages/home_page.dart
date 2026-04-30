@@ -40,6 +40,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    Future<void>.microtask(_refreshCatalog);
     _loadingTimer = Timer(const Duration(milliseconds: 650), () {
       if (mounted) setState(() => _loading = false);
     });
@@ -116,7 +117,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       final matchesCategory = switch (selectedCat) {
         'cat_books' => false,
         'cat_nevralogiya' => true,
-        'cat_online' => false,
+        'cat_online' => true,
         _ => false,
       };
       if (!matchesCategory) return false;
@@ -154,7 +155,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
             )
             .toList(growable: false)
         : allCourses
-            .where((c) => c.categoryId == 'cat_online')
             .take(8)
             .map(
               (course) => _NewsItem(
@@ -424,6 +424,28 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
               ),
             ),
           ),
+          SliverToBoxAdapter(
+            child: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: CatalogService.lastLoadError != null && allCourses.isEmpty
+                  ? Material(
+                      color: const Color(0xFFFFF4E5),
+                      borderRadius: BorderRadius.circular(12),
+                      child: Padding(
+                        padding: const EdgeInsets.all(12),
+                        child: Text(
+                          'Kurslar yuklanmadi: ${CatalogService.lastLoadError}\n'
+                          'Internet va API_BASE_URL ni tekshiring. Pastga torting (yangilash).',
+                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                color: const Color(0xFF92400E),
+                                fontWeight: FontWeight.w600,
+                              ),
+                        ),
+                      ),
+                    )
+                  : const SizedBox.shrink(),
+            ),
+          ),
           if (selectedCat == 'cat_online') ...[
             SliverToBoxAdapter(
               child: Padding(
@@ -483,7 +505,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
               ),
             ),
           ],
-          if (selectedCat != 'cat_online') ...[
+          if (selectedCat == 'cat_nevralogiya' || selectedCat == 'cat_online') ...[
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
