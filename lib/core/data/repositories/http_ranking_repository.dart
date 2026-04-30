@@ -1,5 +1,6 @@
 import 'dart:convert';
 
+import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../models/ranking_models.dart';
@@ -13,15 +14,39 @@ class HttpRankingRepository implements RankingRepository {
 
   http.Client get _client => client ?? http.Client();
 
+  String _errorMessage(String fallback, String body) {
+    try {
+      final parsed = jsonDecode(body);
+      if (parsed is Map<String, dynamic>) {
+        final detail = parsed['detail']?.toString().trim() ?? '';
+        if (detail.isNotEmpty) return detail;
+      }
+    } catch (_) {}
+    return fallback;
+  }
+
   @override
   Future<List<RankingItemModel>> fetchRanking({int limit = 50}) async {
-    if (baseUrl.isEmpty) return const [];
-    final response = await _client.get(Uri.parse('$baseUrl/api/v1/ranking?limit=$limit'));
-    if (response.statusCode < 200 || response.statusCode >= 300) return const [];
+    if (baseUrl.isEmpty) {
+      throw Exception('API manzili topilmadi (ranking).');
+    }
+    final uri = Uri.parse('$baseUrl/api/v1/ranking?limit=$limit');
+    debugPrint('[API][ranking.fetch][request] $uri');
+    final response = await _client.get(uri);
+    debugPrint('[API][ranking.fetch][response] status=${response.statusCode}');
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      throw Exception(
+        _errorMessage("Reytingni olishda xatolik (${response.statusCode}).", response.body),
+      );
+    }
     final body = jsonDecode(response.body);
-    if (body is! Map<String, dynamic>) return const [];
+    if (body is! Map<String, dynamic>) {
+      throw Exception('Reyting javobi JSON emas.');
+    }
     final raw = body['items'];
-    if (raw is! List) return const [];
+    if (raw is! List) {
+      throw Exception("Reyting ro'yxati topilmadi.");
+    }
     return raw
         .whereType<Map<String, dynamic>>()
         .map(RankingItemModel.fromJson)

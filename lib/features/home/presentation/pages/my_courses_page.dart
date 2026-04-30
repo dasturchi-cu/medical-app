@@ -5,6 +5,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../core/state/purchase_controller.dart';
 import '../../../../core/theme/design_system.dart';
 import '../../../../widgets/course_card.dart';
 
@@ -15,11 +16,12 @@ class MyCoursesPage extends ConsumerWidget {
   Widget build(BuildContext context, WidgetRef ref) {
     final repo = ref.watch(courseRepositoryProvider);
     final progress = ref.watch(progressControllerProvider);
+    final purchased = ref.watch(purchaseControllerProvider);
 
     final all = repo.getCourses();
     final enrolled = all.where((c) {
       final p = progress.byCourseId[c.id];
-      return (p?.enrolled ?? false);
+      return (p?.enrolled ?? false) || purchased.isPurchased(c.id);
     }).toList();
 
     return SafeArea(

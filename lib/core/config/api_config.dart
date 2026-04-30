@@ -22,6 +22,9 @@ String _normalizeBaseUrl(String input) {
   // Common typo: missing "om" in onrender.com
   value = value.replaceAll('.onrender.c/', '.onrender.com/');
   value = value.replaceAll('.onrender.c', '.onrender.com');
+  // Common typo: double "om" — onrender.comom (e.g. dart-define or env paste error)
+  value = value.replaceAll('.onrender.comom', '.onrender.com');
+  value = value.replaceAll('.onrender.comom/', '.onrender.com/');
 
   if (!value.startsWith('http://') && !value.startsWith('https://')) {
     value = 'https://$value';

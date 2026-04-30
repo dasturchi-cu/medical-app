@@ -16,10 +16,12 @@ class CourseStatsCommentsSheet extends ConsumerStatefulWidget {
     super.key,
     required this.courseId,
     required this.courseTitleUz,
+    this.useFeedbackApi = false,
   });
 
   final String courseId;
   final String courseTitleUz;
+  final bool useFeedbackApi;
 
   @override
   ConsumerState<CourseStatsCommentsSheet> createState() => _CourseStatsCommentsSheetState();
@@ -35,6 +37,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   int _myRating = 0;
   bool _sending = false;
   bool _ratingLoading = false;
+  bool _feedbackApiMissing = false;
   String? _replyToCommentId;
   bool _statsLoading = true;
   String? _statsError;
@@ -75,11 +78,23 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
     try {
       final auth = ref.read(authControllerProvider);
       final userId = auth.userId ?? '';
-      debugPrint('[API][courses.stats][request] courseId=${widget.courseId} userId=$userId');
+      final statsPath = widget.useFeedbackApi
+          ? '/api/v1/feedback/${widget.courseId}/stats?user_id=$userId'
+          : '/api/v1/courses/${widget.courseId}/stats?user_id=$userId';
+      debugPrint('[API][courses.stats][request] path=$statsPath');
       final response = await http
-          .get(Uri.parse('$baseUrl/api/v1/courses/${widget.courseId}/stats?user_id=$userId'))
+          .get(Uri.parse('$baseUrl$statsPath'))
           .timeout(const Duration(seconds: 12));
       debugPrint('[API][courses.stats][response] status=${response.statusCode}');
+      if (widget.useFeedbackApi && response.statusCode == 404) {
+        if (!mounted) return;
+        setState(() {
+          _statsLoading = false;
+          _statsError = null;
+          _feedbackApiMissing = true;
+        });
+        return;
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         throw Exception('Kurs statistikasi yuklanmadi (${response.statusCode}).');
       }
@@ -95,13 +110,14 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       final myRating = rawMy == null ? 0 : (int.tryParse(rawMy.toString()) ?? 0);
       if (!mounted) return;
       setState(() {
-        _enrolledCount = enrolled;
+        _enrolledCount = widget.useFeedbackApi ? 0 : enrolled;
         _commentsCount = comments;
         _ratingAvg = ratingAvg;
         _ratingCount = ratingCount;
         _myRating = myRating;
         _statsLoading = false;
         _statsError = null;
+        _feedbackApiMissing = false;
       });
     } catch (error) {
       debugPrint('[API][courses.stats][error] $error');
@@ -120,16 +136,22 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
     if (userId.isEmpty || baseUrl.isEmpty || widget.courseId.trim().isEmpty) return;
     setState(() => _ratingLoading = true);
     try {
-      debugPrint('[API][courses.rate][request] courseId=${widget.courseId} userId=$userId stars=$stars');
+      final ratePath = widget.useFeedbackApi
+          ? '/api/v1/feedback/${widget.courseId}/rate'
+          : '/api/v1/courses/${widget.courseId}/rate';
+      debugPrint('[API][courses.rate][request] path=$ratePath userId=$userId stars=$stars');
       final response = await http
           .post(
-            Uri.parse('$baseUrl/api/v1/courses/${widget.courseId}/rate'),
+            Uri.parse('$baseUrl$ratePath'),
             headers: const {'Content-Type': 'application/json'},
             body: jsonEncode({'user_id': userId, 'stars': stars}),
           )
           .timeout(const Duration(seconds: 12));
       debugPrint('[API][courses.rate][response] status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (widget.useFeedbackApi && response.statusCode == 404) {
+          throw Exception('Feedback API hali backendda yoq. Backendni yangilang.');
+        }
         var msg = 'Baholash rad etildi (${response.statusCode}).';
         try {
           final b = jsonDecode(response.body);
@@ -224,6 +246,20 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(color: Colors.red.shade800, fontWeight: FontWeight.w600),
                 ),
               )
+            else if (widget.useFeedbackApi)
+              Row(
+                children: [
+                  _StatChip(
+                    icon: Icons.chat_bubble_outline,
+                    label: '$_commentsCount izoh',
+                  ),
+                  const SizedBox(width: 10),
+                  _StatChip(
+                    icon: Icons.star_border,
+                    label: '$_ratingCount baho',
+                  ),
+                ],
+              )
             else
               Row(
                 children: [
@@ -255,7 +291,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                 const SizedBox(width: 8),
                 for (var i = 1; i <= 5; i++)
                   IconButton(
-                    onPressed: _ratingLoading ? null : () => _submitRating(i),
+                    onPressed: _ratingLoading || _feedbackApiMissing ? null : () => _submitRating(i),
                     icon: Icon(
                       i <= _myRating ? Icons.star : Icons.star_border,
                       color: Colors.amber,
@@ -272,6 +308,17 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                 ),
               ],
             ),
+            if (_feedbackApiMissing)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 8),
+                child: Text(
+                  'Yulduzcha baholash backendga hali deploy qilinmagan (feedback endpoint 404).',
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Colors.red.shade800,
+                        fontWeight: FontWeight.w600,
+                      ),
+                ),
+              ),
             const SizedBox(height: 12),
             Text(
               'Izohlar',

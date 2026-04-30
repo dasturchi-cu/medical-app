@@ -117,7 +117,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       final matchesCategory = switch (selectedCat) {
         'cat_books' => false,
         'cat_nevralogiya' => true,
-        'cat_online' => true,
+        'cat_online' => false,
         _ => false,
       };
       if (!matchesCategory) return false;
@@ -126,50 +126,30 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           c.authorUz.toLowerCase().contains(query);
     }).toList();
     final remoteBanners = bannersAsync.valueOrNull ?? const [];
-    final courseIdByTitle = <String, String>{
-      for (final course in allCourses) course.titleUz.trim().toLowerCase(): course.id,
-    };
-    final newsItems = remoteBanners.isNotEmpty
-        ? remoteBanners
-            .map(
-              (banner) {
-                final resolvedCourseId = (banner.courseId ?? '').trim().isNotEmpty
-                    ? (banner.courseId ?? '').trim()
-                    : (courseIdByTitle[banner.title.trim().toLowerCase()] ?? '');
-                return _NewsItem(
-                  titleUz: banner.title,
-                  summaryUz: banner.message.isEmpty
-                      ? 'Kurs bo\'yicha reklama'
-                      : banner.message,
-                  relatedCourseId: resolvedCourseId,
-                  imageUrl: banner.imageUrl.isEmpty
-                      ? 'https://picsum.photos/seed/${banner.id}/600/320'
-                      : banner.imageUrl,
-                  rating: 0,
-                  commentCount: 0,
-                  priceText: banner.priceLabel.isEmpty
-                      ? "299 000 so'm"
-                      : banner.priceLabel,
-                );
-              },
-            )
-            .toList(growable: false)
-        : allCourses
-            .take(8)
-            .map(
-              (course) => _NewsItem(
-                titleUz: course.titleUz,
-                summaryUz: course.descriptionUz.isEmpty
-                    ? '${course.authorUz} kursi haqida qisqacha ma\'lumot.'
-                    : course.descriptionUz,
-                relatedCourseId: course.id,
-                imageUrl: 'https://picsum.photos/seed/${course.id}/600/320',
-                rating: course.rating,
-                commentCount: 0,
-                priceText: course.priceUz,
-              ),
-            )
-            .toList(growable: false);
+    final newsItems = remoteBanners
+        .map(
+          (banner) {
+            final linkedCourseId = (banner.courseId ?? '').trim();
+            return _NewsItem(
+              id: banner.id,
+              titleUz: banner.title,
+              summaryUz: banner.message.isEmpty
+                  ? 'Onlayn kurslar uchun reklama'
+                  : banner.message,
+              relatedCourseId: linkedCourseId.isEmpty ? banner.id : linkedCourseId,
+              useFeedbackApi: linkedCourseId.isEmpty,
+              imageUrl: banner.imageUrl.isEmpty
+                  ? 'https://picsum.photos/seed/${banner.id}/600/320'
+                  : banner.imageUrl,
+              rating: 0,
+              commentCount: 0,
+              priceText: banner.priceLabel.isEmpty
+                  ? "299 000 so'm"
+                  : banner.priceLabel,
+            );
+          },
+        )
+        .toList(growable: false);
     final progress = ref.watch(progressControllerProvider);
 
     return SafeArea(
@@ -461,51 +441,53 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
             SliverToBoxAdapter(
               child: SizedBox(
                 height: 306,
-                child: ListView.separated(
-                  scrollDirection: Axis.horizontal,
-                  padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
-                  itemCount: newsItems.length,
-                  separatorBuilder: (_, index) => const SizedBox(width: 12),
-                  itemBuilder: (context, index) {
-                    final news = newsItems[index];
-                    final relatedCourse = repo.getCourseById(news.relatedCourseId);
-                    return _NewsCard(
-                      item: news,
-                      onCommentsTap: () {
-                        if (news.relatedCourseId.trim().isEmpty) {
-                          ScaffoldMessenger.of(context).showSnackBar(
-                            const SnackBar(content: Text('Bu reklama kursga ulanmagan.')),
+                child: newsItems.isEmpty
+                    ? Center(
+                        child: Text(
+                          'Hozircha reklama joylanmagan',
+                          style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                color: Colors.black54,
+                                fontWeight: FontWeight.w700,
+                              ),
+                        ),
+                      )
+                    : ListView.separated(
+                        scrollDirection: Axis.horizontal,
+                        padding: const EdgeInsets.fromLTRB(16, 10, 16, 6),
+                        itemCount: newsItems.length,
+                        separatorBuilder: (_, index) => const SizedBox(width: 12),
+                        itemBuilder: (context, index) {
+                          final news = newsItems[index];
+                          return _NewsCard(
+                            item: news,
+                            onCommentsTap: () {
+                              showModalBottomSheet(
+                                context: context,
+                                isScrollControlled: true,
+                                showDragHandle: false,
+                                builder: (_) => CourseStatsCommentsSheet(
+                                  courseId: news.relatedCourseId,
+                                  courseTitleUz: news.titleUz,
+                                  useFeedbackApi: news.useFeedbackApi,
+                                ),
+                              );
+                            },
+                            onBuyTap: () async {
+                              await showPurchaseModal(
+                                context: context,
+                                courseName: news.titleUz,
+                                description: news.summaryUz,
+                                price: news.priceText,
+                                courseId: null,
+                              );
+                            },
                           );
-                          return;
-                        }
-                        showModalBottomSheet(
-                          context: context,
-                          isScrollControlled: true,
-                          showDragHandle: false,
-                          builder: (_) => CourseStatsCommentsSheet(
-                            courseId: news.relatedCourseId,
-                            courseTitleUz: news.titleUz,
-                          ),
-                        );
-                      },
-                      onBuyTap: () async {
-                        await showPurchaseModal(
-                          context: context,
-                          courseName: news.titleUz,
-                          description: news.summaryUz,
-                          price: relatedCourse?.priceUz ?? news.priceText,
-                          courseId: news.relatedCourseId.isEmpty
-                              ? null
-                              : news.relatedCourseId,
-                        );
-                      },
-                    );
-                  },
-                ),
+                        },
+                      ),
               ),
             ),
           ],
-          if (selectedCat == 'cat_nevralogiya' || selectedCat == 'cat_online') ...[
+          if (selectedCat == 'cat_nevralogiya') ...[
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.fromLTRB(16, 16, 16, 4),
@@ -735,18 +717,22 @@ class _NewsCard extends StatelessWidget {
 
 class _NewsItem {
   const _NewsItem({
+    required this.id,
     required this.titleUz,
     required this.summaryUz,
     required this.relatedCourseId,
+    required this.useFeedbackApi,
     required this.imageUrl,
     required this.rating,
     required this.commentCount,
     required this.priceText,
   });
 
+  final String id;
   final String titleUz;
   final String summaryUz;
   final String relatedCourseId;
+  final bool useFeedbackApi;
   final String imageUrl;
   final double rating;
   final int commentCount;

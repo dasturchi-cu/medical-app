@@ -12,7 +12,7 @@ import '../data/repositories/http_purchases_repository.dart';
 import '../data/repositories/http_ranking_repository.dart';
 import '../data/repositories/http_slides_repository.dart';
 import '../data/repositories/http_test_attempt_repository.dart';
-import '../data/repositories/mock_course_repository.dart';
+import '../data/repositories/catalog_course_repository.dart';
 import '../data/repositories/mock_quiz_repository.dart';
 import '../data/repositories/notifications_repository.dart';
 import '../data/repositories/purchases_repository.dart';

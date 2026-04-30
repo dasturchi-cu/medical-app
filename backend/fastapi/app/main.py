@@ -14,6 +14,7 @@ from .api.purchases import router as purchases_router
 from .api.ranking import router as ranking_router
 from .api.notifications import router as notifications_router
 from .api.comments import router as comments_router
+from .api.feedback import router as feedback_router
 from .api.lesson_slides import router as lesson_slides_router
 from .api.lessons import router as lessons_router
 from .api.slides import router as slides_router
@@ -38,6 +39,7 @@ app.include_router(auth_router, prefix=settings.api_prefix)
 app.include_router(admin_users_router, prefix=settings.api_prefix)
 app.include_router(admin_comments_router, prefix=settings.api_prefix)
 app.include_router(comments_router, prefix=settings.api_prefix)
+app.include_router(feedback_router, prefix=settings.api_prefix)
 app.include_router(lesson_slides_router, prefix=settings.api_prefix)
 app.include_router(lessons_router, prefix=settings.api_prefix)
 app.include_router(slides_router, prefix=settings.api_prefix)

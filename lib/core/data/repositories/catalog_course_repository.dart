@@ -88,4 +88,3 @@ class CatalogCourseRepository implements CourseRepository {
     return flat;
   }
 }
-
