@@ -5,6 +5,7 @@ from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
 
 from .api.auth import router as auth_router
+from .api.admin_ads import router as admin_ads_router
 from .api.admin_ratings import router as admin_ratings_router
 from .api.admin_users import router as admin_users_router
 from .api.admin_comments import router as admin_comments_router
@@ -37,6 +38,7 @@ app.add_middleware(
 
 app.include_router(notifications_router, prefix=settings.api_prefix)
 app.include_router(auth_router, prefix=settings.api_prefix)
+app.include_router(admin_ads_router, prefix=settings.api_prefix)
 app.include_router(admin_ratings_router, prefix=settings.api_prefix)
 app.include_router(admin_users_router, prefix=settings.api_prefix)
 app.include_router(admin_comments_router, prefix=settings.api_prefix)

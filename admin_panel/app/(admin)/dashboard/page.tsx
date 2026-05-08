@@ -6,7 +6,7 @@ import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { fetchBanners, type BannerItem } from "@/lib/api/banners";
 import { fetchCourses, type CourseItem } from "@/lib/api/courses";
 import { fetchLessons, type LessonItem } from "@/lib/api/lessons";
-import { fetchNotifications } from "@/lib/api/notifications";
+import { fetchUsers } from "@/lib/api/users";
 import { notifyError } from "@/lib/notify";
 
 export default function DashboardPage() {
@@ -20,19 +20,17 @@ export default function DashboardPage() {
     let mounted = true;
     const load = async () => {
       try {
-        const [courseItems, lessonItems, bannerItems, notifications] = await Promise.all([
+        const [courseItems, lessonItems, bannerItems, users] = await Promise.all([
           fetchCourses(),
           fetchLessons(),
           fetchBanners(),
-          fetchNotifications(),
+          fetchUsers(),
         ]);
         if (!mounted) return;
         setCourses(courseItems);
         setLessons(lessonItems);
         setBanners(bannerItems);
-        setUsersCount(
-          notifications.reduce((max, item) => Math.max(max, Number(item.recipients_count) || 0), 0),
-        );
+        setUsersCount(users.length);
       } catch (error) {
         if (!mounted) return;
         notifyError(error instanceof Error ? error.message : "Boshqaruv paneli ma'lumotlarini olishda xatolik.");

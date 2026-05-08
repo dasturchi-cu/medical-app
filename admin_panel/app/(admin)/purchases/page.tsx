@@ -1,19 +1,25 @@
 "use client";
 
 import { useEffect, useMemo, useState } from "react";
-import { fetchSubscriptionsOverview, type CourseSubscriptionItem } from "@/lib/api/subscriptions";
-import { notifyError } from "@/lib/notify";
+import { ConfirmDialog } from "@/components/confirm-dialog";
+import { StatusModal } from "@/components/status-modal";
+import { fetchPurchasesAdmin, revokePurchase, type PurchaseAdminItem } from "@/lib/api/subscriptions";
+import { notifyError, notifySuccess } from "@/lib/notify";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function PurchasesPage() {
   const [loading, setLoading] = useState(true);
-  const [items, setItems] = useState<CourseSubscriptionItem[]>([]);
+  const [items, setItems] = useState<PurchaseAdminItem[]>([]);
   const [search, setSearch] = useState("");
+  const [deleteId, setDeleteId] = useState<string | null>(null);
+  const statusModal = useStatusModal();
+  const runStatus = statusModal.run;
 
   useEffect(() => {
     let mounted = true;
     const load = async () => {
       try {
-        const overview = await fetchSubscriptionsOverview();
+        const overview = await fetchPurchasesAdmin();
         if (!mounted) return;
         setItems(overview.items ?? []);
       } catch (error) {
@@ -31,17 +37,7 @@ export default function PurchasesPage() {
 
   const rows = useMemo(() => {
     const q = search.trim().toLowerCase();
-    return items.flatMap((course) =>
-      course.buyers
-        .filter((buyer) => !q || `${course.course_title} ${buyer.user_name} ${buyer.user_email}`.toLowerCase().includes(q))
-        .map((buyer) => ({
-          id: `${course.course_id}-${buyer.user_id}-${buyer.purchased_at}`,
-          course: course.course_title,
-          user: buyer.user_name,
-          email: buyer.user_email,
-          date: buyer.purchased_at || "manual",
-        })),
-    );
+    return items.filter((item) => !q || `${item.course_title} ${item.user_name} ${item.user_email}`.toLowerCase().includes(q));
   }, [items, search]);
 
   return (
@@ -64,7 +60,7 @@ export default function PurchasesPage() {
           <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Kurs</div>
           <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Foydalanuvchi</div>
           <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Email</div>
-          <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Purchased At</div>
+          <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Xarid vaqti</div>
         </div>
         {loading ? (
           <p className="p-4 text-sm text-slate-500">Yuklanmoqda...</p>
@@ -72,15 +68,48 @@ export default function PurchasesPage() {
           <p className="p-4 text-sm text-slate-500">Sotuv yozuvlari topilmadi.</p>
         ) : (
           rows.map((row) => (
-            <div key={row.id} className="grid grid-cols-1 gap-px border-t border-slate-100 sm:grid-cols-4">
-              <div className="p-3 text-sm text-slate-700">{row.course}</div>
-              <div className="p-3 text-sm text-slate-700">{row.user}</div>
-              <div className="p-3 text-sm text-slate-700">{row.email}</div>
-              <div className="p-3 text-sm text-slate-500">{row.date}</div>
+            <div key={row.entitlement_id} className="grid grid-cols-1 gap-px border-t border-slate-100 sm:grid-cols-4">
+              <div className="p-3 text-sm text-slate-700">{row.course_title}</div>
+              <div className="p-3 text-sm text-slate-700">{row.user_name}</div>
+              <div className="p-3 text-sm text-slate-700">{row.user_email}</div>
+              <div className="flex items-center justify-between gap-2 p-3 text-sm text-slate-500">
+                <span>{row.purchased_at || "manual"}</span>
+                <button
+                  type="button"
+                  className="rounded-lg border border-red-200 px-2 py-1 text-xs text-red-600"
+                  onClick={() => setDeleteId(row.entitlement_id)}
+                >
+                  Bekor qilish
+                </button>
+              </div>
             </div>
           ))
         )}
       </div>
+      <ConfirmDialog
+        open={Boolean(deleteId)}
+        title="Xaridni bekor qilish"
+        description="Ushbu xarid ruxsatini bekor qilmoqchimisiz?"
+        confirmText="Ha, bekor qilish"
+        onCancel={() => setDeleteId(null)}
+        onConfirm={async () => {
+          if (!deleteId) return;
+          try {
+            await runStatus({
+              loadingMessage: "Xarid bekor qilinmoqda...",
+              successMessage: "Xarid muvaffaqiyatli bekor qilindi",
+              errorMessage: "Xaridni bekor qilishda xatolik.",
+              action: async () => revokePurchase(deleteId),
+            });
+            setItems((prev) => prev.filter((item) => item.entitlement_id !== deleteId));
+            setDeleteId(null);
+            notifySuccess("Xarid bekor qilindi.");
+          } catch (error) {
+            notifyError(error instanceof Error ? error.message : "Xaridni bekor qilishda xatolik.");
+          }
+        }}
+      />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

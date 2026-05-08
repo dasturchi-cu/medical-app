@@ -3,7 +3,13 @@ from __future__ import annotations
 import logging
 from supabase import Client
 
-from ..schemas.subscriptions_admin import CourseBuyerItem, CourseSubscriptionItem, SubscriptionsOverviewResponse
+from ..schemas.subscriptions_admin import (
+    CourseBuyerItem,
+    CourseSubscriptionItem,
+    PurchaseAdminItem,
+    PurchasesAdminResponse,
+    SubscriptionsOverviewResponse,
+)
 
 logger = logging.getLogger(__name__)
 
@@ -69,3 +75,50 @@ def get_subscriptions_overview(client: Client) -> SubscriptionsOverviewResponse:
     except Exception as error:
         logger.warning("Failed to build subscriptions overview from Supabase: %s", error)
         return SubscriptionsOverviewResponse(total_course_sales=0, total_unique_buyers=0, items=[])
+
+
+def list_purchases_admin(client: Client, *, query: str = "") -> PurchasesAdminResponse:
+    entitlements = (
+        client.table("user_entitlements")
+        .select("id,user_id,course_id,created_at,is_active")
+        .is_("section_id", None)
+        .order("created_at", desc=True)
+        .execute()
+    ).data or []
+    if not entitlements:
+        return PurchasesAdminResponse(total=0, items=[])
+
+    course_ids = list({str(row.get("course_id") or "") for row in entitlements if row.get("course_id")})
+    user_ids = list({str(row.get("user_id") or "") for row in entitlements if row.get("user_id")})
+    courses_rows = client.table("courses").select("id,title_uz").in_("id", course_ids).execute().data or []
+    users_rows = client.table("users").select("id,full_name,phone").in_("id", user_ids).execute().data or []
+    course_titles = {str(row.get("id")): str(row.get("title_uz") or row.get("id") or "") for row in courses_rows}
+    users_map = {
+        str(row.get("id")): {"name": str(row.get("full_name") or "Foydalanuvchi"), "email": str(row.get("phone") or "")}
+        for row in users_rows
+    }
+
+    q = query.strip().lower()
+    items: list[PurchaseAdminItem] = []
+    for row in entitlements:
+        user_id = str(row.get("user_id") or "")
+        course_id = str(row.get("course_id") or "")
+        user_info = users_map.get(user_id, {"name": "Foydalanuvchi", "email": ""})
+        item = PurchaseAdminItem(
+            entitlement_id=str(row.get("id") or ""),
+            user_id=user_id,
+            user_name=str(user_info["name"]),
+            user_email=str(user_info["email"]),
+            course_id=course_id,
+            course_title=course_titles.get(course_id, course_id),
+            purchased_at=str(row.get("created_at") or ""),
+            is_active=bool(row.get("is_active")),
+        )
+        if q and q not in f"{item.user_name} {item.user_email} {item.course_title} {item.user_id}".lower():
+            continue
+        items.append(item)
+    return PurchasesAdminResponse(total=len(items), items=items)
+
+
+def revoke_purchase_admin(client: Client, *, entitlement_id: str) -> None:
+    client.table("user_entitlements").update({"is_active": False}).eq("id", entitlement_id).execute()
