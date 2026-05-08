@@ -14,6 +14,7 @@ logger = logging.getLogger(__name__)
 def _to_notification_item(row: dict[str, Any]) -> NotificationItem:
     recipients_count = int(row.get("recipients_count") or 0)
     viewed_count = int(row.get("viewed_count") or 0)
+    clicked_count = int(row.get("clicked_count") or 0)
     sent_at = row.get("created_at")
     if isinstance(sent_at, str):
         sent_at_dt = datetime.fromisoformat(sent_at.replace("Z", "+00:00"))
@@ -30,6 +31,7 @@ def _to_notification_item(row: dict[str, Any]) -> NotificationItem:
         sent_at=sent_at_dt,
         recipients_count=recipients_count,
         viewed_count=viewed_count,
+        clicked_count=clicked_count,
     )
 
 
@@ -58,14 +60,28 @@ def list_notifications(client: Client, *, limit: int = 50) -> list[NotificationI
         for delivery in deliveries:
             key = str(delivery["notification_id"])
             if key not in counts:
-                counts[key] = {"recipients_count": 0, "viewed_count": 0}
+                counts[key] = {"recipients_count": 0, "viewed_count": 0, "clicked_count": 0}
             counts[key]["recipients_count"] += 1
             if delivery.get("viewed_at"):
                 counts[key]["viewed_count"] += 1
 
+        click_resp = (
+            client.table("notification_click_events")
+            .select("notification_id")
+            .in_("notification_id", ids)
+            .execute()
+        )
+        for row in click_resp.data or []:
+            key = str(row.get("notification_id") or "")
+            if not key:
+                continue
+            if key not in counts:
+                counts[key] = {"recipients_count": 0, "viewed_count": 0, "clicked_count": 0}
+            counts[key]["clicked_count"] += 1
+
         merged: list[NotificationItem] = []
         for item in notifications:
-            item_counts = counts.get(str(item["id"]), {"recipients_count": 0, "viewed_count": 0})
+            item_counts = counts.get(str(item["id"]), {"recipients_count": 0, "viewed_count": 0, "clicked_count": 0})
             merged.append(_to_notification_item({**item, **item_counts}))
         return merged
     except Exception as error:
@@ -106,6 +122,7 @@ def create_notification(client: Client, payload: NotificationCreate) -> Notifica
             **item,
             "recipients_count": len(users),
             "viewed_count": 0,
+            "clicked_count": 0,
         }
     )
 
@@ -158,3 +175,19 @@ def mark_notification_viewed(client: Client, *, notification_id: str, user_id: s
     client.table("notification_deliveries").update({"viewed_at": datetime.utcnow().isoformat()}).eq(
         "notification_id", notification_id
     ).eq("user_id", user_id).is_("viewed_at", None).execute()
+
+
+def mark_notification_clicked(client: Client, *, notification_id: str, user_id: str) -> None:
+    existing = (
+        client.table("notification_click_events")
+        .select("id")
+        .eq("notification_id", notification_id)
+        .eq("user_id", user_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if existing:
+        return
+    client.table("notification_click_events").insert(
+        {"notification_id": notification_id, "user_id": user_id}
+    ).execute()

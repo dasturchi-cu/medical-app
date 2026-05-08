@@ -3,6 +3,7 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 
 from .api.auth import router as auth_router
 from .api.admin_ads import router as admin_ads_router
@@ -11,6 +12,7 @@ from .api.admin_users import router as admin_users_router
 from .api.admin_comments import router as admin_comments_router
 from .api.banners import router as banners_router
 from .api.courses import router as courses_router
+from .api.content_assets import router as content_assets_router
 from .api.mobile import router as mobile_router
 from .api.purchases import router as purchases_router
 from .api.ranking import router as ranking_router
@@ -54,6 +56,7 @@ app.include_router(ranking_router, prefix=settings.api_prefix)
 app.include_router(mobile_router, prefix=settings.api_prefix)
 app.include_router(courses_router, prefix=settings.api_prefix)
 app.include_router(banners_router, prefix=settings.api_prefix)
+app.include_router(content_assets_router, prefix=settings.api_prefix)
 
 
 @app.middleware("http")
@@ -65,7 +68,21 @@ async def log_requests(request: Request, call_next):
         request.url.path,
         request.url.query,
     )
-    response = await call_next(request)
+    try:
+        response = await call_next(request)
+    except Exception as error:
+        elapsed_ms = int((time.perf_counter() - started) * 1000)
+        logger.exception(
+            "api.error method=%s path=%s elapsed_ms=%s error=%s",
+            request.method,
+            request.url.path,
+            elapsed_ms,
+            error,
+        )
+        return JSONResponse(
+            status_code=500,
+            content={"detail": "Server ichki xatoligi. Iltimos keyinroq qayta urinib ko'ring."},
+        )
     elapsed_ms = int((time.perf_counter() - started) * 1000)
     logger.info(
         "api.response method=%s path=%s status=%s elapsed_ms=%s",

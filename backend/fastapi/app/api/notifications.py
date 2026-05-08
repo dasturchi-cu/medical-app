@@ -3,6 +3,7 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 from ..config import Settings, get_settings
 from ..db import get_supabase_client
 from ..schemas.notifications import (
+    MarkClickedRequest,
     MarkViewedRequest,
     NotificationCreate,
     NotificationCreateResponse,
@@ -15,6 +16,7 @@ from ..services.notifications import (
     list_user_notification_feed,
     list_notifications,
     mark_notification_viewed,
+    mark_notification_clicked,
 )
 
 router = APIRouter(prefix="/notifications", tags=["notifications"])
@@ -71,3 +73,11 @@ def set_notification_viewed(
     payload: MarkViewedRequest,
 ):
     mark_notification_viewed(get_supabase_client(), notification_id=notification_id, user_id=str(payload.user_id))
+
+
+@router.post("/{notification_id}/click", status_code=status.HTTP_204_NO_CONTENT)
+def set_notification_clicked(
+    notification_id: str,
+    payload: MarkClickedRequest,
+):
+    mark_notification_clicked(get_supabase_client(), notification_id=notification_id, user_id=str(payload.user_id))

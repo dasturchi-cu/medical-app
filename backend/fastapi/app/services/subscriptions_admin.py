@@ -120,5 +120,48 @@ def list_purchases_admin(client: Client, *, query: str = "") -> PurchasesAdminRe
     return PurchasesAdminResponse(total=len(items), items=items)
 
 
-def revoke_purchase_admin(client: Client, *, entitlement_id: str) -> None:
+def revoke_purchase_admin(client: Client, *, entitlement_id: str) -> dict[str, str | bool]:
+    row = (
+        client.table("user_entitlements")
+        .select("id,user_id,course_id,is_active")
+        .eq("id", entitlement_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not row:
+        return {"revoked": False, "notification_sent": False, "detail": "Entitlement topilmadi."}
+    target = row[0]
     client.table("user_entitlements").update({"is_active": False}).eq("id", entitlement_id).execute()
+    user_id = str(target.get("user_id") or "")
+    notification_sent = False
+    if user_id:
+        inserted = (
+            client.table("notifications")
+            .insert(
+                {
+                    "title": "Kurs bekor qilindi",
+                    "message": "Kurs bekor qilindi. Qayta olish uchun admin bilan bog'laning.",
+                    "image_url": "",
+                    "created_by": "admin_panel",
+                }
+            )
+            .execute()
+        ).data or []
+        if inserted:
+            notification_id = str(inserted[0].get("id") or "")
+            if notification_id:
+                client.table("notification_deliveries").insert(
+                    {"notification_id": notification_id, "user_id": user_id}
+                ).execute()
+                notification_sent = True
+    client.table("audit_logs").insert(
+        {
+            "actor_type": "admin",
+            "actor_id": "admin_panel",
+            "action": "purchase_revoked",
+            "entity_type": "user_entitlements",
+            "entity_id": entitlement_id,
+            "metadata": {"user_id": user_id, "course_id": str(target.get("course_id") or "")},
+        }
+    ).execute()
+    return {"revoked": True, "notification_sent": notification_sent, "detail": "Xarid bekor qilindi."}

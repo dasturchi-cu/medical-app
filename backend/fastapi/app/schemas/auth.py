@@ -13,9 +13,11 @@ class AuthUserResponse(BaseModel):
     user_id: str
     phone: str
     full_name: str
+    session_token: str
 
 
 class UserStatusResponse(BaseModel):
     user_id: str
     is_blocked: bool
     admin_contact: str
+    session_active: bool = True

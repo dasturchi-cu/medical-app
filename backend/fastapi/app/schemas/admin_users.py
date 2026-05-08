@@ -61,6 +61,8 @@ class UserRecentRatingItem(BaseModel):
 class UserRecentCommentItem(BaseModel):
     id: str
     course_key: str
+    course_title: str = ""
+    lesson_title: str = ""
     text: str
     likes_count: int
     replies_count: int
@@ -69,6 +71,7 @@ class UserRecentCommentItem(BaseModel):
 
 class UserProgressItem(BaseModel):
     lesson_id: str
+    lesson_title: str = ""
     course_id: str
     course_title: str
     watched_sec: int

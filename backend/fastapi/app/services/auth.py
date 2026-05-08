@@ -1,6 +1,7 @@
 from __future__ import annotations
 
 from datetime import datetime
+import secrets
 
 from fastapi import HTTPException, status
 from supabase import Client
@@ -97,20 +98,70 @@ def mobile_login(client: Client, payload: MobileLoginRequest, *, admin_contact: 
         if missing:
             client.table("notification_deliveries").insert(missing).execute()
 
+    session_token = secrets.token_urlsafe(32)
+    existing_sessions = (
+        client.table("auth_sessions")
+        .select("id")
+        .eq("user_id", user_id)
+        .eq("device_id", payload.device_id)
+        .limit(1)
+        .execute()
+    ).data or []
+    if existing_sessions:
+        client.table("auth_sessions").update(
+            {
+                "session_token": session_token,
+                "is_active": True,
+                "invalidated_at": None,
+                "invalidated_reason": "",
+                "last_seen_at": datetime.utcnow().isoformat(),
+            }
+        ).eq("id", existing_sessions[0]["id"]).execute()
+    else:
+        client.table("auth_sessions").insert(
+            {
+                "user_id": user_id,
+                "device_id": payload.device_id,
+                "session_token": session_token,
+                "is_active": True,
+                "last_seen_at": datetime.utcnow().isoformat(),
+            }
+        ).execute()
+
     return AuthUserResponse(
         user_id=user_id,
         phone=phone,
         full_name=str(user.get("full_name") or ""),
+        session_token=session_token,
     )
 
 
-def get_user_status(client: Client, *, user_id: str, admin_contact: str = "Neuroscienceadmin") -> UserStatusResponse:
+def get_user_status(
+    client: Client,
+    *,
+    user_id: str,
+    admin_contact: str = "Neuroscienceadmin",
+    session_token: str | None = None,
+) -> UserStatusResponse:
     user_resp = client.table("users").select("id,is_blocked").eq("id", user_id).limit(1).execute()
     user = (user_resp.data or [None])[0]
     if user is None:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User topilmadi.")
+    session_active = True
+    if session_token and session_token.strip():
+        session = (
+            client.table("auth_sessions")
+            .select("id,is_active")
+            .eq("user_id", user_id)
+            .eq("session_token", session_token.strip())
+            .limit(1)
+            .execute()
+        ).data or []
+        session_active = bool(session and session[0].get("is_active"))
+
     return UserStatusResponse(
         user_id=str(user.get("id") or user_id),
         is_blocked=bool(user.get("is_blocked")),
         admin_contact=admin_contact,
+        session_active=session_active,
     )

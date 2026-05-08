@@ -12,6 +12,7 @@ from ..schemas.tests import (
     QuizItem,
     QuizQuestionCreate,
     QuizQuestionItem,
+    QuizQuestionUpdate,
 )
 
 
@@ -130,6 +131,25 @@ def add_question(client: Client, *, quiz_id: str, payload: QuizQuestionCreate) -
     if not row:
         raise RuntimeError("Failed to add question.")
     return _to_question_item(row)
+
+
+def update_question(client: Client, *, question_id: str, payload: QuizQuestionUpdate) -> QuizQuestionItem:
+    patch: dict[str, Any] = {}
+    for key in ["question_text", "option_a", "option_b", "option_c", "option_d", "correct_option", "order_no"]:
+        value = getattr(payload, key)
+        if value is not None:
+            patch[key] = value.strip() if isinstance(value, str) else value
+    if not patch:
+        raise RuntimeError("No fields to update.")
+    updated = client.table("quiz_questions").update(patch).eq("id", question_id).execute()
+    row = (updated.data or [None])[0]
+    if not row:
+        raise RuntimeError("Question not found.")
+    return _to_question_item(row)
+
+
+def delete_question(client: Client, *, question_id: str) -> None:
+    client.table("quiz_questions").delete().eq("id", question_id).execute()
 
 
 def _ensure_rank_row(client: Client, *, user_id: str) -> dict[str, Any]:

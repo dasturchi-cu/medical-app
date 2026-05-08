@@ -16,6 +16,7 @@ class NotificationItem(BaseModel):
     sent_at: datetime
     recipients_count: int
     viewed_count: int
+    clicked_count: int
 
 
 class NotificationListResponse(BaseModel):
@@ -40,4 +41,8 @@ class NotificationFeedResponse(BaseModel):
 
 
 class MarkViewedRequest(BaseModel):
+    user_id: str
+
+
+class MarkClickedRequest(BaseModel):
     user_id: str

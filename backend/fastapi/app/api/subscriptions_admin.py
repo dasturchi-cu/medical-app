@@ -28,6 +28,6 @@ def get_purchases(search: str = "", _: None = Depends(_require_admin_key)):
     return list_purchases_admin(get_supabase_client(), query=search)
 
 
-@router.delete("/purchases/{entitlement_id}", status_code=status.HTTP_204_NO_CONTENT)
+@router.delete("/purchases/{entitlement_id}", status_code=status.HTTP_200_OK)
 def remove_purchase(entitlement_id: str, _: None = Depends(_require_admin_key)):
-    revoke_purchase_admin(get_supabase_client(), entitlement_id=entitlement_id)
+    return revoke_purchase_admin(get_supabase_client(), entitlement_id=entitlement_id)

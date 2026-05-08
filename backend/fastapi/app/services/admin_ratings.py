@@ -57,3 +57,28 @@ def reset_admin_ratings(client: Client, *, course_id: str | None = None, user_id
         query = query.eq("user_id", user_id)
     response = query.execute()
     return len(response.data or [])
+
+
+def get_admin_ratings_analytics(client: Client) -> dict[str, float | int]:
+    rows = client.table("ratings").select("stars").execute().data or []
+    total = len(rows)
+    if total == 0:
+        return {
+            "total_ratings": 0,
+            "average_stars": 0.0,
+            "five_star_count": 0,
+            "four_star_count": 0,
+            "low_rating_count": 0,
+        }
+    stars = [int(row.get("stars") or 0) for row in rows]
+    five = len([value for value in stars if value == 5])
+    four = len([value for value in stars if value == 4])
+    low = len([value for value in stars if value <= 3])
+    avg = sum(stars) / total
+    return {
+        "total_ratings": total,
+        "average_stars": round(avg, 2),
+        "five_star_count": five,
+        "four_star_count": four,
+        "low_rating_count": low,
+    }

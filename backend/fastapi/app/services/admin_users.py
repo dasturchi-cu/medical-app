@@ -23,17 +23,43 @@ logger = logging.getLogger(__name__)
 def list_admin_users(client: Client) -> list[AdminUserItem]:
     try:
         rows = client.table("users").select("*").order("created_at", desc=False).execute().data or []
+        user_ids = [str(row.get("id")) for row in rows if row.get("id")]
+        sessions = (
+            client.table("auth_sessions")
+            .select("user_id")
+            .in_("user_id", user_ids)
+            .execute()
+        ).data if user_ids else []
+        devices = (
+            client.table("user_devices")
+            .select("user_id")
+            .in_("user_id", user_ids)
+            .execute()
+        ).data if user_ids else []
+        session_count_map: dict[str, int] = {}
+        app_open_map: dict[str, int] = {}
+        for row in sessions or []:
+            key = str(row.get("user_id") or "")
+            if not key:
+                continue
+            session_count_map[key] = session_count_map.get(key, 0) + 1
+        for row in devices or []:
+            key = str(row.get("user_id") or "")
+            if not key:
+                continue
+            app_open_map[key] = app_open_map.get(key, 0) + 1
         items: list[AdminUserItem] = []
         for row in rows:
             created = str(row.get("created_at") or "")
+            row_user_id = str(row.get("id") or "")
             items.append(
                 AdminUserItem(
-                    id=str(row.get("id") or ""),
+                    id=row_user_id,
                     name=str(row.get("full_name") or "Foydalanuvchi"),
                     email=str(row.get("phone") or ""),
                     registration_date=created[:10] if created else "",
-                    login_count=0,
-                    app_open_count=0,
+                    login_count=session_count_map.get(row_user_id, 0),
+                    app_open_count=app_open_map.get(row_user_id, 0),
                     is_blocked=bool(row.get("is_blocked")),
                 )
             )
@@ -219,10 +245,18 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         )
         for row in ratings
     ]
+    lesson_ids = [str(row.get("lesson_id") or "") for row in progress_rows if row.get("lesson_id")]
+    lessons_map: dict[str, str] = {}
+    if lesson_ids:
+        lesson_rows = client.table("lessons").select("id,title").in_("id", lesson_ids).execute().data or []
+        lessons_map = {str(row.get("id")): str(row.get("title") or row.get("id") or "") for row in lesson_rows}
+
     recent_comments = [
         UserRecentCommentItem(
             id=str(row.get("id") or ""),
             course_key=str(row.get("course_key") or ""),
+            course_title=courses_map.get(str(row.get("course_key") or ""), str(row.get("course_key") or "")),
+            lesson_title="",
             text=str(row.get("text") or ""),
             likes_count=int(row.get("likes_count") or 0),
             replies_count=int(row.get("replies_count") or 0),
@@ -235,6 +269,7 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
             lesson_id=str(row.get("lesson_id") or ""),
             course_id=str((row.get("lessons") or {}).get("course_id") or ""),
             course_title=courses_map.get(str((row.get("lessons") or {}).get("course_id") or ""), str((row.get("lessons") or {}).get("course_id") or "")),
+            lesson_title=lessons_map.get(str(row.get("lesson_id") or ""), str(row.get("lesson_id") or "")),
             watched_sec=int(row.get("watched_sec") or 0),
             completed=bool(row.get("completed")),
             updated_at=str(row.get("updated_at") or ""),

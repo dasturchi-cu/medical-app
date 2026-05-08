@@ -22,6 +22,16 @@ class QuizQuestionCreate(BaseModel):
     order_no: int = Field(default=1, ge=1)
 
 
+class QuizQuestionUpdate(BaseModel):
+    question_text: str | None = Field(default=None, min_length=1, max_length=500)
+    option_a: str | None = Field(default=None, min_length=1, max_length=250)
+    option_b: str | None = Field(default=None, min_length=1, max_length=250)
+    option_c: str | None = Field(default=None, min_length=1, max_length=250)
+    option_d: str | None = Field(default=None, min_length=1, max_length=250)
+    correct_option: str | None = Field(default=None, pattern="^[ABCD]$")
+    order_no: int | None = Field(default=None, ge=1)
+
+
 class QuizItem(BaseModel):
     id: str
     title: str

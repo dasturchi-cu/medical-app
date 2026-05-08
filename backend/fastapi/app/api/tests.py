@@ -11,9 +11,10 @@ from ..schemas.tests import (
     QuizListResponse,
     QuizQuestionCreate,
     QuizQuestionItem,
+    QuizQuestionUpdate,
     QuizQuestionsResponse,
 )
-from ..services.tests import add_question, create_attempt, create_quiz, delete_quiz, list_questions, list_quizzes
+from ..services.tests import add_question, create_attempt, create_quiz, delete_question, delete_quiz, list_questions, list_quizzes, update_question
 from ..services.tests import get_quiz
 
 router = APIRouter(prefix="/tests", tags=["tests"])
@@ -71,6 +72,23 @@ def post_test_question(
     _: None = Depends(_require_admin_key),
 ):
     return add_question(get_supabase_client(), quiz_id=quiz_id, payload=payload)
+
+
+@router.patch("/questions/{question_id}", response_model=QuizQuestionItem)
+def patch_test_question(
+    question_id: str,
+    payload: QuizQuestionUpdate,
+    _: None = Depends(_require_admin_key),
+):
+    return update_question(get_supabase_client(), question_id=question_id, payload=payload)
+
+
+@router.delete("/questions/{question_id}", status_code=status.HTTP_204_NO_CONTENT)
+def remove_test_question(
+    question_id: str,
+    _: None = Depends(_require_admin_key),
+):
+    delete_question(get_supabase_client(), question_id=question_id)
 
 
 @router.post("/{quiz_id}/attempts", response_model=QuizAttemptResponse, status_code=status.HTTP_201_CREATED)

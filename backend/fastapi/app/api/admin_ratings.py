@@ -2,8 +2,8 @@ from fastapi import APIRouter, Depends, Header, HTTPException, Query, status
 
 from ..config import Settings, get_settings
 from ..db import get_supabase_client
-from ..schemas.admin_ratings import AdminRatingsResetRequest, AdminRatingsResponse, AdminRatingUpdateRequest
-from ..services.admin_ratings import delete_admin_rating, list_admin_ratings, reset_admin_ratings, update_admin_rating
+from ..schemas.admin_ratings import AdminRatingsAnalyticsResponse, AdminRatingsResetRequest, AdminRatingsResponse, AdminRatingUpdateRequest
+from ..services.admin_ratings import delete_admin_rating, get_admin_ratings_analytics, list_admin_ratings, reset_admin_ratings, update_admin_rating
 
 router = APIRouter(prefix="/admin/ratings", tags=["admin-ratings"])
 
@@ -27,6 +27,11 @@ def get_ratings(
 ):
     items, total = list_admin_ratings(get_supabase_client(), query=search, page=page, page_size=page_size)
     return AdminRatingsResponse(items=items, total=total)
+
+
+@router.get("/analytics", response_model=AdminRatingsAnalyticsResponse)
+def get_ratings_analytics(_: None = Depends(_require_admin_key)):
+    return AdminRatingsAnalyticsResponse(**get_admin_ratings_analytics(get_supabase_client()))
 
 
 @router.delete("/{rating_id}", status_code=status.HTTP_204_NO_CONTENT)
