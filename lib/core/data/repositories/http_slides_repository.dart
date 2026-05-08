@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase/supabase.dart';
 
 import '../models/slide_models.dart';
 import 'slides_repository.dart';
@@ -11,10 +12,12 @@ class HttpSlidesRepository implements SlidesRepository {
   HttpSlidesRepository({
     required this.baseUrl,
     this.client,
+    this.realtimeClient,
   });
 
   final String baseUrl;
   final http.Client? client;
+  final SupabaseClient? realtimeClient;
 
   http.Client get _client => client ?? http.Client();
 
@@ -60,8 +63,41 @@ class HttpSlidesRepository implements SlidesRepository {
   @override
   Stream<List<HomeSlideItem>> watchSlides({
     Duration pollInterval = const Duration(seconds: 8),
-  }) async* {
-    yield await fetchSlides();
-    yield* Stream.periodic(pollInterval).asyncMap((_) => fetchSlides());
+  }) {
+    final controller = StreamController<List<HomeSlideItem>>();
+    RealtimeChannel? channel;
+    Timer? poller;
+    var disposed = false;
+
+    Future<void> push() async {
+      if (disposed) return;
+      controller.add(await fetchSlides());
+    }
+
+    Future<void> boot() async {
+      await push();
+      final client = realtimeClient;
+      if (client != null) {
+        channel = client
+            .channel('app-home-slides')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'slides',
+              callback: (_) => unawaited(push()),
+            )
+            .subscribe();
+      }
+      poller = Timer.periodic(pollInterval, (_) => unawaited(push()));
+    }
+
+    unawaited(boot());
+    controller.onCancel = () async {
+      disposed = true;
+      poller?.cancel();
+      if (channel != null) await realtimeClient?.removeChannel(channel!);
+      await controller.close();
+    };
+    return controller.stream;
   }
 }

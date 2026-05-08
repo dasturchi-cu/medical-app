@@ -7,6 +7,7 @@ import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
 import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { StatusModal } from "@/components/status-modal";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -15,6 +16,8 @@ import { Select, SelectContent, SelectItem, SelectTrigger, SelectValue } from "@
 import { fetchCourses, type CourseItem } from "@/lib/api/courses";
 import { createSlide, deleteSlide, fetchSlides, type SlideItem, updateSlide } from "@/lib/api/slides";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function HomeBannersPage() {
   const [courses, setCourses] = useState<CourseItem[]>([]);
@@ -34,10 +37,12 @@ export default function HomeBannersPage() {
     image: "",
     course_id: "",
   });
+  const statusModal = useStatusModal();
+  const runStatus = statusModal.run;
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
         const [courseItems, slideItems] = await Promise.all([fetchCourses(), fetchSlides()]);
         if (!mounted) return;
@@ -45,15 +50,25 @@ export default function HomeBannersPage() {
         setHomeBanners(slideItems);
         setFormValues((prev) => ({ ...prev, course_id: prev.course_id || courseItems[0]?.id || "" }));
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Home reklamalarni olishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void load();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-home-slides-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "home_slides" }, () => {
+        void load(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, []);
 
@@ -117,13 +132,18 @@ export default function HomeBannersPage() {
       return;
     }
     try {
-      const created = await createSlide({
-        title: formValues.title.trim(),
-        subtitle: "",
-        image_url: formValues.image.trim(),
-        button_text: formValues.button_text.trim() || "Boshlash",
-        course_id: formValues.course_id || null,
-        order_no: homeBanners.length + 1,
+      const created = await runStatus({
+        loadingMessage: "Home reklama saqlanmoqda...",
+        successMessage: "Home reklama muvaffaqiyatli saqlandi",
+        errorMessage: "Home reklama qo'shilmadi.",
+        action: async () => createSlide({
+          title: formValues.title.trim(),
+          subtitle: "",
+          image_url: formValues.image.trim(),
+          button_text: formValues.button_text.trim() || "Boshlash",
+          course_id: formValues.course_id || null,
+          order_no: homeBanners.length + 1,
+        }),
       });
       setHomeBanners((prev) => [...prev, created]);
       notifySuccess("Home reklama muvaffaqiyatli qo'shildi.");
@@ -150,11 +170,16 @@ export default function HomeBannersPage() {
       return;
     }
     try {
-      const updated = await updateSlide(editBanner.id, {
-        title: editValues.title.trim(),
-        image_url: editValues.image.trim(),
-        button_text: editValues.button_text.trim() || "Boshlash",
-        course_id: editValues.course_id || null,
+      const updated = await runStatus({
+        loadingMessage: "Home reklama yangilanmoqda...",
+        successMessage: "Home reklama muvaffaqiyatli yangilandi",
+        errorMessage: "Home reklama yangilanmadi.",
+        action: async () => updateSlide(editBanner.id, {
+          title: editValues.title.trim(),
+          image_url: editValues.image.trim(),
+          button_text: editValues.button_text.trim() || "Boshlash",
+          course_id: editValues.course_id || null,
+        }),
       });
       setHomeBanners((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
       notifySuccess("Home reklama muvaffaqiyatli yangilandi.");
@@ -276,7 +301,12 @@ export default function HomeBannersPage() {
         onConfirm={async () => {
           if (!deleteId) return;
           try {
-            await deleteSlide(deleteId);
+            await runStatus({
+              loadingMessage: "Home reklama o'chirilmoqda...",
+              successMessage: "Home reklama muvaffaqiyatli o'chirildi",
+              errorMessage: "Home reklama o'chirilmadi.",
+              action: async () => deleteSlide(deleteId),
+            });
             setHomeBanners((prev) => prev.filter((item) => item.id !== deleteId));
             notifySuccess("Home reklama muvaffaqiyatli o'chirildi.");
             setDeleteId(null);
@@ -285,6 +315,7 @@ export default function HomeBannersPage() {
           }
         }}
       />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

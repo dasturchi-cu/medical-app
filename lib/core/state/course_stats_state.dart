@@ -20,7 +20,7 @@ class CourseCardStats {
   final int commentsCount;
 }
 
-final courseCardStatsProvider = StreamProvider.family<CourseCardStats, String>((
+final courseCardStatsProvider = StreamProvider.autoDispose.family<CourseCardStats, String>((
   ref,
   courseId,
 ) async* {
@@ -33,7 +33,12 @@ final courseCardStatsProvider = StreamProvider.family<CourseCardStats, String>((
   }
 
   Future<CourseCardStats> load() async {
-    final uri = Uri.parse('$baseUrl/api/v1/courses/$courseId/stats?user_id=$userId');
+    final hasUser = userId.trim().isNotEmpty;
+    final uri = Uri.parse(
+      hasUser
+          ? '$baseUrl/api/v1/courses/$courseId/stats?user_id=$userId'
+          : '$baseUrl/api/v1/courses/$courseId/stats',
+    );
     debugPrint('[API][courses.card_stats][request] $uri');
     final response = await http.get(uri).timeout(const Duration(seconds: 10));
     debugPrint('[API][courses.card_stats][response] status=${response.statusCode}');
@@ -51,20 +56,23 @@ final courseCardStatsProvider = StreamProvider.family<CourseCardStats, String>((
     );
   }
 
+  CourseCardStats last = const CourseCardStats(ratingAvg: 0, ratingCount: 0, commentsCount: 0);
   try {
-    yield await load();
+    last = await load();
+    yield last;
   } catch (_) {
-    yield const CourseCardStats(ratingAvg: 0, ratingCount: 0, commentsCount: 0);
+    yield last;
   }
 
-  await for (final _ in Stream.periodic(const Duration(seconds: 6))) {
+  await for (final _ in Stream.periodic(const Duration(seconds: 30))) {
     try {
-      yield await load();
+      last = await load();
+      yield last;
     } catch (_) {}
   }
 });
 
-final contentCardStatsProvider = StreamProvider.family<CourseCardStats, ({String key, bool useFeedbackApi})>((
+final contentCardStatsProvider = StreamProvider.autoDispose.family<CourseCardStats, ({String key, bool useFeedbackApi})>((
   ref,
   args,
 ) async* {
@@ -78,9 +86,10 @@ final contentCardStatsProvider = StreamProvider.family<CourseCardStats, ({String
   }
 
   Future<CourseCardStats> load() async {
+    final hasUser = userId.trim().isNotEmpty;
     final path = args.useFeedbackApi
-        ? '/api/v1/feedback/$key/stats?user_id=$userId'
-        : '/api/v1/courses/$key/stats?user_id=$userId';
+        ? (hasUser ? '/api/v1/feedback/$key/stats?user_id=$userId' : '/api/v1/feedback/$key/stats')
+        : (hasUser ? '/api/v1/courses/$key/stats?user_id=$userId' : '/api/v1/courses/$key/stats');
     final uri = Uri.parse('$baseUrl$path');
     debugPrint('[API][content.card_stats][request] $uri');
     final response = await http.get(uri).timeout(const Duration(seconds: 10));
@@ -99,15 +108,18 @@ final contentCardStatsProvider = StreamProvider.family<CourseCardStats, ({String
     );
   }
 
+  CourseCardStats last = const CourseCardStats(ratingAvg: 0, ratingCount: 0, commentsCount: 0);
   try {
-    yield await load();
+    last = await load();
+    yield last;
   } catch (_) {
-    yield const CourseCardStats(ratingAvg: 0, ratingCount: 0, commentsCount: 0);
+    yield last;
   }
 
-  await for (final _ in Stream.periodic(const Duration(seconds: 6))) {
+  await for (final _ in Stream.periodic(const Duration(seconds: 30))) {
     try {
-      yield await load();
+      last = await load();
+      yield last;
     } catch (_) {}
   }
 });

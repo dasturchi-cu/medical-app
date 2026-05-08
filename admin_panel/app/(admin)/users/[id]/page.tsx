@@ -26,6 +26,7 @@ import {
 } from "@/lib/api/users";
 import { fetchCourses } from "@/lib/api/courses";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function UserDetailPage() {
@@ -46,7 +47,7 @@ export default function UserDetailPage() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
         const [userItems, courseItems, entitlementItems] = await Promise.all([
           fetchUsers(),
@@ -69,15 +70,37 @@ export default function UserDetailPage() {
           setOverview(null);
         }
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Foydalanuvchi ma'lumotlarini olishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void load();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel(`admin-user-${userId}-live`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "users", filter: `id=eq.${userId}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_entitlements", filter: `user_id=eq.${userId}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "video_progress", filter: `user_id=eq.${userId}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_comments", filter: `user_id=eq.${userId}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "ratings", filter: `user_id=eq.${userId}` }, () => {
+        void load(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, [userId]);
 
@@ -209,10 +232,15 @@ export default function UserDetailPage() {
                 return;
               }
               try {
-                await grantCourse(user.id, selectedCourse);
+                await runStatus({
+                  loadingMessage: "Kurs berilmoqda...",
+                  successMessage: "Kurs muvaffaqiyatli berildi",
+                  errorMessage: "Kurs berishda xatolik.",
+                  action: async () => grantCourse(user.id, selectedCourse),
+                });
                 const nextEntitlements = await fetchUserEntitlements(user.id);
                 setEntitlements(nextEntitlements);
-                notifySuccess("Foydalanuvchiga kurs berildi.");
+                notifySuccess("Kurs muvaffaqiyatli berildi");
               } catch (error) {
                 notifyError(error instanceof Error ? error.message : "Kurs berishda xatolik.");
               }
@@ -281,7 +309,7 @@ export default function UserDetailPage() {
           {(overview?.recent_comments ?? []).length > 0 ? (
             overview!.recent_comments.map((item) => (
               <div key={item.id} className="rounded-xl bg-slate-50 p-3 text-sm">
-                <p className="font-medium text-slate-900">{item.course_key}</p>
+                <p className="font-medium text-slate-900">{item.course_title || item.course_key}</p>
                 <p className="text-slate-700">{item.text}</p>
                 <p className="text-slate-500">Like: {item.likes_count} · Reply: {item.replies_count}</p>
               </div>
@@ -300,7 +328,7 @@ export default function UserDetailPage() {
               <div key={`${item.lesson_id}-${idx}`} className="rounded-xl bg-slate-50 p-3 text-sm">
                 <p className="font-medium text-slate-900">{item.course_title || item.course_id}</p>
                 <p className="text-slate-600">
-                  Lesson: {item.lesson_id} · {item.watched_sec}s · {item.completed ? "Tugagan" : "Jarayonda"}
+                  Lesson: {item.lesson_title || item.lesson_id} · {item.watched_sec}s · {item.completed ? "Tugagan" : "Jarayonda"}
                 </p>
                 <p className="text-slate-500">{(item.updated_at || "").replace("T", " ").slice(0, 16)}</p>
               </div>
@@ -341,7 +369,7 @@ export default function UserDetailPage() {
             <Input id="user-name" value={editValues.name} onChange={(event) => setEditValues((prev) => ({ ...prev, name: event.target.value }))} />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="user-email">Email / phone</Label>
+            <Label htmlFor="user-email">Telefon raqam</Label>
             <Input id="user-email" value={editValues.email} onChange={(event) => setEditValues((prev) => ({ ...prev, email: event.target.value }))} />
           </div>
           <Button type="submit" className="h-10 rounded-xl">

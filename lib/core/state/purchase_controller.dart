@@ -1,6 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter/foundation.dart';
 
+import '../data/models/purchase_models.dart';
 import '../di/providers.dart';
 
 class PurchaseState {
@@ -24,25 +27,30 @@ final purchaseControllerProvider =
     NotifierProvider<PurchaseController, PurchaseState>(PurchaseController.new);
 
 class PurchaseController extends Notifier<PurchaseState> {
+  StreamSubscription<List<UserEntitlementItem>>? _subscription;
+
   @override
-  PurchaseState build() => const PurchaseState(purchasedCourseIds: {});
+  PurchaseState build() {
+    ref.onDispose(() {
+      _subscription?.cancel();
+    });
+    return const PurchaseState(purchasedCourseIds: {});
+  }
+
+  void bindRealtime(String userId) {
+    if (userId.isEmpty) return;
+    _subscription?.cancel();
+    _subscription = ref
+        .read(purchasesRepositoryProvider)
+        .watchUserEntitlements(userId: userId)
+        .listen((items) => _applyEntitlements(items));
+  }
 
   Future<void> syncFromBackend(String userId) async {
     if (userId.isEmpty) return;
     try {
       final items = await ref.read(purchasesRepositoryProvider).fetchUserEntitlements(userId: userId);
-      final keys = <String>{};
-      for (final item in items) {
-        if (item.sectionId != null &&
-            item.sectionId!.isNotEmpty &&
-            item.courseId != null &&
-            item.courseId!.isNotEmpty) {
-          keys.add(basePurchaseKey(item.courseId!, item.sectionId!).trim().toLowerCase());
-        } else if (item.courseId != null && item.courseId!.isNotEmpty) {
-          keys.add(item.courseId!.trim().toLowerCase());
-        }
-      }
-      state = PurchaseState(purchasedCourseIds: keys);
+      _applyEntitlements(items);
     } catch (error, stack) {
       debugPrint('[API][purchases.sync][error] $error\n$stack');
       // Keep previous purchase state on transient network/backend failures.
@@ -50,6 +58,8 @@ class PurchaseController extends Notifier<PurchaseState> {
   }
 
   void clear() {
+    _subscription?.cancel();
+    _subscription = null;
     state = const PurchaseState(purchasedCourseIds: {});
   }
 
@@ -61,6 +71,21 @@ class PurchaseController extends Notifier<PurchaseState> {
 
   void purchaseBase(String courseId, String sectionId) {
     purchaseCourse(basePurchaseKey(courseId, sectionId));
+  }
+
+  void _applyEntitlements(List<UserEntitlementItem> items) {
+    final keys = <String>{};
+    for (final item in items) {
+      if (item.sectionId != null &&
+          item.sectionId!.isNotEmpty &&
+          item.courseId != null &&
+          item.courseId!.isNotEmpty) {
+        keys.add(basePurchaseKey(item.courseId!, item.sectionId!).trim().toLowerCase());
+      } else if (item.courseId != null && item.courseId!.isNotEmpty) {
+        keys.add(item.courseId!.trim().toLowerCase());
+      }
+    }
+    state = PurchaseState(purchasedCourseIds: keys);
   }
 }
 

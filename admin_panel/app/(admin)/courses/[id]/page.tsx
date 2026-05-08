@@ -6,14 +6,17 @@ import { BarChart3, MessageSquare, Star, Users, Video } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
 import { AppModal } from "@/components/modal";
+import { StatusModal } from "@/components/status-modal";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { fetchAdminComments, deleteAdminComment, type AdminCommentItem } from "@/lib/api/admin-comments";
 import { fetchCourseStats, fetchCourses, type CourseItem, type CourseStatsItem } from "@/lib/api/courses";
 import { fetchLessons, removeLesson, updateLesson, type LessonItem } from "@/lib/api/lessons";
-import { fetchSubscriptionsOverview } from "@/lib/api/subscriptions";
+import { fetchPurchasesAdmin } from "@/lib/api/subscriptions";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function CourseDetailPage() {
   const { id } = useParams<{ id: string }>();
@@ -27,15 +30,17 @@ export default function CourseDetailPage() {
   const [deleteLessonId, setDeleteLessonId] = useState<string | null>(null);
   const [deleteCommentId, setDeleteCommentId] = useState<string | null>(null);
   const [editValues, setEditValues] = useState({ title: "", videoId: "", order: "1" });
+  const statusModal = useStatusModal();
+  const runStatus = statusModal.run;
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
-        const [courseItems, lessonItems, subscriptions, commentItems, courseStats] = await Promise.all([
+        const [courseItems, lessonItems, purchases, commentItems, courseStats] = await Promise.all([
           fetchCourses(),
           fetchLessons(id),
-          fetchSubscriptionsOverview(),
+          fetchPurchasesAdmin(),
           fetchAdminComments(),
           fetchCourseStats(id),
         ]);
@@ -44,18 +49,50 @@ export default function CourseDetailPage() {
         setLessons([...lessonItems].sort((a, b) => a.order_no - b.order_no));
         setComments(commentItems.filter((item) => item.course_id === id));
         setStats(courseStats);
-        const buyersForCourse = subscriptions.items.find((item) => item.course_id === id)?.buyers ?? [];
-        setBuyers(buyersForCourse.map((item) => ({ user_name: item.user_name, purchased_at: item.purchased_at })));
+        const buyersForCourse = purchases.items
+          .filter((item) => item.course_id === id)
+          .map((item) => ({ user_name: item.user_name, purchased_at: item.purchased_at }));
+        setBuyers(buyersForCourse);
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Kurs sahifasini ochishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void load();
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel(`admin-course-${id}-live`)
+      .on("postgres_changes", { event: "*", schema: "public", table: "courses", filter: `id=eq.${id}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "lessons", filter: `course_id=eq.${id}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_comments", filter: `course_key=eq.${id}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "comments", filter: `course_id=eq.${id}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "ratings", filter: `course_id=eq.${id}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_ratings", filter: `content_key=eq.${id}` }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_entitlements", filter: `course_id=eq.${id}` }, () => {
+        void load(true);
+      })
+      .subscribe();
+
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, [id]);
 
@@ -75,10 +112,15 @@ export default function CourseDetailPage() {
     if (!editLesson) return;
     const submit = async () => {
       try {
-        const updated = await updateLesson(editLesson.id, {
-          title: editValues.title,
-          video_url: editValues.videoId,
-          order_no: Number(editValues.order) || 1,
+        const updated = await runStatus({
+          loadingMessage: "Dars yangilanmoqda...",
+          successMessage: "Dars muvaffaqiyatli yangilandi",
+          errorMessage: "Darsni yangilashda xatolik.",
+          action: async () => updateLesson(editLesson.id, {
+            title: editValues.title,
+            video_url: editValues.videoId,
+            order_no: Number(editValues.order) || 1,
+          }),
         });
         setLessons((prev) => prev.map((item) => (item.id === updated.id ? updated : item)).sort((a, b) => a.order_no - b.order_no));
         setEditLesson(null);
@@ -99,10 +141,15 @@ export default function CourseDetailPage() {
     const current = ordered[currentIndex];
     const target = ordered[targetIndex];
     try {
-      const [a, b] = await Promise.all([
-        updateLesson(current.id, { order_no: target.order_no }),
-        updateLesson(target.id, { order_no: current.order_no }),
-      ]);
+      const [a, b] = await runStatus({
+        loadingMessage: "Dars tartibi yangilanmoqda...",
+        successMessage: "Dars tartibi muvaffaqiyatli yangilandi",
+        errorMessage: "Dars tartibini o'zgartirishda xatolik.",
+        action: async () => Promise.all([
+          updateLesson(current.id, { order_no: target.order_no }),
+          updateLesson(target.id, { order_no: current.order_no }),
+        ]),
+      });
       setLessons((prev) => prev.map((item) => (item.id === a.id ? a : item.id === b.id ? b : item)).sort((x, y) => x.order_no - y.order_no));
       notifySuccess(direction === "up" ? "Dars yuqoriga ko'chdi." : "Dars pastga ko'chdi.");
     } catch (error) {
@@ -244,7 +291,12 @@ export default function CourseDetailPage() {
           const submitDelete = async () => {
             if (!deleteLessonId) return;
             try {
-              await removeLesson(deleteLessonId);
+              await runStatus({
+                loadingMessage: "Video o'chirilmoqda...",
+                successMessage: "Video muvaffaqiyatli o'chirildi",
+                errorMessage: "Videoni o'chirishda xatolik.",
+                action: async () => removeLesson(deleteLessonId),
+              });
               setLessons((prev) => prev.filter((item) => item.id !== deleteLessonId));
               notifySuccess("Video o'chirildi.");
               setDeleteLessonId(null);
@@ -266,7 +318,12 @@ export default function CourseDetailPage() {
           const submitDelete = async () => {
             if (!deleteCommentId) return;
             try {
-              await deleteAdminComment(deleteCommentId);
+              await runStatus({
+                loadingMessage: "Izoh o'chirilmoqda...",
+                successMessage: "Izoh muvaffaqiyatli o'chirildi",
+                errorMessage: "Izohni o'chirishda xatolik.",
+                action: async () => deleteAdminComment(deleteCommentId),
+              });
               setComments((prev) => prev.filter((item) => item.id !== deleteCommentId));
               notifySuccess("Izoh o'chirildi.");
               setDeleteCommentId(null);
@@ -277,6 +334,7 @@ export default function CourseDetailPage() {
           void submitDelete();
         }}
       />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

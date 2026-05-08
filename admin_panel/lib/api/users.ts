@@ -42,6 +42,8 @@ export interface UserRecentRatingItem {
 export interface UserRecentCommentItem {
   id: string;
   course_key: string;
+  course_title: string;
+  lesson_title: string;
   text: string;
   likes_count: number;
   replies_count: number;
@@ -50,6 +52,7 @@ export interface UserRecentCommentItem {
 
 export interface UserProgressItem {
   lesson_id: string;
+  lesson_title: string;
   course_id: string;
   course_title: string;
   watched_sec: number;

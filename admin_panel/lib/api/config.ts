@@ -1,5 +1,6 @@
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 const adminApiKey = process.env.NEXT_PUBLIC_ADMIN_API_KEY;
+const requestTimeoutMs = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 15000);
 
 function resolveApiBaseUrl() {
   const fromEnv = apiBaseUrl?.trim();
@@ -15,7 +16,6 @@ function resolveApiBaseCandidates() {
   const fromEnv = apiBaseUrl?.trim();
   const candidates: string[] = [];
   const localhostCandidates = ["http://localhost:8000", "http://127.0.0.1:8000"];
-  const isLocalBase = (value: string) => value.includes("localhost") || value.includes("127.0.0.1");
   const pushCandidate = (value?: string) => {
     const normalized = value?.trim();
     if (!normalized) return;
@@ -25,15 +25,14 @@ function resolveApiBaseCandidates() {
   if (typeof window !== "undefined") {
     const host = window.location.hostname?.trim();
     if (host) {
-      pushCandidate(`http://${host}:8000`);
       if (fromEnv) {
-        if (isLocalBase(fromEnv) && host !== "localhost" && host !== "127.0.0.1") {
-          localhostCandidates.forEach(pushCandidate);
-          pushCandidate(fromEnv);
-          return candidates;
-        }
+        // Prefer explicit env backend first to avoid split-brain (admin writes to one API, app reads from another).
         pushCandidate(fromEnv);
+        pushCandidate(`http://${host}:8000`);
+        localhostCandidates.forEach(pushCandidate);
+        return candidates;
       }
+      pushCandidate(`http://${host}:8000`);
       localhostCandidates.forEach(pushCandidate);
       return candidates;
     }
@@ -49,41 +48,56 @@ export function getApiConfig() {
     apiBaseUrl: resolvedBaseUrl,
     apiBaseCandidates: resolveApiBaseCandidates(),
     adminApiKey: adminApiKey?.trim() ?? "",
+    requestTimeoutMs: Number.isFinite(requestTimeoutMs) && requestTimeoutMs > 0 ? requestTimeoutMs : 15000,
     isConfigured: Boolean(resolvedBaseUrl),
   };
 }
 
+async function fetchWithTimeout(url: string, init: RequestInit | undefined, timeoutMs: number) {
+  const controller = new AbortController();
+  const timer = setTimeout(() => controller.abort("Request timeout"), timeoutMs);
+  try {
+    return await fetch(url, {
+      ...init,
+      signal: init?.signal ?? controller.signal,
+    });
+  } finally {
+    clearTimeout(timer);
+  }
+}
+
+function shouldRetry(response: Response) {
+  return response.status >= 500 || response.status === 429;
+}
+
 export async function apiFetch(path: string, init?: RequestInit) {
-  const { apiBaseCandidates } = getApiConfig();
+  const { apiBaseCandidates, requestTimeoutMs } = getApiConfig();
   const normalizedPath = path.startsWith("/") ? path : `/${path}`;
   let lastError: unknown = null;
   let lastResponse: Response | null = null;
 
   for (const baseUrl of apiBaseCandidates) {
     const url = `${baseUrl}${normalizedPath}`;
-    console.log("API START", url, init?.method ?? "GET");
-    try {
-      const response = await fetch(url, init);
-      let responseData: unknown;
+    for (let attempt = 0; attempt < 2; attempt += 1) {
       try {
-        const text = await response.clone().text();
-        responseData = text ? JSON.parse(text) : null;
-      } catch {
-        responseData = { _nonJson: true };
+        const response = await fetchWithTimeout(url, init, requestTimeoutMs);
+        if (shouldRetry(response) && attempt === 0) {
+          lastResponse = response;
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          continue;
+        }
+        return response;
+      } catch (error) {
+        lastError = error;
+        if (attempt === 0) {
+          await new Promise((resolve) => setTimeout(resolve, 300));
+          continue;
+        }
       }
-      console.log("API RESPONSE", responseData);
-      if (response.status >= 500) {
-        lastResponse = response;
-        continue;
-      }
-      return response;
-    } catch (error) {
-      console.log("API ERROR", error);
-      lastError = error;
     }
   }
   if (lastResponse) return lastResponse;
-  const message = lastError instanceof Error ? lastError.message : "Backendga ulanishda xatolik.";
+  const message = lastError instanceof Error ? lastError.message : "Server bilan aloqa yo'q.";
   return new Response(JSON.stringify({ detail: `Backendga ulanishda xatolik: ${message}` }), {
     status: 503,
     headers: { "Content-Type": "application/json" },

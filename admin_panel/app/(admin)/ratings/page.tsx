@@ -6,8 +6,9 @@ import { StatusModal } from "@/components/status-modal";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
-import { deleteRating, fetchRatings, resetRatings, type RatingItem, updateRating } from "@/lib/api/ratings";
+import { deleteRating, fetchRatings, fetchRatingsAnalytics, resetRatings, type RatingItem, type RatingsAnalytics, updateRating } from "@/lib/api/ratings";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function RatingsPage() {
@@ -16,6 +17,7 @@ export default function RatingsPage() {
   const [search, setSearch] = useState("");
   const [page, setPage] = useState(1);
   const [total, setTotal] = useState(0);
+  const [analytics, setAnalytics] = useState<RatingsAnalytics | null>(null);
   const [deleteId, setDeleteId] = useState<string | null>(null);
   const pageSize = 10;
   const statusModal = useStatusModal();
@@ -23,22 +25,34 @@ export default function RatingsPage() {
 
   useEffect(() => {
     let mounted = true;
-    const loadRatings = async () => {
+    const loadRatings = async (silent = false) => {
       try {
-        const response = await fetchRatings({ search, page, pageSize });
+        const [response, analyticsResponse] = await Promise.all([
+          fetchRatings({ search, page, pageSize }),
+          fetchRatingsAnalytics(),
+        ]);
         if (!mounted) return;
         setItems(response.items);
         setTotal(response.total);
+        setAnalytics(analyticsResponse);
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Reytinglar yuklanmadi.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void loadRatings();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-ratings-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "ratings" }, () => {
+        void loadRatings(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) void supabase?.removeChannel(channel);
     };
   }, [search, page]);
 
@@ -96,6 +110,13 @@ export default function RatingsPage() {
 
   return (
     <section className="admin-page space-y-4">
+      <div className="grid gap-3 sm:grid-cols-2 xl:grid-cols-5">
+        <StatCard label="Jami baholar" value={String(analytics?.total_ratings ?? 0)} />
+        <StatCard label="O'rtacha baho" value={(analytics?.average_stars ?? 0).toFixed(2)} />
+        <StatCard label="5 yulduz" value={String(analytics?.five_star_count ?? 0)} />
+        <StatCard label="4 yulduz" value={String(analytics?.four_star_count ?? 0)} />
+        <StatCard label="Past baholar (<=3)" value={String(analytics?.low_rating_count ?? 0)} />
+      </div>
       <div className="surface-card grid gap-3 p-4 sm:grid-cols-[1fr_auto_auto] sm:items-end">
         <div>
           <label htmlFor="search" className="mb-2 block text-sm font-medium text-slate-700">
@@ -170,5 +191,14 @@ export default function RatingsPage() {
       />
       <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
+  );
+}
+
+function StatCard({ label, value }: { label: string; value: string }) {
+  return (
+    <div className="surface-card p-4">
+      <p className="text-sm text-slate-500">{label}</p>
+      <p className="mt-2 text-2xl font-semibold text-slate-900">{value}</p>
+    </div>
   );
 }

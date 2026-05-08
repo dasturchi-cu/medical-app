@@ -5,6 +5,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { StatusModal } from "@/components/status-modal";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,8 @@ import { Label } from "@/components/ui/label";
 import { createNotification, fetchNotifications, removeNotification, type NotificationCampaign } from "@/lib/api/notifications";
 import { fetchUsers } from "@/lib/api/users";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function NotificationsPage() {
   const [notifications, setNotifications] = useState<NotificationCampaign[]>([]);
@@ -23,10 +26,12 @@ export default function NotificationsPage() {
     message: "",
     image: "",
   });
+  const statusModal = useStatusModal();
+  const runStatus = statusModal.run;
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
         const [items, users] = await Promise.all([fetchNotifications(), fetchUsers()]);
         if (mounted) {
@@ -34,27 +39,46 @@ export default function NotificationsPage() {
           setTotalUsers(users.length);
         }
       } catch (error) {
-        if (mounted) setNotifications([]);
-        notifyError(error instanceof Error ? error.message : "Notificationlarni olishda xatolik.");
+        if (mounted && !silent) setNotifications([]);
+        if (!silent) notifyError(error instanceof Error ? error.message : "Notificationlarni olishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void load();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-notifications-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "notifications" }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "notification_deliveries" }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "notification_click_events" }, () => {
+        void load(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, []);
 
   const stats = useMemo(() => {
     const totalSent = notifications.reduce((sum, item) => sum + item.recipients_count, 0);
     const totalViewed = notifications.reduce((sum, item) => sum + item.viewed_count, 0);
+    const totalClicked = notifications.reduce((sum, item) => sum + item.clicked_count, 0);
     const avgViewRate = totalSent > 0 ? (totalViewed / totalSent) * 100 : 0;
+    const avgClickRate = totalSent > 0 ? (totalClicked / totalSent) * 100 : 0;
     return {
       totalUsers,
       sentCampaigns: notifications.length,
       totalSent,
       avgViewRate,
+      avgClickRate,
     };
   }, [notifications, totalUsers]);
 
@@ -68,6 +92,7 @@ export default function NotificationsPage() {
       },
       { key: "recipients_count", label: "Yuborildi" },
       { key: "viewed_count", label: "Ko'rganlar" },
+      { key: "clicked_count", label: "Bosganlar" },
       {
         key: "viewRate",
         label: "Ko'rish foizi",
@@ -94,10 +119,15 @@ export default function NotificationsPage() {
     event.preventDefault();
     const submit = async () => {
       try {
-        const item = await createNotification({
-          title: formValues.title,
-          message: formValues.message,
-          image: formValues.image,
+        const item = await runStatus({
+          loadingMessage: "Bildirishnoma yuborilmoqda...",
+          successMessage: "Bildirishnoma muvaffaqiyatli yuborildi",
+          errorMessage: "Notification yuborilmadi.",
+          action: async () => createNotification({
+            title: formValues.title,
+            message: formValues.message,
+            image: formValues.image,
+          }),
         });
         setNotifications((prev) => [item, ...prev]);
         notifySuccess("Notification muvaffaqiyatli yuborildi.");
@@ -118,6 +148,7 @@ export default function NotificationsPage() {
         <StatCard label="Yuborilgan va bor notificationlar" value={String(stats.sentCampaigns)} />
         <StatCard label="Jami yuborilgan notification" value={String(stats.totalSent)} />
         <StatCard label="O'rtacha ko'rish foizi" value={`${stats.avgViewRate.toFixed(1)}%`} />
+        <StatCard label="O'rtacha click foizi" value={`${stats.avgClickRate.toFixed(1)}%`} />
       </div>
 
       <AppForm
@@ -166,7 +197,12 @@ export default function NotificationsPage() {
           const submitDelete = async () => {
             if (!deleteId) return;
             try {
-              await removeNotification(deleteId);
+              await runStatus({
+                loadingMessage: "Bildirishnoma o'chirilmoqda...",
+                successMessage: "Bildirishnoma muvaffaqiyatli o'chirildi",
+                errorMessage: "Notification o'chirilmadi.",
+                action: async () => removeNotification(deleteId),
+              });
               setNotifications((prev) => prev.filter((item) => item.id !== deleteId));
               notifySuccess("Notification tarixi o'chirildi.");
               setDeleteId(null);
@@ -177,6 +213,7 @@ export default function NotificationsPage() {
           void submitDelete();
         }}
       />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

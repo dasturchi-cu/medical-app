@@ -3,7 +3,9 @@
 import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
+import { AppModal } from "@/components/modal";
 import { PageSkeleton } from "@/components/page-skeleton";
+import { StatusModal } from "@/components/status-modal";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -11,15 +13,19 @@ import { Label } from "@/components/ui/label";
 import {
   createTest,
   createTestQuestion,
+  deleteTestQuestion,
   deleteTest,
   fetchTestQuestions,
   fetchTests,
   type TestItem,
   type TestQuestionItem,
+  updateTestQuestion,
 } from "@/lib/api/tests";
 import { fetchCourses, type CourseItem } from "@/lib/api/courses";
 import { fetchLessons, type LessonItem } from "@/lib/api/lessons";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function TestsPage() {
   const [courses, setCourses] = useState<CourseItem[]>([]);
@@ -29,6 +35,8 @@ export default function TestsPage() {
   const [selectedTestId, setSelectedTestId] = useState<string>("");
   const [questions, setQuestions] = useState<TestQuestionItem[]>([]);
   const [deleteId, setDeleteId] = useState<string | null>(null);
+  const [deleteQuestionId, setDeleteQuestionId] = useState<string | null>(null);
+  const [editQuestion, setEditQuestion] = useState<TestQuestionItem | null>(null);
   const [testValues, setTestValues] = useState({
     title: "",
     description: "",
@@ -44,25 +52,50 @@ export default function TestsPage() {
     option_d: "",
     correct_option: "A" as "A" | "B" | "C" | "D",
   });
+  const [editQValues, setEditQValues] = useState({
+    question_text: "",
+    option_a: "",
+    option_b: "",
+    option_c: "",
+    option_d: "",
+    correct_option: "A" as "A" | "B" | "C" | "D",
+    order_no: "1",
+  });
+  const statusModal = useStatusModal();
+  const runStatus = statusModal.run;
 
   useEffect(() => {
     let mounted = true;
-    void Promise.all([fetchTests(), fetchCourses(), fetchLessons()])
-      .then(([testsItems, courseItems, lessonItems]) => {
+    const load = async (silent = false) => {
+      try {
+        const [testsItems, courseItems, lessonItems] = await Promise.all([fetchTests(), fetchCourses(), fetchLessons()]);
         if (!mounted) return;
         setTests(testsItems);
-        setSelectedTestId(testsItems[0]?.id ?? "");
+        setSelectedTestId((prev) => prev || testsItems[0]?.id || "");
         setCourses(courseItems);
         setLessons(lessonItems);
-      })
-      .catch((error) => {
-        if (mounted) notifyError(error instanceof Error ? error.message : "Test ma'lumotlarini olishda xatolik.");
-      })
-      .finally(() => {
+      } catch (error) {
+        if (mounted && !silent) notifyError(error instanceof Error ? error.message : "Test ma'lumotlarini olishda xatolik.");
+      } finally {
         if (mounted) setLoading(false);
-      });
+      }
+    };
+    void load();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-tests-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "quizzes" }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "quiz_questions" }, () => {
+        void load(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, []);
 
@@ -111,6 +144,39 @@ export default function TestsPage() {
       { key: "order_no", label: "#" },
       { key: "question_text", label: "Savol" },
       { key: "correct_option", label: "To'g'ri" },
+      {
+        key: "actions",
+        label: "Amallar",
+        render: (item: TestQuestionItem) => (
+          <div className="flex gap-2">
+            <Button
+              variant="outline"
+              className="h-8 rounded-lg px-3 text-xs"
+              onClick={() => {
+                setEditQuestion(item);
+                setEditQValues({
+                  question_text: item.question_text,
+                  option_a: item.option_a,
+                  option_b: item.option_b,
+                  option_c: item.option_c,
+                  option_d: item.option_d,
+                  correct_option: item.correct_option as "A" | "B" | "C" | "D",
+                  order_no: String(item.order_no),
+                });
+              }}
+            >
+              Tahrirlash
+            </Button>
+            <Button
+              variant="destructive"
+              className="h-8 rounded-lg px-3 text-xs"
+              onClick={() => setDeleteQuestionId(item.id)}
+            >
+              O&apos;chirish
+            </Button>
+          </div>
+        ),
+      },
     ],
     [],
   );
@@ -121,12 +187,17 @@ export default function TestsPage() {
       notifyError("Test userga chiqishi uchun dars tanlash majburiy.");
       return;
     }
-    void createTest({
-      title: testValues.title,
-      description: testValues.description,
-      estimated_minutes: Number(testValues.estimated_minutes) || 10,
-      course_id: testValues.course_id || null,
-      lesson_id: testValues.lesson_id || null,
+    void runStatus({
+      loadingMessage: "Test yaratilmoqda...",
+      successMessage: "Test muvaffaqiyatli yaratildi",
+      errorMessage: "Test yaratilmadi.",
+      action: async () => createTest({
+        title: testValues.title,
+        description: testValues.description,
+        estimated_minutes: Number(testValues.estimated_minutes) || 10,
+        course_id: testValues.course_id || null,
+        lesson_id: testValues.lesson_id || null,
+      }),
     })
       .then((item) => {
         setTests((prev) => [item, ...prev]);
@@ -150,14 +221,19 @@ export default function TestsPage() {
       notifyError("Avval test tanlang.");
       return;
     }
-    void createTestQuestion(selectedTestId, {
-      question_text: qValues.question_text,
-      option_a: qValues.option_a,
-      option_b: qValues.option_b,
-      option_c: qValues.option_c,
-      option_d: qValues.option_d,
-      correct_option: qValues.correct_option,
-      order_no: questions.length + 1,
+    void runStatus({
+      loadingMessage: "Savol qo'shilmoqda...",
+      successMessage: "Savol muvaffaqiyatli qo'shildi",
+      errorMessage: "Savol qo'shilmadi.",
+      action: async () => createTestQuestion(selectedTestId, {
+        question_text: qValues.question_text,
+        option_a: qValues.option_a,
+        option_b: qValues.option_b,
+        option_c: qValues.option_c,
+        option_d: qValues.option_d,
+        correct_option: qValues.correct_option,
+        order_no: questions.length + 1,
+      }),
     })
       .then((item) => {
         setQuestions((prev) => [...prev, item].sort((a, b) => a.order_no - b.order_no));
@@ -175,6 +251,34 @@ export default function TestsPage() {
       .catch((error) => {
         notifyError(error instanceof Error ? error.message : "Savol qo'shilmadi.");
       });
+  };
+
+  const onUpdateQuestion = (event: FormEvent<HTMLFormElement>) => {
+    event.preventDefault();
+    if (!editQuestion) return;
+    void runStatus({
+      loadingMessage: "Savol yangilanmoqda...",
+      successMessage: "Savol muvaffaqiyatli yangilandi",
+      errorMessage: "Savol yangilanmadi.",
+      action: async () =>
+        updateTestQuestion(editQuestion.id, {
+          question_text: editQValues.question_text,
+          option_a: editQValues.option_a,
+          option_b: editQValues.option_b,
+          option_c: editQValues.option_c,
+          option_d: editQValues.option_d,
+          correct_option: editQValues.correct_option,
+          order_no: Number(editQValues.order_no) || 1,
+        }),
+    })
+        .then((updated) => {
+          setQuestions((prev) => prev.map((item) => (item.id === updated.id ? updated : item)).sort((a, b) => a.order_no - b.order_no));
+          setEditQuestion(null);
+          notifySuccess("Savol yangilandi.");
+        })
+        .catch((error) => {
+          notifyError(error instanceof Error ? error.message : "Savol yangilanmadi.");
+        });
   };
 
   if (loading) return <PageSkeleton />;
@@ -299,19 +403,74 @@ export default function TestsPage() {
         onCancel={() => setDeleteId(null)}
         onConfirm={() => {
           if (!deleteId) return;
-          void deleteTest(deleteId).then(() => {
-            setTests((prev) => prev.filter((item) => item.id !== deleteId));
-            if (selectedTestId === deleteId) {
-              setSelectedTestId("");
-              setQuestions([]);
-            }
-            setDeleteId(null);
-            notifySuccess("Test o'chirildi.");
-          }).catch((error) => {
-            notifyError(error instanceof Error ? error.message : "Test o'chirilmadi.");
-          });
+          void runStatus({
+            loadingMessage: "Test o'chirilmoqda...",
+            successMessage: "Test muvaffaqiyatli o'chirildi",
+            errorMessage: "Test o'chirilmadi.",
+            action: async () => deleteTest(deleteId),
+          }).then(() => {
+              setTests((prev) => prev.filter((item) => item.id !== deleteId));
+              if (selectedTestId === deleteId) {
+                setSelectedTestId("");
+                setQuestions([]);
+              }
+              setDeleteId(null);
+              notifySuccess("Test o'chirildi.");
+            }).catch((error) => {
+              notifyError(error instanceof Error ? error.message : "Test o'chirilmadi.");
+            });
         }}
       />
+      <ConfirmDialog
+        open={Boolean(deleteQuestionId)}
+        title="Savolni o'chirish"
+        description="Savolni rostdan ham o'chirmoqchimisiz?"
+        confirmText="Ha, o'chirish"
+        onCancel={() => setDeleteQuestionId(null)}
+        onConfirm={() => {
+          if (!deleteQuestionId) return;
+          void runStatus({
+            loadingMessage: "Savol o'chirilmoqda...",
+            successMessage: "Savol muvaffaqiyatli o'chirildi",
+            errorMessage: "Savol o'chirilmadi.",
+            action: async () => deleteTestQuestion(deleteQuestionId),
+          }).then(() => {
+              setQuestions((prev) => prev.filter((item) => item.id !== deleteQuestionId));
+              setDeleteQuestionId(null);
+              notifySuccess("Savol o'chirildi.");
+            }).catch((error) => {
+              notifyError(error instanceof Error ? error.message : "Savol o'chirilmadi.");
+            });
+        }}
+      />
+      <AppModal
+        open={Boolean(editQuestion)}
+        onOpenChange={(open) => (!open ? setEditQuestion(null) : undefined)}
+        title="Savolni tahrirlash"
+      >
+        <AppForm title="Savol ma'lumotlari" submitLabel="Saqlash" onSubmit={onUpdateQuestion}>
+          <div className="grid gap-2">
+            <Label htmlFor="editQuestionText">Savol matni</Label>
+            <Input id="editQuestionText" value={editQValues.question_text} onChange={(e) => setEditQValues((p) => ({ ...p, question_text: e.target.value }))} />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <Input placeholder="A variant" value={editQValues.option_a} onChange={(e) => setEditQValues((p) => ({ ...p, option_a: e.target.value }))} />
+            <Input placeholder="B variant" value={editQValues.option_b} onChange={(e) => setEditQValues((p) => ({ ...p, option_b: e.target.value }))} />
+            <Input placeholder="C variant" value={editQValues.option_c} onChange={(e) => setEditQValues((p) => ({ ...p, option_c: e.target.value }))} />
+            <Input placeholder="D variant" value={editQValues.option_d} onChange={(e) => setEditQValues((p) => ({ ...p, option_d: e.target.value }))} />
+          </div>
+          <div className="grid gap-2 sm:grid-cols-2">
+            <select className="h-11 rounded-xl border border-slate-200 bg-white px-3 text-sm" value={editQValues.correct_option} onChange={(e) => setEditQValues((p) => ({ ...p, correct_option: e.target.value as "A" | "B" | "C" | "D" }))}>
+              <option value="A">To&apos;g&apos;ri javob: A</option>
+              <option value="B">To&apos;g&apos;ri javob: B</option>
+              <option value="C">To&apos;g&apos;ri javob: C</option>
+              <option value="D">To&apos;g&apos;ri javob: D</option>
+            </select>
+            <Input placeholder="Tartib" value={editQValues.order_no} onChange={(e) => setEditQValues((p) => ({ ...p, order_no: e.target.value }))} />
+          </div>
+        </AppForm>
+      </AppModal>
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

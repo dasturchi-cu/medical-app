@@ -5,6 +5,7 @@ import { ConfirmDialog } from "@/components/confirm-dialog";
 import { StatusModal } from "@/components/status-modal";
 import { fetchPurchasesAdmin, revokePurchase, type PurchaseAdminItem } from "@/lib/api/subscriptions";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function PurchasesPage() {
@@ -17,21 +18,34 @@ export default function PurchasesPage() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
         const overview = await fetchPurchasesAdmin();
         if (!mounted) return;
         setItems(overview.items ?? []);
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Sotuvlarni olishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void load();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-purchases-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_entitlements" }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "payments" }, () => {
+        void load(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, []);
 
@@ -44,14 +58,14 @@ export default function PurchasesPage() {
     <section className="admin-page space-y-4">
       <div className="surface-card p-4">
         <label htmlFor="purchase-search" className="mb-2 block text-sm font-medium text-slate-700">
-          Xaridlarni qidirish
+          Xaridlarni qidirish (telefon)
         </label>
         <input
           id="purchase-search"
           value={search}
           onChange={(event) => setSearch(event.target.value)}
           className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
-          placeholder="Kurs, foydalanuvchi yoki email bo'yicha qidiring"
+          placeholder="Kurs, foydalanuvchi yoki telefon bo'yicha qidiring"
         />
       </div>
 
@@ -59,7 +73,7 @@ export default function PurchasesPage() {
         <div className="grid grid-cols-1 gap-px bg-slate-100 sm:grid-cols-4">
           <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Kurs</div>
           <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Foydalanuvchi</div>
-          <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Email</div>
+          <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Telefon raqam</div>
           <div className="bg-slate-50 p-3 text-xs font-semibold uppercase tracking-wide text-slate-500">Xarid vaqti</div>
         </div>
         {loading ? (
@@ -103,7 +117,7 @@ export default function PurchasesPage() {
             });
             setItems((prev) => prev.filter((item) => item.entitlement_id !== deleteId));
             setDeleteId(null);
-            notifySuccess("Xarid bekor qilindi.");
+            notifySuccess("Xarid bekor qilindi va foydalanuvchiga realtime notification yuborildi.");
           } catch (error) {
             notifyError(error instanceof Error ? error.message : "Xaridni bekor qilishda xatolik.");
           }

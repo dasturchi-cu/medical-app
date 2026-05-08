@@ -13,6 +13,7 @@ import { Label } from "@/components/ui/label";
 import { fetchCourses } from "@/lib/api/courses";
 import { blockUser, fetchUsers, grantCourse, removeUser, type AdminUserItem, unblockUser, updateUser } from "@/lib/api/users";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function UsersPage() {
@@ -31,7 +32,7 @@ export default function UsersPage() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
         const [usersItems, coursesItems] = await Promise.all([fetchUsers(), fetchCourses()]);
         if (!mounted) return;
@@ -39,15 +40,28 @@ export default function UsersPage() {
         setCourses(coursesItems.map((item) => ({ id: item.id, title_uz: item.title_uz })));
         setSelectedCourse(coursesItems[0]?.id ?? "");
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Foydalanuvchilarni olishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void load();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-users-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "users" }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "user_entitlements" }, () => {
+        void load(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, []);
 
@@ -74,7 +88,7 @@ export default function UsersPage() {
         ),
       },
       { key: "id", label: "Foydalanuvchi ID" },
-      { key: "email", label: "Email" },
+      { key: "email", label: "Telefon raqam" },
       { key: "login_count", label: "Login soni" },
       { key: "app_open_count", label: "App open soni" },
       {
@@ -147,14 +161,14 @@ export default function UsersPage() {
             <Button
               className="h-8 rounded-lg bg-primary px-3 text-xs text-white"
               onClick={async () => {
-                if (!selectedCourse) {
+                  if (!selectedCourse) {
                   notifyError("Avval kurs tanlang.");
                   return;
                 }
                 try {
                   await runStatus({
-                    loadingMessage: "Kurs biriktirilmoqda...",
-                    successMessage: "Kurs muvaffaqiyatli biriktirildi",
+                    loadingMessage: "Kurs berilmoqda...",
+                    successMessage: "Kurs muvaffaqiyatli berildi",
                     errorMessage: "Kurs berishda xatolik.",
                     action: async () => grantCourse(user.id, selectedCourse),
                   });
@@ -213,26 +227,9 @@ export default function UsersPage() {
               setQuery(event.target.value);
               setPage(1);
             }}
-            placeholder="ID, ism yoki email bo'yicha qidiring"
+            placeholder="ID, ism yoki telefon raqam bo'yicha qidiring"
             className="h-11 rounded-xl border-slate-200"
           />
-        </div>
-
-        <div className="surface-card grid gap-3 p-4">
-          <div>
-            <label className="mb-2 block text-sm font-medium text-slate-700">Qaysi kurs beriladi?</label>
-            <select
-              value={selectedCourse}
-              onChange={(event) => setSelectedCourse(event.target.value)}
-              className="h-11 w-full rounded-xl border border-slate-200 px-3 text-sm outline-none focus:border-primary"
-            >
-              {courses.map((course) => (
-                <option key={course.id} value={course.id}>
-                  {course.title_uz}
-                </option>
-              ))}
-            </select>
-          </div>
         </div>
 
         <AppTable columns={columns} data={pageUsers} emptyText="Foydalanuvchi topilmadi." />
@@ -268,7 +265,7 @@ export default function UsersPage() {
             />
           </div>
           <div className="grid gap-2">
-            <Label htmlFor="edit_email">Email / phone</Label>
+            <Label htmlFor="edit_email">Telefon raqam</Label>
             <Input
               id="edit_email"
               value={editValues.email}

@@ -3,15 +3,17 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase/supabase.dart';
 
 import '../models/comment_models.dart';
 import 'comments_repository.dart';
 
 class HttpCommentsRepository implements CommentsRepository {
-  HttpCommentsRepository({required this.baseUrl, this.client});
+  HttpCommentsRepository({required this.baseUrl, this.client, this.realtimeClient});
 
   final String baseUrl;
   final http.Client? client;
+  final SupabaseClient? realtimeClient;
 
   http.Client get _client => client ?? http.Client();
   static const _timeout = Duration(seconds: 8);
@@ -33,10 +35,13 @@ class HttpCommentsRepository implements CommentsRepository {
     required String userId,
   }) async {
     if (baseUrl.isEmpty || courseKey.isEmpty) return const [];
-    debugPrint('[API][comments.fetch][request] courseKey=$courseKey userId=$userId');
+    final hasUser = userId.trim().isNotEmpty;
     final uri = Uri.parse(
-      '$baseUrl/api/v1/comments?course_key=$courseKey&user_id=$userId',
+      hasUser
+          ? '$baseUrl/api/v1/comments?course_key=$courseKey&user_id=$userId'
+          : '$baseUrl/api/v1/comments?course_key=$courseKey',
     );
+    debugPrint('[API][comments.fetch][request] courseKey=$courseKey userId=${hasUser ? userId : "-"}');
     final response = await _client.get(uri).timeout(_timeout);
     debugPrint('[API][comments.fetch][response] status=${response.statusCode}');
     if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -137,21 +142,56 @@ class HttpCommentsRepository implements CommentsRepository {
     required String courseKey,
     required String userId,
     Duration pollInterval = const Duration(seconds: 6),
-  }) async* {
+  }) {
+    final controller = StreamController<List<AppCommentItem>>();
+    RealtimeChannel? channel;
+    Timer? poller;
+    var disposed = false;
     List<AppCommentItem> last = const [];
-    try {
-      last = await fetchComments(courseKey: courseKey, userId: userId);
-    } catch (_) {}
-    yield last;
 
-    await for (final _ in Stream.periodic(pollInterval)) {
+    Future<void> push() async {
+      if (disposed) return;
       try {
         last = await fetchComments(courseKey: courseKey, userId: userId);
-        yield last;
-      } catch (_) {
-        // Keep previously rendered comments instead of flashing empty list.
-        yield last;
-      }
+      } catch (_) {}
+      if (!disposed) controller.add(last);
     }
+
+    Future<void> boot() async {
+      await push();
+      final client = realtimeClient;
+      if (client != null) {
+        channel = client
+            .channel('app-comments-$courseKey')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'app_comments',
+              filter: PostgresChangeFilter(
+                type: PostgresChangeFilterType.eq,
+                column: 'course_key',
+                value: courseKey,
+              ),
+              callback: (_) => unawaited(push()),
+            )
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'app_comment_likes',
+              callback: (_) => unawaited(push()),
+            )
+            .subscribe();
+      }
+      poller = Timer.periodic(pollInterval, (_) => unawaited(push()));
+    }
+
+    unawaited(boot());
+    controller.onCancel = () async {
+      disposed = true;
+      poller?.cancel();
+      if (channel != null) await realtimeClient?.removeChannel(channel!);
+      await controller.close();
+    };
+    return controller.stream;
   }
 }

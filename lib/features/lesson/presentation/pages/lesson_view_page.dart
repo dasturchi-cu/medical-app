@@ -12,6 +12,7 @@ import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/auth_controller.dart';
+import '../../../../core/state/lesson_assets_state.dart';
 import '../../../../core/state/lesson_slides_state.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../widgets/video_player_box.dart';
@@ -71,6 +72,18 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     }
 
     final remoteSlides = lessonSlidesAsync.valueOrNull ?? const [];
+    final lessonAssets = ref.watch(lessonAssetsProvider(widget.lessonId)).valueOrNull ?? const [];
+    final assetSlides = lessonAssets
+        .map(
+          (asset) => _RenderedSlide(
+            title: asset.title,
+            body: asset.description,
+            imageUrl: asset.previewImageUrl,
+            assetId: asset.id,
+            assetType: asset.fileType,
+          ),
+        )
+        .toList(growable: false);
     final renderedSlides = remoteSlides.isNotEmpty
         ? remoteSlides
             .map(
@@ -84,6 +97,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
         : lesson.slides
             .map((text) => _RenderedSlide(title: text, body: '', imageUrl: ''))
             .toList(growable: false);
+    final mergedSlides = [...renderedSlides, ...assetSlides];
 
     return Scaffold(
       appBar: AppBar(
@@ -122,6 +136,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                   url: lesson.videoUrl,
                   height: mediaHeight,
                   onWatchProgress: (watchedSec, completed) {
+                    if (!mounted) return;
                     if (courseId == null) return;
                     _syncWatchProgress(
                       courseId: courseId,
@@ -132,9 +147,10 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                 );
               }
               return _SlideViewer(
-                slides: renderedSlides,
+                slides: mergedSlides,
                 controller: _slidesController,
                 height: mediaHeight,
+                lessonId: widget.lessonId,
               );
             },
           ),
@@ -245,6 +261,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     required int watchedSec,
     required bool completed,
   }) async {
+    if (!mounted) return;
     final auth = ref.read(authControllerProvider);
     final userId = auth.userId ?? '';
     final baseUrl = getApiBaseUrl();
@@ -281,11 +298,13 @@ class _SlideViewer extends StatefulWidget {
     required this.slides,
     required this.controller,
     required this.height,
+    required this.lessonId,
   });
 
   final List<_RenderedSlide> slides;
   final PageController controller;
   final double height;
+  final String lessonId;
 
   @override
   State<_SlideViewer> createState() => _SlideViewerState();
@@ -413,6 +432,20 @@ class _SlideViewerState extends State<_SlideViewer> {
                                 ),
                               ),
                             ],
+                            if ((slide.assetId ?? '').isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              FilledButton.icon(
+                                style: FilledButton.styleFrom(
+                                  backgroundColor: Colors.white.withValues(alpha: 0.18),
+                                  foregroundColor: Colors.white,
+                                ),
+                                onPressed: () => context.push(
+                                  '${AppRoutes.lessonAsset}?lessonId=${widget.lessonId}&assetId=${slide.assetId}',
+                                ),
+                                icon: Icon((slide.assetType ?? 'pdf') == 'ppt' ? Icons.open_in_new : Icons.picture_as_pdf_outlined),
+                                label: Text((slide.assetType ?? 'pdf') == 'ppt' ? 'PPT ni ochish' : 'PDF ni ochish'),
+                              ),
+                            ],
                           ],
                         ),
                       ),
@@ -535,105 +568,120 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: Colors.black,
-      body: SafeArea(
-        child: Stack(
-          children: [
-            PageView.builder(
-              controller: _controller,
-              itemCount: widget.slides.length,
-              onPageChanged: (v) => setState(() => _index = v),
-              itemBuilder: (context, i) {
-                final slide = widget.slides[i];
-                return Container(
-                  color: const Color(0xFF1E6BB8),
-                  child: Padding(
-                    padding: const EdgeInsets.all(28),
-                    child: Column(
-                      crossAxisAlignment: CrossAxisAlignment.start,
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        Text(
-                          'Test slayd ${i + 1}',
-                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                color: Colors.white70,
-                                fontWeight: FontWeight.w800,
+      body: Stack(
+        children: [
+          PageView.builder(
+            controller: _controller,
+            itemCount: widget.slides.length,
+            onPageChanged: (v) => setState(() => _index = v),
+            itemBuilder: (context, i) {
+              final slide = widget.slides[i];
+              return Container(
+                color: const Color(0xFF1E6BB8),
+                child: Stack(
+                  fit: StackFit.expand,
+                  children: [
+                    if (slide.imageUrl.trim().isNotEmpty)
+                      _SlideImage(
+                        imageUrl: slide.imageUrl,
+                        fit: BoxFit.cover,
+                        placeholderHeight: double.infinity,
+                      ),
+                    if (slide.title.trim().isNotEmpty || slide.body.trim().isNotEmpty)
+                      Align(
+                        alignment: Alignment.topLeft,
+                        child: Container(
+                          margin: const EdgeInsets.fromLTRB(18, 18, 18, 0),
+                          padding: const EdgeInsets.all(12),
+                          decoration: BoxDecoration(
+                            color: Colors.black.withValues(alpha: 0.32),
+                            borderRadius: BorderRadius.circular(12),
+                          ),
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                'Test slayd ${i + 1}',
+                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                      color: Colors.white70,
+                                      fontWeight: FontWeight.w800,
+                                    ),
                               ),
-                        ),
-                        const SizedBox(height: 10),
-                        Text(
-                          slide.title,
-                          style: Theme.of(context).textTheme.displaySmall?.copyWith(
-                                color: Colors.white,
-                                fontWeight: FontWeight.w900,
-                              ),
-                        ),
-                        if (slide.body.trim().isNotEmpty) ...[
-                          const SizedBox(height: 12),
-                          Text(
-                            slide.body,
-                            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                                  color: Colors.white.withValues(alpha: 0.9),
-                                  fontWeight: FontWeight.w600,
+                              if (slide.title.trim().isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  slide.title,
+                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                        color: Colors.white,
+                                        fontWeight: FontWeight.w900,
+                                      ),
                                 ),
+                              ],
+                              if (slide.body.trim().isNotEmpty) ...[
+                                const SizedBox(height: 6),
+                                Text(
+                                  slide.body,
+                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                                        color: Colors.white.withValues(alpha: 0.9),
+                                      ),
+                                ),
+                              ],
+                            ],
                           ),
-                        ],
-                        if (slide.imageUrl.trim().isNotEmpty) ...[
-                          const SizedBox(height: 14),
-                          Expanded(
-                            child: ClipRRect(
-                              borderRadius: BorderRadius.circular(14),
-                              child: _SlideImage(
-                                imageUrl: slide.imageUrl,
-                                fit: BoxFit.contain,
-                                placeholderHeight: double.infinity,
-                              ),
-                            ),
-                          ),
-                        ],
-                      ],
-                    ),
-                  ),
-                );
-              },
+                        ),
+                      ),
+                  ],
+                ),
+              );
+            },
+          ),
+          Positioned(
+            top: 8,
+            left: 8,
+            child: IconButton.filledTonal(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.close_fullscreen),
+              tooltip: 'Chiqish',
             ),
-            Positioned(
-              top: 8,
-              left: 8,
-              child: IconButton.filledTonal(
-                onPressed: () => Navigator.of(context).pop(),
-                icon: const Icon(Icons.close_fullscreen),
-                tooltip: 'Chiqish',
-              ),
+          ),
+          Positioned(
+            bottom: 12,
+            right: 12,
+            child: IconButton.filledTonal(
+              onPressed: () => Navigator.of(context).pop(),
+              icon: const Icon(Icons.fullscreen_exit),
+              tooltip: 'Kichraytirish',
             ),
-            Positioned(
-              bottom: 12,
-              left: 0,
-              right: 0,
-              child: Column(
-                children: [
-                  AnimatedSmoothIndicator(
-                    activeIndex: _index,
-                    count: widget.slides.length,
-                    effect: const WormEffect(
-                      dotWidth: 8,
-                      dotHeight: 8,
-                      activeDotColor: Colors.white,
-                      dotColor: Color(0x80FFFFFF),
-                    ),
+          ),
+          Positioned(
+            bottom: 12,
+             left: 0,
+            right: 0,
+            child: Column(
+              children: [
+                AnimatedSmoothIndicator(
+                  activeIndex: _index,
+                  count: widget.slides.length,
+                  effect: const WormEffect(
+                    dotWidth: 8,
+                    dotHeight: 8,
+                    activeDotColor: Colors.white,
+                    dotColor: Color(0x80FFFFFF),
                   ),
-                  const SizedBox(height: 8),
-                  Text(
-                    '${_index + 1} / ${widget.slides.length}',
-                    style: const TextStyle(
-                      color: Colors.white,
-                      fontWeight: FontWeight.w700,
-                    ),
+                ),
+                const SizedBox(height: 8),
+                Text(
+                  '${_index + 1} / ${widget.slides.length}',
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontWeight: FontWeight.w700,
                   ),
-                ],
-              ),
+                ),
+              ],
             ),
-          ],
-        ),
+          ),
+        ],
       ),
     );
   }
@@ -644,11 +692,15 @@ class _RenderedSlide {
     required this.title,
     required this.body,
     required this.imageUrl,
+    this.assetId,
+    this.assetType,
   });
 
   final String title;
   final String body;
   final String imageUrl;
+  final String? assetId;
+  final String? assetType;
 }
 
 class _SlideImage extends StatelessWidget {

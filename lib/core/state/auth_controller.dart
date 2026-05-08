@@ -63,6 +63,7 @@ class AuthController extends Notifier<AuthState> {
       );
     }
     Future.microtask(() {
+      ref.read(purchaseControllerProvider.notifier).bindRealtime(user.id);
       ref.read(purchaseControllerProvider.notifier).syncFromBackend(user.id);
       _verifyUserAccess(user.id);
     });
@@ -83,7 +84,8 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> _verifyUserAccess(String userId) async {
     final status = await ref.read(authServiceProvider).checkUserAccess(userId);
-    if (status == null || !status.isBlocked) return;
+    if (status == null) return;
+    if (!status.isBlocked && status.sessionActive) return;
     await ref.read(authServiceProvider).signOut();
     ref.read(purchaseControllerProvider.notifier).clear();
     state = AuthState(
@@ -91,8 +93,10 @@ class AuthController extends Notifier<AuthState> {
       name: 'Mehmon',
       userId: null,
       email: null,
-      isBlocked: true,
-      blockReason: "Siz admin tomonidan bloklangansiz. Admin: @${status.adminContact}",
+      isBlocked: status.isBlocked,
+      blockReason: status.isBlocked
+          ? "Siz admin tomonidan bloklangansiz. Admin: @${status.adminContact}"
+          : "Sessiya tugatildi. Qaytadan tizimga kiring.",
     );
   }
 
@@ -125,6 +129,7 @@ class AuthController extends Notifier<AuthState> {
         return 'Telefon raqami noto‘g‘ri';
       }
       state = _fromUser(user);
+      ref.read(purchaseControllerProvider.notifier).bindRealtime(user.id);
       await ref.read(purchaseControllerProvider.notifier).syncFromBackend(user.id);
       return null;
     } on AuthServiceError catch (error) {

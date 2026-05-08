@@ -11,6 +11,7 @@ import { Label } from "@/components/ui/label";
 import { createAd, fetchAds, removeAd, type AdItem, updateAd } from "@/lib/api/ads";
 import { fetchCourses } from "@/lib/api/courses";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function AdsPage() {
@@ -25,7 +26,7 @@ export default function AdsPage() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
         const [adItems, courseItems] = await Promise.all([fetchAds(), fetchCourses()]);
         if (!mounted) return;
@@ -34,15 +35,25 @@ export default function AdsPage() {
         setCourses(mapped);
         setFormValues((prev) => ({ ...prev, courseId: mapped[0]?.id ?? "" }));
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Reklamalar yuklanmadi.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void load();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-ads-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "course_banners" }, () => {
+        void load(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, []);
 
@@ -113,7 +124,7 @@ export default function AdsPage() {
         <Field label="Sarlavha" value={formValues.title} onChange={(value) => setFormValues((prev) => ({ ...prev, title: value }))} />
         <Field label="Matn" value={formValues.message} onChange={(value) => setFormValues((prev) => ({ ...prev, message: value }))} />
         <Field label="Narx" value={formValues.price} onChange={(value) => setFormValues((prev) => ({ ...prev, price: value }))} />
-        <Field label="Rasm manzili" value={formValues.image} onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))} />
+        <Field label="Rasm manzili (upload URL)" value={formValues.image} onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))} />
         <div className="grid gap-2">
           <Label htmlFor="course">Kurs</Label>
           <select
@@ -164,7 +175,7 @@ export default function AdsPage() {
           <Field label="Sarlavha" value={editValues.title} onChange={(value) => setEditValues((prev) => ({ ...prev, title: value }))} />
           <Field label="Matn" value={editValues.message} onChange={(value) => setEditValues((prev) => ({ ...prev, message: value }))} />
           <Field label="Narx" value={editValues.price} onChange={(value) => setEditValues((prev) => ({ ...prev, price: value }))} />
-          <Field label="Rasm manzili" value={editValues.image} onChange={(value) => setEditValues((prev) => ({ ...prev, image: value }))} />
+          <Field label="Rasm manzili (upload URL)" value={editValues.image} onChange={(value) => setEditValues((prev) => ({ ...prev, image: value }))} />
           <Button type="submit" className="h-10 rounded-xl px-4">
             Yangilash
           </Button>

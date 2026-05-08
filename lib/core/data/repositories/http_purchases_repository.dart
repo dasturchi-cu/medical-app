@@ -1,16 +1,19 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:supabase/supabase.dart';
 
 import '../models/purchase_models.dart';
 import 'purchases_repository.dart';
 
 class HttpPurchasesRepository implements PurchasesRepository {
-  HttpPurchasesRepository({required this.baseUrl, this.client});
+  HttpPurchasesRepository({required this.baseUrl, this.client, this.realtimeClient});
 
   final String baseUrl;
   final http.Client? client;
+  final SupabaseClient? realtimeClient;
 
   http.Client get _client => client ?? http.Client();
 
@@ -84,5 +87,55 @@ class HttpPurchasesRepository implements PurchasesRepository {
         .whereType<Map<String, dynamic>>()
         .map(UserEntitlementItem.fromJson)
         .toList(growable: false);
+  }
+
+  @override
+  Stream<List<UserEntitlementItem>> watchUserEntitlements({
+    required String userId,
+    Duration pollInterval = const Duration(seconds: 12),
+  }) {
+    if (userId.isEmpty) return Stream.value(const []);
+    final controller = StreamController<List<UserEntitlementItem>>();
+    RealtimeChannel? channel;
+    Timer? poller;
+    var disposed = false;
+
+    Future<void> push() async {
+      if (disposed) return;
+      try {
+        controller.add(await fetchUserEntitlements(userId: userId));
+      } catch (_) {}
+    }
+
+    Future<void> boot() async {
+      await push();
+      final client = realtimeClient;
+      if (client != null) {
+        channel = client
+            .channel('app-entitlements-$userId')
+            .onPostgresChanges(
+              event: PostgresChangeEvent.all,
+              schema: 'public',
+              table: 'user_entitlements',
+              filter: PostgresChangeFilter(
+                type: PostgresChangeFilterType.eq,
+                column: 'user_id',
+                value: userId,
+              ),
+              callback: (_) => unawaited(push()),
+            )
+            .subscribe();
+      }
+      poller = Timer.periodic(pollInterval, (_) => unawaited(push()));
+    }
+
+    unawaited(boot());
+    controller.onCancel = () async {
+      disposed = true;
+      poller?.cancel();
+      if (channel != null) await realtimeClient?.removeChannel(channel!);
+      await controller.close();
+    };
+    return controller.stream;
   }
 }

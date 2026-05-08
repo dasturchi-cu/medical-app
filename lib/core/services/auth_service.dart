@@ -16,11 +16,13 @@ class UserAccessStatus {
     required this.userId,
     required this.isBlocked,
     required this.adminContact,
+    required this.sessionActive,
   });
 
   final String userId;
   final bool isBlocked;
   final String adminContact;
+  final bool sessionActive;
 }
 
 class LocalAuthUser {
@@ -28,26 +30,35 @@ class LocalAuthUser {
     required this.id,
     required this.email,
     required this.name,
+    required this.sessionToken,
   });
 
   final String id;
   final String email;
   final String name;
+  final String sessionToken;
 
   Map<String, dynamic> toJson() => {
         'id': id,
         'email': email,
         'name': name,
+        'session_token': sessionToken,
       };
 
   factory LocalAuthUser.fromJson(Map<String, dynamic> json) => LocalAuthUser(
         id: (json['id'] ?? '').toString(),
         email: (json['email'] ?? '').toString(),
         name: (json['name'] ?? '').toString(),
+        sessionToken: (json['session_token'] ?? '').toString(),
       );
 
-  LocalAuthUser copyWith({String? name}) {
-    return LocalAuthUser(id: id, email: email, name: name ?? this.name);
+  LocalAuthUser copyWith({String? name, String? sessionToken}) {
+    return LocalAuthUser(
+      id: id,
+      email: email,
+      name: name ?? this.name,
+      sessionToken: sessionToken ?? this.sessionToken,
+    );
   }
 }
 
@@ -108,6 +119,7 @@ class AuthService {
       id: (body['user_id'] ?? '').toString(),
       email: (body['phone'] ?? normalizedPhone).toString(),
       name: (body['full_name'] ?? '').toString(),
+      sessionToken: (body['session_token'] ?? '').toString(),
     );
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKey, jsonEncode(_currentUser!.toJson()));
@@ -119,7 +131,7 @@ class AuthService {
     if (baseUrl.isEmpty || userId.trim().isEmpty) return null;
     try {
       final response = await http
-          .get(Uri.parse('$baseUrl/api/v1/auth/user-status/$userId'))
+          .get(Uri.parse('$baseUrl/api/v1/auth/session-status/$userId?session_token=${Uri.encodeQueryComponent(_currentUser?.sessionToken ?? "")}'))
           .timeout(const Duration(seconds: 8));
       if (response.statusCode < 200 || response.statusCode >= 300) return null;
       final body = jsonDecode(response.body);
@@ -128,6 +140,7 @@ class AuthService {
         userId: (body['user_id'] ?? userId).toString(),
         isBlocked: body['is_blocked'] == true,
         adminContact: (body['admin_contact'] ?? 'Neuroscienceadmin').toString(),
+        sessionActive: body['session_active'] != false,
       );
     } catch (_) {
       return null;

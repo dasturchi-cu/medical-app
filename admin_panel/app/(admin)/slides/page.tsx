@@ -4,6 +4,7 @@ import { type FormEvent, useEffect, useMemo, useState } from "react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { AppForm } from "@/components/form";
 import { ImagePicker } from "@/components/image-picker";
+import { StatusModal } from "@/components/status-modal";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
@@ -12,6 +13,8 @@ import { fetchCourses } from "@/lib/api/courses";
 import { fetchLessonSlides, createLessonSlide, deleteLessonSlide, type LessonSlideItem } from "@/lib/api/lesson-slides";
 import { fetchLessons, type LessonItem } from "@/lib/api/lessons";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
+import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function SlidesPage() {
   const [courses, setCourses] = useState<Array<{ id: string; title_uz: string }>>([]);
@@ -21,6 +24,8 @@ export default function SlidesPage() {
   const [selectedCourseId, setSelectedCourseId] = useState<string>("");
   const [selectedLessonId, setSelectedLessonId] = useState<string>("");
   const [values, setValues] = useState({ title: "", body: "", image_url: "", image_urls: [] as string[], order_no: "1" });
+  const statusModal = useStatusModal();
+  const runStatus = statusModal.run;
 
   const resolvedCourseId = selectedCourseId || courses[0]?.id || "";
   const filteredLessons = lessons.filter((item) => (resolvedCourseId ? item.course_id === resolvedCourseId : true));
@@ -28,7 +33,7 @@ export default function SlidesPage() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
         const [courseItems, lessonItems] = await Promise.all([fetchCourses(), fetchLessons()]);
         if (!mounted) return;
@@ -38,13 +43,23 @@ export default function SlidesPage() {
         const firstLesson = lessonItems.find((item) => item.course_id === (courseItems[0]?.id ?? ""));
         setSelectedLessonId(firstLesson?.id ?? "");
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Slayd bo'limini ochishda xatolik.");
       }
     };
     void load();
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-lesson-slides-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "lesson_slides" }, () => {
+        void load(true);
+      })
+      .subscribe();
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, []);
 
@@ -112,12 +127,17 @@ export default function SlidesPage() {
         const created: LessonSlideItem[] = [];
         for (let idx = 0; idx < urls.length; idx += 1) {
           const url = urls[idx];
-          const item = await createLessonSlide({
-            lesson_id: resolvedLessonId,
-            title: values.title,
-            body: values.body,
-            image_url: url,
-            order_no: baseOrder + idx,
+          const item = await runStatus({
+            loadingMessage: "Slayd saqlanmoqda...",
+            successMessage: "Slayd muvaffaqiyatli saqlandi",
+            errorMessage: "Slayd qo'shishda xatolik.",
+            action: async () => createLessonSlide({
+              lesson_id: resolvedLessonId,
+              title: values.title,
+              body: values.body,
+              image_url: url,
+              order_no: baseOrder + idx,
+            }),
           });
           created.push(item);
         }
@@ -241,7 +261,12 @@ export default function SlidesPage() {
           const submitDelete = async () => {
             if (!deleteId) return;
             try {
-              await deleteLessonSlide(deleteId);
+              await runStatus({
+                loadingMessage: "Slayd o'chirilmoqda...",
+                successMessage: "Slayd muvaffaqiyatli o'chirildi",
+                errorMessage: "Slayd o'chirishda xatolik.",
+                action: async () => deleteLessonSlide(deleteId),
+              });
               setSlides((prev) => prev.filter((item) => item.id !== deleteId));
               notifySuccess("Slayd o'chirildi.");
               setDeleteId(null);
@@ -252,6 +277,7 @@ export default function SlidesPage() {
           void submitDelete();
         }}
       />
+      <StatusModal open={statusModal.state.open} type={statusModal.state.type} message={statusModal.state.message} />
     </section>
   );
 }

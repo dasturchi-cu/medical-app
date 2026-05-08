@@ -11,6 +11,7 @@ import { Input } from "@/components/ui/input";
 import { deleteAdminComment, fetchAdminComments, replyAdminComment, toggleAdminCommentHeart, type AdminCommentItem } from "@/lib/api/admin-comments";
 import { fetchCourses } from "@/lib/api/courses";
 import { notifyError, notifySuccess } from "@/lib/notify";
+import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useStatusModal } from "@/lib/use-status-modal";
 
 export default function CommentsPage() {
@@ -24,22 +25,43 @@ export default function CommentsPage() {
 
   useEffect(() => {
     let mounted = true;
-    const load = async () => {
+    const load = async (silent = false) => {
       try {
         const [commentItems, courseItems] = await Promise.all([fetchAdminComments(), fetchCourses()]);
         if (!mounted) return;
         setComments(commentItems);
         setCourses(courseItems.map((item) => ({ id: item.id, title_uz: item.title_uz })));
       } catch (error) {
-        if (!mounted) return;
+        if (!mounted || silent) return;
         notifyError(error instanceof Error ? error.message : "Izohlarni olishda xatolik.");
       } finally {
         if (mounted) setLoading(false);
       }
     };
     void load();
+
+    const supabase = getSupabaseBrowserClient();
+    const channel = supabase
+      ?.channel("admin-comments-live")
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_comments" }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "app_comment_likes" }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, () => {
+        void load(true);
+      })
+      .on("postgres_changes", { event: "*", schema: "public", table: "comment_reactions" }, () => {
+        void load(true);
+      })
+      .subscribe();
+
     return () => {
       mounted = false;
+      if (channel) {
+        void supabase?.removeChannel(channel);
+      }
     };
   }, []);
 

@@ -8,6 +8,7 @@ export interface NotificationCampaign {
   sent_at: string;
   recipients_count: number;
   viewed_count: number;
+  clicked_count: number;
 }
 
 interface NotificationApiResponse {
@@ -18,6 +19,7 @@ interface NotificationApiResponse {
   sent_at: string;
   recipients_count: number;
   viewed_count: number;
+  clicked_count: number;
 }
 
 function toCampaign(item: NotificationApiResponse): NotificationCampaign {
@@ -29,6 +31,7 @@ function toCampaign(item: NotificationApiResponse): NotificationCampaign {
     sent_at: item.sent_at.replace("T", " ").slice(0, 16),
     recipients_count: Number(item.recipients_count) || 0,
     viewed_count: Number(item.viewed_count) || 0,
+    clicked_count: Number(item.clicked_count) || 0,
   };
 }
 

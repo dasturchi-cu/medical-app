@@ -5,12 +5,15 @@ import 'package:go_router/go_router.dart';
 import '../../features/course/presentation/pages/course_detail_page.dart';
 import '../../features/auth/presentation/pages/login_page.dart';
 import '../../features/home/presentation/pages/home_page.dart';
+import '../../features/home/presentation/pages/books_page.dart';
+import '../../features/home/presentation/pages/book_reader_page.dart';
 import '../../features/home/presentation/pages/my_courses_page.dart';
 import '../../features/home/presentation/pages/notifications_page.dart';
 import '../../features/home/presentation/pages/profile_page.dart';
 import '../../features/home/presentation/pages/ranking_page.dart';
 import '../../features/lesson/presentation/pages/lesson_list_page.dart';
 import '../../features/lesson/presentation/pages/lesson_view_page.dart';
+import '../../features/lesson/presentation/pages/asset_view_page.dart';
 import '../../features/pomodoro/presentation/pages/pomodoro_screen.dart';
 import '../../features/quiz/presentation/pages/quiz_page.dart';
 import '../../features/quiz/presentation/pages/result_page.dart';
@@ -59,6 +62,17 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) => const NotificationsPage(),
           ),
           GoRoute(
+            path: AppRoutes.books,
+            builder: (context, state) => const BooksPage(),
+          ),
+          GoRoute(
+            path: AppRoutes.bookReader,
+            builder: (context, state) {
+              final bookId = state.uri.queryParameters['id'] ?? '';
+              return BookReaderPage(bookId: bookId);
+            },
+          ),
+          GoRoute(
             path: AppRoutes.courseDetail,
             builder: (context, state) {
               final courseId = state.uri.queryParameters['id'] ?? '';
@@ -78,6 +92,14 @@ final appRouterProvider = Provider<GoRouter>((ref) {
             builder: (context, state) {
               final lessonId = state.uri.queryParameters['id'] ?? '';
               return LessonViewPage(lessonId: lessonId);
+            },
+          ),
+          GoRoute(
+            path: AppRoutes.lessonAsset,
+            builder: (context, state) {
+              final lessonId = state.uri.queryParameters['lessonId'] ?? '';
+              final assetId = state.uri.queryParameters['assetId'] ?? '';
+              return AssetViewPage(lessonId: lessonId, assetId: assetId);
             },
           ),
           GoRoute(

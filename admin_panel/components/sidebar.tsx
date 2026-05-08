@@ -5,6 +5,7 @@ import { usePathname } from "next/navigation";
 import {
   Bell,
   BookOpen,
+  BookText,
   FileQuestion,
   House,
   ImageIcon,
@@ -15,6 +16,7 @@ import {
   Sparkles,
   Users,
   X,
+  Presentation,
 } from "lucide-react";
 import { cn } from "@/lib/utils";
 
@@ -28,6 +30,8 @@ const navItems = [
   { href: "/purchases", label: "Xaridlar", icon: ShoppingCart },
   { href: "/banners", label: "Bannerlar", icon: ImageIcon },
   { href: "/ads", label: "Reklamalar", icon: Sparkles },
+  { href: "/books", label: "Kitoblar", icon: BookText },
+  { href: "/slide-assets", label: "Slaydlar (PDF/PPT)", icon: Presentation },
   { href: "/notifications", label: "Bildirishnomalar", icon: Bell },
   { href: "/tests", label: "Testlar", icon: FileQuestion },
 ];

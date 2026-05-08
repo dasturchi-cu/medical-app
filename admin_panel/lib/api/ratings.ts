@@ -10,6 +10,14 @@ export interface RatingItem {
   created_at: string;
 }
 
+export interface RatingsAnalytics {
+  total_ratings: number;
+  average_stars: number;
+  five_star_count: number;
+  four_star_count: number;
+  low_rating_count: number;
+}
+
 function headers() {
   const { adminApiKey } = getApiConfig();
   return {
@@ -38,6 +46,15 @@ export async function fetchRatings(params: { search?: string; page?: number; pag
   });
   if (!response.ok) throw new Error(await parseError(response, "Reytinglarni olishda xatolik."));
   return (await response.json()) as { items: RatingItem[]; total: number };
+}
+
+export async function fetchRatingsAnalytics() {
+  const response = await apiFetch("/api/v1/admin/ratings/analytics", {
+    cache: "no-store",
+    headers: headers(),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Reyting analytics olishda xatolik."));
+  return (await response.json()) as RatingsAnalytics;
 }
 
 export async function deleteRating(ratingId: string) {

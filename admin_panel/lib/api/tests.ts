@@ -101,3 +101,32 @@ export async function createTestQuestion(
   if (!response.ok) throw new Error(await parseError(response, "Savol qo'shishda xatolik."));
   return (await response.json()) as TestQuestionItem;
 }
+
+export async function updateTestQuestion(
+  questionId: string,
+  payload: Partial<{
+    question_text: string;
+    option_a: string;
+    option_b: string;
+    option_c: string;
+    option_d: string;
+    correct_option: "A" | "B" | "C" | "D";
+    order_no: number;
+  }>,
+) {
+  const response = await apiFetch(`/api/v1/tests/questions/${questionId}`, {
+    method: "PATCH",
+    headers: headers(),
+    body: JSON.stringify(payload),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Savolni yangilashda xatolik."));
+  return (await response.json()) as TestQuestionItem;
+}
+
+export async function deleteTestQuestion(questionId: string) {
+  const response = await apiFetch(`/api/v1/tests/questions/${questionId}`, {
+    method: "DELETE",
+    headers: headers(),
+  });
+  if (!response.ok) throw new Error(await parseError(response, "Savolni o'chirishda xatolik."));
+}

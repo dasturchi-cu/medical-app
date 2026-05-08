@@ -69,4 +69,5 @@ export async function revokePurchase(entitlementId: string) {
   if (!response.ok) {
     throw new Error("Xaridni bekor qilishda xatolik.");
   }
+  return (await response.json()) as { revoked: boolean; notification_sent: boolean; detail: string };
 }

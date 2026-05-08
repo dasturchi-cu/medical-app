@@ -35,6 +35,7 @@ class NotificationsPage extends ConsumerWidget {
                 onTap: () async {
                   final userId = auth.userId ?? '';
                   await repo.markViewed(userId: userId, notificationId: item.id);
+                  await repo.markClicked(userId: userId, notificationId: item.id);
                   ref.invalidate(notificationsFeedProvider);
                 },
                 child: Card(

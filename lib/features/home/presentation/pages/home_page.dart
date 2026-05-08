@@ -13,6 +13,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/services/catalog_service.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/banners_state.dart';
+import '../../../../core/state/books_state.dart';
 import '../../../../core/state/course_stats_state.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../core/state/slides_state.dart';
@@ -89,6 +90,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     final allCourses = repo.getCourses();
     final slidesAsync = ref.watch(slidesFeedProvider);
     final bannersAsync = ref.watch(bannersFeedProvider);
+    final booksAsync = ref.watch(booksFeedProvider);
     final remoteSlides = slidesAsync.valueOrNull ?? const [];
     final slideItems = remoteSlides.isNotEmpty
         ? remoteSlides
@@ -603,14 +605,70 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
             ),
           ],
           if (selectedCat == 'cat_books')
-            SliverFillRemaining(
-              hasScrollBody: false,
-              child: Center(
-                child: Text(
-                  context.tr('books_empty'),
-                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                    color: Colors.black54,
-                    fontWeight: FontWeight.w700,
+            SliverToBoxAdapter(
+              child: Padding(
+                padding: const EdgeInsets.fromLTRB(16, 10, 16, 0),
+                child: Card(
+                  child: Padding(
+                    padding: const EdgeInsets.all(14),
+                    child: Column(
+                      crossAxisAlignment: CrossAxisAlignment.start,
+                      children: [
+                        Text(
+                          'Kitoblar kutubxonasi',
+                          style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                            fontWeight: FontWeight.w800,
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Text(
+                          'Jami: ${(booksAsync.valueOrNull ?? const []).length} ta kitob',
+                          style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                        ),
+                        const SizedBox(height: 10),
+                        if ((booksAsync.valueOrNull ?? const []).isNotEmpty) ...[
+                          ...((booksAsync.valueOrNull ?? const []).take(4).map(
+                                (book) => Padding(
+                                  padding: const EdgeInsets.only(bottom: 8),
+                                  child: ListTile(
+                                    dense: true,
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 10, vertical: 2),
+                                    shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(10),
+                                      side: BorderSide(color: Colors.black.withValues(alpha: 0.06)),
+                                    ),
+                                    leading: const Icon(Icons.menu_book_outlined),
+                                    title: Text(
+                                      book.title,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    subtitle: Text(
+                                      book.author.isEmpty ? 'Muallif ko‘rsatilmagan' : book.author,
+                                      maxLines: 1,
+                                      overflow: TextOverflow.ellipsis,
+                                    ),
+                                    onTap: () => context.push('${AppRoutes.bookReader}?id=${book.id}'),
+                                  ),
+                                ),
+                              )),
+                        ] else
+                          Padding(
+                            padding: const EdgeInsets.only(bottom: 8),
+                            child: Text(
+                              context.tr('books_empty'),
+                              style: Theme.of(context).textTheme.bodyMedium?.copyWith(color: Colors.black54),
+                            ),
+                          ),
+                        SizedBox(
+                          width: double.infinity,
+                          child: FilledButton(
+                            onPressed: () => context.push(AppRoutes.books),
+                            child: Text((booksAsync.valueOrNull ?? const []).isEmpty ? "Kitob qo'shilgach shu yerda chiqadi" : "Barcha kitoblarni ochish"),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
                 ),
               ),

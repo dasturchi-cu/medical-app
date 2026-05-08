@@ -1,11 +1,10 @@
 "use client";
 
-import { useRef } from "react";
+import { useRef, useState } from "react";
 import type { ChangeEvent } from "react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { adminActions, useAdminStore } from "@/lib/admin-store";
 import { notifySuccess } from "@/lib/notify";
 
 interface ImagePickerProps {
@@ -17,7 +16,7 @@ interface ImagePickerProps {
 
 export function ImagePicker({ label, value, helperText, onChange }: ImagePickerProps) {
   const inputRef = useRef<HTMLInputElement | null>(null);
-  const mediaAssets = useAdminStore((state) => state.mediaAssets);
+  const [mediaAssets, setMediaAssets] = useState<MediaAsset[]>(() => readMediaAssets());
 
   const onFileChange = async (event: ChangeEvent<HTMLInputElement>) => {
     const file = event.target.files?.[0];
@@ -32,7 +31,8 @@ export function ImagePicker({ label, value, helperText, onChange }: ImagePickerP
     const dataUrl = await readFileAsDataUrl(file);
     const optimized = await optimizeImage(dataUrl, 1600, 0.78);
     onChange(optimized);
-    adminActions.addMediaAsset(optimized);
+    addMediaAsset(optimized);
+    setMediaAssets(readMediaAssets());
     notifySuccess("Rasm yuklandi va media kutubxonaga qo'shildi.");
   };
 
@@ -69,7 +69,11 @@ export function ImagePicker({ label, value, helperText, onChange }: ImagePickerP
                 <button
                   type="button"
                   className="absolute right-1 top-1 hidden rounded-md bg-white/90 px-1.5 py-0.5 text-[10px] text-red-600 group-hover:block"
-                  onClick={() => adminActions.deleteMediaAsset(asset.id)}
+                  onClick={() => {
+                    deleteMediaAsset(asset.id);
+                    setMediaAssets(readMediaAssets());
+                    notifySuccess("Rasm o'chirildi.");
+                  }}
                 >
                   O&apos;chirish
                 </button>
@@ -81,6 +85,43 @@ export function ImagePicker({ label, value, helperText, onChange }: ImagePickerP
       {helperText ? <p className="text-xs text-slate-500">{helperText}</p> : null}
     </div>
   );
+}
+
+const storageKey = "admin_media_assets_v1";
+
+interface MediaAsset {
+  id: string;
+  src: string;
+  created_at: string;
+}
+
+function readMediaAssets(): MediaAsset[] {
+  if (typeof window === "undefined") return [];
+  try {
+    const raw = window.localStorage.getItem(storageKey) ?? "[]";
+    const parsed = JSON.parse(raw) as MediaAsset[];
+    return Array.isArray(parsed) ? parsed : [];
+  } catch {
+    return [];
+  }
+}
+
+function writeMediaAssets(items: MediaAsset[]) {
+  if (typeof window === "undefined") return;
+  window.localStorage.setItem(storageKey, JSON.stringify(items));
+}
+
+function addMediaAsset(src: string) {
+  const normalized = src.trim();
+  if (!normalized) return;
+  const current = readMediaAssets();
+  if (current.some((item) => item.src === normalized)) return;
+  writeMediaAssets([{ id: `media-${Date.now()}`, src: normalized, created_at: new Date().toISOString() }, ...current].slice(0, 30));
+}
+
+function deleteMediaAsset(id: string) {
+  const current = readMediaAssets();
+  writeMediaAssets(current.filter((item) => item.id !== id));
 }
 
 function readFileAsDataUrl(file: File) {
