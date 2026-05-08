@@ -726,7 +726,7 @@ class _SlideImage extends StatelessWidget {
     if (raw.startsWith('data:image')) {
       final commaIndex = raw.indexOf(',');
       if (commaIndex > 0) {
-        final payload = raw.substring(commaIndex + 1);
+        final payload = raw.substring(commaIndex + 1).replaceAll(RegExp(r'\s'), '');
         try {
           final bytes = base64Decode(payload);
           return Image.memory(

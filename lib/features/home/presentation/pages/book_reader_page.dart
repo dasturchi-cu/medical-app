@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -39,29 +40,51 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage> {
     }
     return Scaffold(
       appBar: AppBar(title: Text(book.title)),
-      body: SfPdfViewer.network(
-        book.fileUrl,
-        canShowPaginationDialog: true,
-        onDocumentLoaded: (details) {
-          _totalPages = details.document.pages.count;
-        },
-        onPageChanged: (details) {
-          _lastPage = details.newPageNumber;
-          _debounce?.cancel();
-          _debounce = Timer(const Duration(seconds: 2), () {
-            if (userId.isEmpty) return;
-            final percent = _totalPages > 0 ? ((_lastPage / _totalPages) * 100).clamp(0, 100).toDouble() : 0.0;
-            unawaited(
-              ref.read(booksRepositoryProvider).upsertProgress(
-                    userId: userId,
-                    bookId: widget.bookId,
-                    pageNo: _lastPage,
-                    progressPercent: percent,
-                  ),
-            );
-          });
-        },
-      ),
+      body: _buildPdfViewer(book.fileUrl, userId),
     );
+  }
+
+  Widget _buildPdfViewer(String fileUrl, String userId) {
+    final normalized = fileUrl.trim();
+    final isPdfDataUrl = normalized.startsWith('data:application/pdf');
+    if (isPdfDataUrl) {
+      final comma = normalized.indexOf(',');
+      if (comma > 0) {
+        try {
+          final bytes = base64Decode(normalized.substring(comma + 1).replaceAll(RegExp(r'\s'), ''));
+          return SfPdfViewer.memory(
+            bytes,
+            canShowPaginationDialog: true,
+            onDocumentLoaded: (details) => _totalPages = details.document.pages.count,
+            onPageChanged: (details) => _onPageChanged(details, userId),
+          );
+        } catch (_) {
+          return const Center(child: Text("PDF faylni o'qib bo'lmadi."));
+        }
+      }
+    }
+    return SfPdfViewer.network(
+      normalized,
+      canShowPaginationDialog: true,
+      onDocumentLoaded: (details) => _totalPages = details.document.pages.count,
+      onPageChanged: (details) => _onPageChanged(details, userId),
+    );
+  }
+
+  void _onPageChanged(PdfPageChangedDetails details, String userId) {
+    _lastPage = details.newPageNumber;
+    _debounce?.cancel();
+    _debounce = Timer(const Duration(seconds: 2), () {
+      if (userId.isEmpty) return;
+      final percent = _totalPages > 0 ? ((_lastPage / _totalPages) * 100).clamp(0, 100).toDouble() : 0.0;
+      unawaited(
+        ref.read(booksRepositoryProvider).upsertProgress(
+              userId: userId,
+              bookId: widget.bookId,
+              pageNo: _lastPage,
+              progressPercent: percent,
+            ),
+      );
+    });
   }
 }

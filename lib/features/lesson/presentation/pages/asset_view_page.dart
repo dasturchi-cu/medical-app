@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -41,34 +42,68 @@ class _AssetViewPageState extends ConsumerState<AssetViewPage> {
     final asset = match.isEmpty ? null : match.first;
     if (asset == null) return const Scaffold(body: Center(child: Text("Fayl topilmadi")));
 
-    if (asset.fileType == 'ppt') {
+    final isPpt = asset.fileType.toLowerCase().startsWith('ppt');
+    if (isPpt) {
+      final isDataUrl = asset.fileUrl.trim().startsWith('data:');
       return Scaffold(
         appBar: AppBar(title: Text(asset.title)),
         body: Center(
-          child: FilledButton.icon(
-            onPressed: () async {
-              final uri = Uri.parse(asset.fileUrl);
-              if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
-              await _saveProgress();
-            },
-            icon: const Icon(Icons.open_in_new),
-            label: const Text('PPT ni ochish'),
-          ),
+          child: isDataUrl
+              ? const Padding(
+                  padding: EdgeInsets.all(16),
+                  child: Text(
+                    "PPT data-url formatida saqlangan. Tashqi viewerda ochish uchun Supabase bucket sozlang va fayl public URL bilan saqlansin.",
+                    textAlign: TextAlign.center,
+                  ),
+                )
+              : FilledButton.icon(
+                  onPressed: () async {
+                    final uri = Uri.parse(asset.fileUrl);
+                    if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
+                    await _saveProgress();
+                  },
+                  icon: const Icon(Icons.open_in_new),
+                  label: const Text('PPT ni ochish'),
+                ),
         ),
       );
     }
 
+    final isPdfDataUrl = asset.fileUrl.trim().startsWith('data:application/pdf');
     return Scaffold(
       appBar: AppBar(title: Text(asset.title)),
-      body: SfPdfViewer.network(
-        asset.fileUrl,
+      body: isPdfDataUrl ? _buildPdfMemory(asset.fileUrl) : _buildPdfNetwork(asset.fileUrl),
+    );
+  }
+
+  Widget _buildPdfMemory(String dataUrl) {
+    final comma = dataUrl.indexOf(',');
+    if (comma <= 0) return const Center(child: Text("PDF formati noto'g'ri."));
+    try {
+      final bytes = base64Decode(dataUrl.substring(comma + 1).replaceAll(RegExp(r'\s'), ''));
+      return SfPdfViewer.memory(
+        bytes,
         onDocumentLoaded: (details) => _totalPages = details.document.pages.count,
         onPageChanged: (details) {
           _lastPage = details.newPageNumber;
           _debounce?.cancel();
           _debounce = Timer(const Duration(seconds: 2), _saveProgress);
         },
-      ),
+      );
+    } catch (_) {
+      return const Center(child: Text("PDF ni o'qib bo'lmadi."));
+    }
+  }
+
+  Widget _buildPdfNetwork(String url) {
+    return SfPdfViewer.network(
+      url,
+      onDocumentLoaded: (details) => _totalPages = details.document.pages.count,
+      onPageChanged: (details) {
+        _lastPage = details.newPageNumber;
+        _debounce?.cancel();
+        _debounce = Timer(const Duration(seconds: 2), _saveProgress);
+      },
     );
   }
 

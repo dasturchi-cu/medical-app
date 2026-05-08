@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
@@ -42,9 +44,7 @@ class BooksPage extends ConsumerWidget {
                     child: SizedBox(
                       width: 56,
                       height: 56,
-                      child: item.coverImageUrl.trim().isEmpty
-                          ? const ColoredBox(color: Color(0xFFE9F0FF))
-                          : Image.network(item.coverImageUrl, fit: BoxFit.cover),
+                      child: _BookCoverImage(url: item.coverImageUrl),
                     ),
                   ),
                   title: Text(item.title, maxLines: 1, overflow: TextOverflow.ellipsis),
@@ -62,5 +62,29 @@ class BooksPage extends ConsumerWidget {
         },
       ),
     );
+  }
+}
+
+class _BookCoverImage extends StatelessWidget {
+  const _BookCoverImage({required this.url});
+
+  final String url;
+
+  @override
+  Widget build(BuildContext context) {
+    final value = url.trim();
+    if (value.isEmpty) return const ColoredBox(color: Color(0xFFE9F0FF));
+    if (value.startsWith('data:image')) {
+      final comma = value.indexOf(',');
+      if (comma > 0) {
+        try {
+          final payload = value.substring(comma + 1).replaceAll(RegExp(r'\s'), '');
+          return Image.memory(base64Decode(payload), fit: BoxFit.cover, errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFFE9F0FF)));
+        } catch (_) {
+          return const ColoredBox(color: Color(0xFFE9F0FF));
+        }
+      }
+    }
+    return Image.network(value, fit: BoxFit.cover, errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFFE9F0FF)));
   }
 }
