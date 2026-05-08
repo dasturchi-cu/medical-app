@@ -312,6 +312,7 @@ class _SlideViewer extends StatefulWidget {
 
 class _SlideViewerState extends State<_SlideViewer> {
   int _page = 0;
+  int? _lastAutoOpenedIndex;
 
   @override
   void initState() {
@@ -339,6 +340,22 @@ class _SlideViewerState extends State<_SlideViewer> {
     final next = (widget.controller.page ?? 0).round();
     if (next == _page) return;
     setState(() => _page = next);
+    _maybeAutoOpenAsset(next);
+  }
+
+  void _maybeAutoOpenAsset(int index) {
+    if (!mounted || index < 0 || index >= widget.slides.length) return;
+    final slide = widget.slides[index];
+    if ((slide.assetId ?? '').isEmpty) return;
+    if ((slide.assetType ?? '').toLowerCase() != 'pdf') return;
+    if (_lastAutoOpenedIndex == index) return;
+    _lastAutoOpenedIndex = index;
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (!mounted) return;
+      context.push(
+        '${AppRoutes.lessonAsset}?lessonId=${widget.lessonId}&assetId=${slide.assetId}',
+      );
+    });
   }
 
   Future<void> _openFullscreen() async {
@@ -432,7 +449,7 @@ class _SlideViewerState extends State<_SlideViewer> {
                                 ),
                               ),
                             ],
-                            if ((slide.assetId ?? '').isNotEmpty) ...[
+                            if ((slide.assetId ?? '').isNotEmpty && (slide.assetType ?? '').toLowerCase() == 'ppt') ...[
                               const SizedBox(height: 10),
                               FilledButton.icon(
                                 style: FilledButton.styleFrom(
@@ -442,8 +459,8 @@ class _SlideViewerState extends State<_SlideViewer> {
                                 onPressed: () => context.push(
                                   '${AppRoutes.lessonAsset}?lessonId=${widget.lessonId}&assetId=${slide.assetId}',
                                 ),
-                                icon: Icon((slide.assetType ?? 'pdf') == 'ppt' ? Icons.open_in_new : Icons.picture_as_pdf_outlined),
-                                label: Text((slide.assetType ?? 'pdf') == 'ppt' ? 'PPT ni ochish' : 'PDF ni ochish'),
+                                icon: const Icon(Icons.open_in_new),
+                                label: const Text('PPT ni ochish'),
                               ),
                             ],
                           ],

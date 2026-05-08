@@ -1,7 +1,6 @@
 "use client";
 
 import { type ChangeEvent, type FormEvent, useEffect, useMemo, useRef, useState } from "react";
-import Image from "next/image";
 import { AppForm } from "@/components/form";
 import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
@@ -267,7 +266,7 @@ export default function SlideAssetsPage() {
           <Input value={form.preview_image_url} placeholder="Preview image URL" onChange={(e) => setForm((p) => ({ ...p, preview_image_url: e.target.value }))} />
           {form.preview_image_url.trim() ? (
             <div className="overflow-hidden rounded-xl border border-slate-200">
-              <Image src={form.preview_image_url} alt="Preview" width={640} height={320} className="h-40 w-full object-cover" />
+              <img src={form.preview_image_url} alt="Preview" className="h-40 w-full object-cover" />
             </div>
           ) : null}
         </div>
