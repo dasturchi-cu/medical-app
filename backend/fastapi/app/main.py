@@ -30,10 +30,12 @@ settings = get_settings()
 app = FastAPI(title=settings.app_name)
 logger = logging.getLogger(__name__)
 
+# credentials=False: admin ilova faqat x-admin-api-key header ishlatadi (cookie yo‘q).
+# credentials=True + allow_origins="*" brauzerda CORS xatosi → fetch "Failed to fetch".
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=[settings.frontend_origin, "*"],
-    allow_credentials=True,
+    allow_origins=["*"],
+    allow_credentials=False,
     allow_methods=["*"],
     allow_headers=["*"],
 )

@@ -82,27 +82,59 @@ def list_lesson_assets(client: Client, *, lesson_id: str | None = None, course_i
     return [_to_lesson_asset(row) for row in rows]
 
 
+def _next_lesson_asset_order_no(client: Client, *, lesson_id: str) -> int:
+    rows = (
+        client.table("lesson_assets")
+        .select("order_no")
+        .eq("lesson_id", lesson_id)
+        .order("order_no", desc=True)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not rows:
+        return 1
+    return int(rows[0].get("order_no") or 0) + 1
+
+
+def _raise_lesson_asset_insert_failure(error: Exception) -> None:
+    message = str(error).lower()
+    if "foreign key" in message:
+        raise RuntimeError(
+            "Tanlangan kurs yoki dars bazada topilmadi (ID eskirgan yoki kurs bilan mos kelmaydi)."
+        ) from error
+    if "duplicate" in message or "unique constraint" in message:
+        raise RuntimeError(
+            "Bu dars uchun tartib raqami band yoki slayd allaqachon mavjud — sahifani yangilab qayta urinib ko‘ring."
+        ) from error
+    raise RuntimeError(f"Slayd qo'shib bo'lmadi: {error}") from error
+
+
 def create_lesson_asset(client: Client, payload: LessonAssetCreate) -> LessonAssetItem:
     raw = payload.model_dump()
-    try:
-        inserted = client.table("lesson_assets").insert(raw).execute()
+    lid = raw.get("lesson_id")
+    if lid:
+        raw["order_no"] = _next_lesson_asset_order_no(client, lesson_id=str(lid))
+
+    def _insert_row(data: dict[str, Any]) -> LessonAssetItem:
+        inserted = client.table("lesson_assets").insert(data).execute()
         row = (inserted.data or [None])[0]
         if not row:
-            raise RuntimeError("Asset saqlanmadi.")
+            raise RuntimeError("Slayd saqlanmadi.")
         _mirror_asset_to_lesson_slides(client, row)
         return _to_lesson_asset(row)
+
+    try:
+        return _insert_row(raw)
     except Exception as error:
         message = str(error).lower()
         # Backward-compatible fallback when DB migrations are partially applied.
         if "preview_image_url" in message and "column" in message:
             fallback = {k: v for k, v in raw.items() if k != "preview_image_url"}
-            inserted = client.table("lesson_assets").insert(fallback).execute()
-            row = (inserted.data or [None])[0]
-            if not row:
-                raise RuntimeError("Asset saqlanmadi.")
-            _mirror_asset_to_lesson_slides(client, row)
-            return _to_lesson_asset(row)
-        raise
+            try:
+                return _insert_row(fallback)
+            except Exception as err2:
+                _raise_lesson_asset_insert_failure(err2)
+        _raise_lesson_asset_insert_failure(error)
 
 
 def _mirror_asset_to_lesson_slides(client: Client, row: dict[str, Any]) -> None:

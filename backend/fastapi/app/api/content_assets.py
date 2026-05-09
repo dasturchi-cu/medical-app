@@ -61,7 +61,10 @@ def get_assets(
 
 @router.post("/assets", response_model=LessonAssetItem, status_code=status.HTTP_201_CREATED)
 def post_asset(payload: LessonAssetCreate, _: None = Depends(_require_admin_key)):
-    return create_lesson_asset(get_supabase_client(), payload)
+    try:
+        return create_lesson_asset(get_supabase_client(), payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.patch("/assets/{asset_id}", response_model=LessonAssetItem)

@@ -1,6 +1,6 @@
 const apiBaseUrl = process.env.NEXT_PUBLIC_API_BASE_URL;
 const adminApiKey = process.env.NEXT_PUBLIC_ADMIN_API_KEY;
-const requestTimeoutMs = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 15000);
+const requestTimeoutMs = Number(process.env.NEXT_PUBLIC_API_TIMEOUT_MS ?? 25000);
 
 function resolveApiBaseUrl() {
   const fromEnv = apiBaseUrl?.trim();
@@ -10,6 +10,19 @@ function resolveApiBaseUrl() {
     return `http://${host}:8000`;
   }
   return "http://localhost:8000";
+}
+
+/** Brauzer boshqa origin dagi backend ga to'g'ridan fetch qilganda CORS / TLS sabab "Failed to fetch" chiqishi mumkin — Next.js rewrite orqali same-origin proxy ishlatiladi. */
+function sameOriginBackendProxyBase(): string | null {
+  if (typeof window === "undefined") return null;
+  const fromEnv = apiBaseUrl?.trim();
+  if (!fromEnv?.startsWith("http")) return null;
+  try {
+    if (new URL(fromEnv).origin === window.location.origin) return null;
+  } catch {
+    return null;
+  }
+  return `${window.location.origin}/api/backend-proxy`;
 }
 
 function resolveApiBaseCandidates() {
@@ -26,7 +39,8 @@ function resolveApiBaseCandidates() {
     const host = window.location.hostname?.trim();
     if (host) {
       if (fromEnv) {
-        // Prefer explicit env backend first to avoid split-brain (admin writes to one API, app reads from another).
+        const proxy = sameOriginBackendProxyBase();
+        if (proxy) pushCandidate(proxy);
         pushCandidate(fromEnv);
         pushCandidate(`http://${host}:8000`);
         localhostCandidates.forEach(pushCandidate);
@@ -59,6 +73,8 @@ async function fetchWithTimeout(url: string, init: RequestInit | undefined, time
   try {
     return await fetch(url, {
       ...init,
+      credentials: init?.credentials ?? "omit",
+      mode: init?.mode ?? "cors",
       signal: init?.signal ?? controller.signal,
     });
   } finally {

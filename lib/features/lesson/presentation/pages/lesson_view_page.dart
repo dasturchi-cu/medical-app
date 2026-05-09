@@ -19,6 +19,11 @@ import '../../../../core/state/lesson_slides_state.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../widgets/video_player_box.dart';
 
+bool _renderedSlideHasVisual(_RenderedSlide slide) {
+  if (slide.imageUrl.trim().isNotEmpty) return true;
+  return (slide.assetFileUrl ?? '').trim().isNotEmpty;
+}
+
 class LessonViewPage extends ConsumerStatefulWidget {
   const LessonViewPage({super.key, required this.lessonId});
 
@@ -77,7 +82,9 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     final lessonAssets =
         ref.watch(lessonAssetsProvider(widget.lessonId)).valueOrNull ??
         const [];
-    final assetSlides = lessonAssets
+    final sortedAssets = [...lessonAssets]
+      ..sort((a, b) => a.orderNo.compareTo(b.orderNo));
+    final assetSlides = sortedAssets
         .map(
           (asset) => _RenderedSlide(
             title: asset.title,
@@ -103,7 +110,13 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                 (text) => _RenderedSlide(title: text, body: '', imageUrl: ''),
               )
               .toList(growable: false);
-    final mergedSlides = [...renderedSlides, ...assetSlides];
+    // Admin paneldan lesson_assets yuklangan bo'lsa, faqat ularni ko'rsatamiz —
+    // backend lesson_slides ga mirror qilganda ikki marta chiqmasin.
+    final mergedSlides =
+        lessonAssets.isNotEmpty ? assetSlides : renderedSlides;
+    final showLessonTextBlock =
+        lesson.transcriptUz.trim().isNotEmpty &&
+            !mergedSlides.any(_renderedSlideHasVisual);
 
     return Scaffold(
       appBar: AppBar(
@@ -161,27 +174,29 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
             },
           ),
           const SizedBox(height: 12),
-          Text(
-            'Dars matni',
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
-          ),
-          const SizedBox(height: 8),
-          Card(
-            margin: EdgeInsets.zero,
-            child: Padding(
-              padding: const EdgeInsets.all(14),
-              child: Text(
-                lesson.transcriptUz,
-                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  height: 1.35,
-                  color: Colors.black87,
+          if (showLessonTextBlock) ...[
+            Text(
+              'Dars matni',
+              style: Theme.of(
+                context,
+              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
+            ),
+            const SizedBox(height: 8),
+            Card(
+              margin: EdgeInsets.zero,
+              child: Padding(
+                padding: const EdgeInsets.all(14),
+                child: Text(
+                  lesson.transcriptUz,
+                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                    height: 1.35,
+                    color: Colors.black87,
+                  ),
                 ),
               ),
             ),
-          ),
-          const SizedBox(height: 14),
+            const SizedBox(height: 14),
+          ],
           Row(
             children: [
               Expanded(
@@ -811,7 +826,10 @@ class _InlinePdfPreviewState extends State<_InlinePdfPreview> {
     if (response.statusCode != 200) {
       final body = response.body.toLowerCase();
       if (body.contains('bucket not found')) {
-        throw Exception("Storage bucket topilmadi.");
+        throw Exception(
+          "Supabase Storage: content-assets bucket/policy yo‘q. SQL Editor’da "
+          "migrations/012_storage_content_assets_bucket.sql ni ishga tushiring; bucket public qiling.",
+        );
       }
       throw Exception("PDF yuklanmadi (status: ${response.statusCode}).");
     }
