@@ -70,8 +70,16 @@ export default function SlideAssetsPage() {
     () => [
       { key: "title", label: "Nomi" },
       { key: "file_type", label: "Turi" },
-      { key: "course_id", label: "Kurs ID" },
-      { key: "lesson_id", label: "Dars ID" },
+      {
+        key: "course_id",
+        label: "Kurs",
+        render: (item: LessonAssetItem) => courses.find((course) => course.id === item.course_id)?.title_uz ?? "—",
+      },
+      {
+        key: "lesson_id",
+        label: "Dars",
+        render: (item: LessonAssetItem) => lessons.find((lesson) => lesson.id === item.lesson_id)?.title ?? "—",
+      },
       {
         key: "file_url",
         label: "Fayl",
@@ -91,7 +99,7 @@ export default function SlideAssetsPage() {
         ),
       },
     ],
-    [],
+    [courses, lessons],
   );
 
   const uploadAsset = async (file: File, kind: "file" | "preview") => {

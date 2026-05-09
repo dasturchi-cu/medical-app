@@ -1,8 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:http/http.dart' as http;
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
@@ -96,15 +98,49 @@ class _AssetViewPageState extends ConsumerState<AssetViewPage> {
   }
 
   Widget _buildPdfNetwork(String url) {
-    return SfPdfViewer.network(
-      url,
-      onDocumentLoaded: (details) => _totalPages = details.document.pages.count,
-      onPageChanged: (details) {
-        _lastPage = details.newPageNumber;
-        _debounce?.cancel();
-        _debounce = Timer(const Duration(seconds: 2), _saveProgress);
+    return FutureBuilder<Uint8List>(
+      future: _downloadPdfBytes(url),
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator());
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return Center(
+            child: Padding(
+              padding: const EdgeInsets.all(16),
+              child: Text(
+                snapshot.error is Exception ? (snapshot.error as Exception).toString().replaceFirst('Exception: ', '') : "PDF yuklanmadi.",
+                textAlign: TextAlign.center,
+              ),
+            ),
+          );
+        }
+        return SfPdfViewer.memory(
+          snapshot.data!,
+          onDocumentLoaded: (details) => _totalPages = details.document.pages.count,
+          onPageChanged: (details) {
+            _lastPage = details.newPageNumber;
+            _debounce?.cancel();
+            _debounce = Timer(const Duration(seconds: 2), _saveProgress);
+          },
+        );
       },
     );
+  }
+
+  Future<Uint8List> _downloadPdfBytes(String url) async {
+    final normalized = url.trim();
+    final uri = Uri.tryParse(normalized);
+    if (uri == null) throw Exception("PDF URL noto'g'ri.");
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      final body = response.body.toLowerCase();
+      if (body.contains('bucket not found')) {
+        throw Exception("Storage bucket topilmadi. Admin panelda `content-assets` bucketni yarating.");
+      }
+      throw Exception("PDF yuklanmadi (status: ${response.statusCode}).");
+    }
+    return response.bodyBytes;
   }
 
   Future<void> _saveProgress() async {

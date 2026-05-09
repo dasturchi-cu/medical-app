@@ -6,6 +6,8 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
+import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
+import 'package:url_launcher/url_launcher.dart';
 
 import '../../../../core/config/api_config.dart';
 import '../../../../core/di/providers.dart';
@@ -79,8 +81,8 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
             title: asset.title,
             body: asset.description,
             imageUrl: asset.previewImageUrl,
-            assetId: asset.id,
             assetType: asset.fileType,
+            assetFileUrl: asset.fileUrl,
           ),
         )
         .toList(growable: false);
@@ -312,7 +314,6 @@ class _SlideViewer extends StatefulWidget {
 
 class _SlideViewerState extends State<_SlideViewer> {
   int _page = 0;
-  int? _lastAutoOpenedIndex;
 
   @override
   void initState() {
@@ -340,22 +341,6 @@ class _SlideViewerState extends State<_SlideViewer> {
     final next = (widget.controller.page ?? 0).round();
     if (next == _page) return;
     setState(() => _page = next);
-    _maybeAutoOpenAsset(next);
-  }
-
-  void _maybeAutoOpenAsset(int index) {
-    if (!mounted || index < 0 || index >= widget.slides.length) return;
-    final slide = widget.slides[index];
-    if ((slide.assetId ?? '').isEmpty) return;
-    if ((slide.assetType ?? '').toLowerCase() != 'pdf') return;
-    if (_lastAutoOpenedIndex == index) return;
-    _lastAutoOpenedIndex = index;
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      if (!mounted) return;
-      context.push(
-        '${AppRoutes.lessonAsset}?lessonId=${widget.lessonId}&assetId=${slide.assetId}',
-      );
-    });
   }
 
   Future<void> _openFullscreen() async {
@@ -449,16 +434,28 @@ class _SlideViewerState extends State<_SlideViewer> {
                                 ),
                               ),
                             ],
-                            if ((slide.assetId ?? '').isNotEmpty && (slide.assetType ?? '').toLowerCase() == 'ppt') ...[
+                            if ((slide.assetType ?? '').toLowerCase() == 'pdf' && (slide.assetFileUrl ?? '').trim().isNotEmpty) ...[
+                              const SizedBox(height: 10),
+                              SizedBox(
+                                height: widget.height * 0.38,
+                                child: ClipRRect(
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: _InlinePdfPreview(url: slide.assetFileUrl!),
+                                ),
+                              ),
+                            ],
+                            if ((slide.assetType ?? '').toLowerCase() == 'ppt' && (slide.assetFileUrl ?? '').trim().isNotEmpty) ...[
                               const SizedBox(height: 10),
                               FilledButton.icon(
                                 style: FilledButton.styleFrom(
                                   backgroundColor: Colors.white.withValues(alpha: 0.18),
                                   foregroundColor: Colors.white,
                                 ),
-                                onPressed: () => context.push(
-                                  '${AppRoutes.lessonAsset}?lessonId=${widget.lessonId}&assetId=${slide.assetId}',
-                                ),
+                                onPressed: () async {
+                                  final uri = Uri.tryParse(slide.assetFileUrl!);
+                                  if (uri == null) return;
+                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                                },
                                 icon: const Icon(Icons.open_in_new),
                                 label: const Text('PPT ni ochish'),
                               ),
@@ -709,15 +706,91 @@ class _RenderedSlide {
     required this.title,
     required this.body,
     required this.imageUrl,
-    this.assetId,
     this.assetType,
+    this.assetFileUrl,
   });
 
   final String title;
   final String body;
   final String imageUrl;
-  final String? assetId;
   final String? assetType;
+  final String? assetFileUrl;
+}
+
+class _InlinePdfPreview extends StatefulWidget {
+  const _InlinePdfPreview({required this.url});
+
+  final String url;
+
+  @override
+  State<_InlinePdfPreview> createState() => _InlinePdfPreviewState();
+}
+
+class _InlinePdfPreviewState extends State<_InlinePdfPreview> {
+  late final Future<Uint8List> _bytesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytesFuture = _loadBytes(widget.url);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List>(
+      future: _bytesFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return const Center(child: CircularProgressIndicator(color: Colors.white));
+        }
+        if (snapshot.hasError || !snapshot.hasData) {
+          return _error(
+            snapshot.error is Exception
+                ? (snapshot.error as Exception).toString().replaceFirst('Exception: ', '')
+                : "PDF ni ochib bo'lmadi",
+          );
+        }
+        return SfPdfViewer.memory(snapshot.data!);
+      },
+    );
+  }
+
+  Future<Uint8List> _loadBytes(String raw) async {
+    final value = raw.trim();
+    if (value.startsWith('data:application/pdf')) {
+      final comma = value.indexOf(',');
+      if (comma <= 0) throw Exception("PDF formati noto'g'ri.");
+      try {
+        return base64Decode(value.substring(comma + 1).replaceAll(RegExp(r'\s'), ''));
+      } catch (_) {
+        throw Exception("PDF ni o'qib bo'lmadi.");
+      }
+    }
+    final uri = Uri.tryParse(value);
+    if (uri == null) throw Exception("PDF URL noto'g'ri.");
+    final response = await http.get(uri);
+    if (response.statusCode != 200) {
+      final body = response.body.toLowerCase();
+      if (body.contains('bucket not found')) {
+        throw Exception("Storage bucket topilmadi.");
+      }
+      throw Exception("PDF yuklanmadi (status: ${response.statusCode}).");
+    }
+    return response.bodyBytes;
+  }
+
+  Widget _error(String message) {
+    return Container(
+      color: const Color(0xFF0E4E8E),
+      alignment: Alignment.center,
+      padding: const EdgeInsets.all(12),
+      child: Text(
+        message,
+        textAlign: TextAlign.center,
+        style: const TextStyle(color: Colors.white),
+      ),
+    );
+  }
 }
 
 class _SlideImage extends StatelessWidget {
