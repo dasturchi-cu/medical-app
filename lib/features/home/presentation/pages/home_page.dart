@@ -140,14 +140,21 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         .map(
           (banner) {
             final linkedCourseId = (banner.courseId ?? '').trim();
+            final externalTelegramOnly = linkedCourseId.isEmpty;
             return _NewsItem(
               id: banner.id,
               titleUz: banner.title,
               summaryUz: banner.message.isEmpty
-                  ? 'Onlayn kurslar uchun reklama'
+                  ? (externalTelegramOnly
+                      ? 'Telegram maxfiy kanalidagi tashqi kurs'
+                      : 'Onlayn kurslar uchun reklama')
                   : banner.message,
-              relatedCourseId: linkedCourseId.isEmpty ? banner.id : linkedCourseId,
-              useFeedbackApi: linkedCourseId.isEmpty,
+              feedbackKey: externalTelegramOnly ? banner.id : linkedCourseId,
+              platformCourseId: externalTelegramOnly ? null : linkedCourseId,
+              telegramContact: banner.telegram.trim().isEmpty
+                  ? 'Neuroscienceadmin'
+                  : banner.telegram.trim(),
+              useFeedbackApi: externalTelegramOnly,
               imageUrl: banner.imageUrl.isEmpty
                   ? 'https://picsum.photos/seed/${banner.id}/600/320'
                   : banner.imageUrl,
@@ -470,7 +477,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                           final news = newsItems[index];
                           final newsStatsAsync = ref.watch(
                             contentCardStatsProvider(
-                              (key: news.relatedCourseId, useFeedbackApi: news.useFeedbackApi),
+                              (key: news.feedbackKey, useFeedbackApi: news.useFeedbackApi),
                             ),
                           );
                           final newsStats = newsStatsAsync.valueOrNull;
@@ -484,7 +491,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                                 isScrollControlled: true,
                                 showDragHandle: false,
                                 builder: (_) => CourseStatsCommentsSheet(
-                                  courseId: news.relatedCourseId,
+                                  courseId: news.feedbackKey,
                                   courseTitleUz: news.titleUz,
                                   useFeedbackApi: news.useFeedbackApi,
                                 ),
@@ -496,7 +503,8 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                                 courseName: news.titleUz,
                                 description: news.summaryUz,
                                 price: news.priceText,
-                                courseId: null,
+                                courseId: news.platformCourseId,
+                                telegramRecipient: news.telegramContact,
                               );
                             },
                           );
@@ -812,7 +820,9 @@ class _NewsItem {
     required this.id,
     required this.titleUz,
     required this.summaryUz,
-    required this.relatedCourseId,
+    required this.feedbackKey,
+    required this.platformCourseId,
+    required this.telegramContact,
     required this.useFeedbackApi,
     required this.imageUrl,
     required this.rating,
@@ -823,7 +833,11 @@ class _NewsItem {
   final String id;
   final String titleUz;
   final String summaryUz;
-  final String relatedCourseId;
+  /// Sharhlar/statistikada kalit (platforma kursi ID yoki tashqi reklama uchun banner ID).
+  final String feedbackKey;
+  /// `null` bo‘lsa bu karta ilova ichidagi kursga bog‘lanmaydi (faqat Telegram).
+  final String? platformCourseId;
+  final String telegramContact;
   final bool useFeedbackApi;
   final String imageUrl;
   final double rating;

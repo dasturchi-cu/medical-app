@@ -42,6 +42,7 @@ export async function createBanner(payload: {
   price_label: string;
   course_id?: string | null;
   telegram: string;
+  is_active?: boolean;
 }) {
   const response = await apiFetch("/api/v1/banners", {
     method: "POST",

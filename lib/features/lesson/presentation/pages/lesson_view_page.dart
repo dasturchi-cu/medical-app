@@ -24,6 +24,42 @@ bool _renderedSlideHasVisual(_RenderedSlide slide) {
   return (slide.assetFileUrl ?? '').trim().isNotEmpty;
 }
 
+bool _slideIsPdfAsset(_RenderedSlide slide) {
+  return (slide.assetType ?? '').toLowerCase() == 'pdf' &&
+      (slide.assetFileUrl ?? '').trim().isNotEmpty;
+}
+
+bool _slideIsPptAsset(_RenderedSlide slide) {
+  return (slide.assetType ?? '').toLowerCase() == 'ppt' &&
+      (slide.assetFileUrl ?? '').trim().isNotEmpty;
+}
+
+bool _slideHasCoverImage(_RenderedSlide slide) {
+  return slide.imageUrl.trim().isNotEmpty && !_slideIsPdfAsset(slide);
+}
+
+/// `lesson_assets` bo‘lsa ham, mirror qilingan `lesson_slides` ko‘proq bo‘lishi mumkin —
+/// faqat assetlarni tanlash jami slayd/rasm sonini pasaytirardi.
+List<_RenderedSlide> _mergeLessonSlidesAndAssets({
+  required List<_RenderedSlide> assetSlides,
+  required List<_RenderedSlide> renderedSlides,
+  required bool hasLessonAssets,
+  required bool hasRemoteLessonSlides,
+}) {
+  if (!hasLessonAssets) return renderedSlides;
+  if (!hasRemoteLessonSlides) return assetSlides;
+
+  final visualsFromSlides =
+      renderedSlides.where(_renderedSlideHasVisual).length;
+  final visualsFromAssets =
+      assetSlides.where(_renderedSlideHasVisual).length;
+  final preferRendered =
+      renderedSlides.length > assetSlides.length ||
+          visualsFromSlides > visualsFromAssets;
+
+  return preferRendered ? renderedSlides : assetSlides;
+}
+
 class LessonViewPage extends ConsumerStatefulWidget {
   const LessonViewPage({super.key, required this.lessonId});
 
@@ -36,7 +72,7 @@ class LessonViewPage extends ConsumerStatefulWidget {
 class _LessonViewPageState extends ConsumerState<LessonViewPage>
     with SingleTickerProviderStateMixin {
   late final TabController _tabController;
-  final _slidesController = PageController();
+  late PageController _slidesController;
   int _lastSyncedWatchSec = 0;
   bool _syncingWatch = false;
 
@@ -44,6 +80,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
   void initState() {
     super.initState();
     _tabController = TabController(length: 2, vsync: this);
+    _slidesController = PageController();
   }
 
   @override
@@ -51,6 +88,15 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     _tabController.dispose();
     _slidesController.dispose();
     super.dispose();
+  }
+
+  @override
+  void didUpdateWidget(covariant LessonViewPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.lessonId != widget.lessonId) {
+      _slidesController.dispose();
+      _slidesController = PageController();
+    }
   }
 
   @override
@@ -63,7 +109,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     final size = MediaQuery.sizeOf(context);
     final mediaHeight = orientation == Orientation.landscape
         ? size.height * 0.78
-        : size.height * 0.38;
+        : size.height * 0.46;
 
     if (lesson == null) {
       return Scaffold(
@@ -110,10 +156,12 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                 (text) => _RenderedSlide(title: text, body: '', imageUrl: ''),
               )
               .toList(growable: false);
-    // Admin paneldan lesson_assets yuklangan bo'lsa, faqat ularni ko'rsatamiz —
-    // backend lesson_slides ga mirror qilganda ikki marta chiqmasin.
-    final mergedSlides =
-        lessonAssets.isNotEmpty ? assetSlides : renderedSlides;
+    final mergedSlides = _mergeLessonSlidesAndAssets(
+      assetSlides: assetSlides,
+      renderedSlides: renderedSlides,
+      hasLessonAssets: lessonAssets.isNotEmpty,
+      hasRemoteLessonSlides: remoteSlides.isNotEmpty,
+    );
     final showLessonTextBlock =
         lesson.transcriptUz.trim().isNotEmpty &&
             !mergedSlides.any(_renderedSlideHasVisual);
@@ -322,6 +370,23 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
   }
 }
 
+/// Qo‘lda surilganda sahifalar tezroq “snap” bo‘lishi uchun qattiq spring.
+class _SnappyPageScrollPhysics extends PageScrollPhysics {
+  const _SnappyPageScrollPhysics({super.parent});
+
+  @override
+  _SnappyPageScrollPhysics applyTo(ScrollPhysics? ancestor) {
+    return _SnappyPageScrollPhysics(parent: buildParent(ancestor));
+  }
+
+  @override
+  SpringDescription get spring => SpringDescription.withDampingRatio(
+        mass: 0.42,
+        stiffness: 9000,
+        ratio: 1.02,
+      );
+}
+
 class _SlideViewer extends StatefulWidget {
   const _SlideViewer({
     required this.slides,
@@ -341,33 +406,141 @@ class _SlideViewer extends StatefulWidget {
 
 class _SlideViewerState extends State<_SlideViewer> {
   int _page = 0;
+  PdfViewerController? _pdfDeckController;
+  int? _pdfPageNumber;
+  int? _pdfPageCount;
 
   @override
   void initState() {
     super.initState();
-    widget.controller.addListener(_onScroll);
+    WidgetsBinding.instance.addPostFrameCallback((_) => _syncPageFromController());
   }
 
   @override
   void didUpdateWidget(covariant _SlideViewer oldWidget) {
     super.didUpdateWidget(oldWidget);
-    if (oldWidget.controller != widget.controller) {
-      oldWidget.controller.removeListener(_onScroll);
-      widget.controller.addListener(_onScroll);
-      _page = (widget.controller.page ?? 0).round();
+    final lessonChanged = oldWidget.lessonId != widget.lessonId;
+    final countChanged = oldWidget.slides.length != widget.slides.length;
+    final controllerChanged = oldWidget.controller != widget.controller;
+    if (controllerChanged) {
+      _page = 0;
+    }
+    if (lessonChanged || countChanged || controllerChanged) {
+      WidgetsBinding.instance.addPostFrameCallback((_) => _syncPageFromController());
     }
   }
 
-  @override
-  void dispose() {
-    widget.controller.removeListener(_onScroll);
-    super.dispose();
+  void _syncPageFromController() {
+    if (!mounted || widget.slides.isEmpty) return;
+    final maxIdx = widget.slides.length - 1;
+    if (!widget.controller.hasClients) {
+      final initial = widget.controller.initialPage.clamp(0, maxIdx);
+      if (_page != initial) setState(() => _page = initial);
+      return;
+    }
+    final fromOffset =
+        (widget.controller.page ?? widget.controller.initialPage.toDouble())
+            .round()
+            .clamp(0, maxIdx);
+    if (fromOffset != _page) setState(() => _page = fromOffset);
   }
 
-  void _onScroll() {
-    final next = (widget.controller.page ?? 0).round();
-    if (next == _page) return;
-    setState(() => _page = next);
+  void _onPageChanged(int index) {
+    if (!mounted || widget.slides.isEmpty) return;
+    final clamped = index.clamp(0, widget.slides.length - 1);
+    if (clamped == _page) return;
+    setState(() {
+      _page = clamped;
+      _pdfDeckController = null;
+      _pdfPageNumber = null;
+      _pdfPageCount = null;
+    });
+  }
+
+  void _onPdfControllerReady(int slideIndex, PdfViewerController c) {
+    if (!mounted || slideIndex != _page) return;
+    setState(() => _pdfDeckController = c);
+  }
+
+  void _onPdfControllerDisposed(PdfViewerController c) {
+    if (_pdfDeckController != c) return;
+    _pdfDeckController = null;
+    if (mounted) setState(() {});
+  }
+
+  void _onPdfPaginationFromViewer(int slideIndex, int page, int totalPages) {
+    if (!mounted || slideIndex != _page || totalPages <= 0) return;
+    final safePage = page.clamp(1, totalPages);
+    setState(() {
+      _pdfPageNumber = safePage;
+      _pdfPageCount = totalPages;
+    });
+  }
+
+  bool _chromePrevEnabled(List<_RenderedSlide> slides) {
+    final slide = slides[_page];
+    if (_slideIsPdfAsset(slide) &&
+        (_pdfPageCount ?? 0) > 1 &&
+        _pdfDeckController != null) {
+      final pn = _pdfPageNumber ?? 1;
+      if (pn > 1) return true;
+      return slides.length > 1 && _page > 0;
+    }
+    return slides.length > 1 && _page > 0;
+  }
+
+  bool _chromeNextEnabled(List<_RenderedSlide> slides) {
+    final slide = slides[_page];
+    if (_slideIsPdfAsset(slide) &&
+        (_pdfPageCount ?? 0) > 1 &&
+        _pdfDeckController != null) {
+      final pn = _pdfPageNumber ?? 1;
+      final tc = _pdfPageCount!;
+      if (pn < tc) return true;
+      return slides.length > 1 && _page < slides.length - 1;
+    }
+    return slides.length > 1 && _page < slides.length - 1;
+  }
+
+  void _chromePrev(PageController carousel) {
+    final slides = widget.slides;
+    final slide = slides[_page];
+    if (_slideIsPdfAsset(slide) &&
+        (_pdfPageCount ?? 0) > 1 &&
+        _pdfDeckController != null) {
+      final pn = _pdfPageNumber ?? 1;
+      if (pn > 1) {
+        _pdfDeckController!.previousPage();
+        return;
+      }
+    }
+    if (slides.length > 1 && _page > 0) {
+      carousel.previousPage(
+        duration: const Duration(milliseconds: 65),
+        curve: Curves.easeOut,
+      );
+    }
+  }
+
+  void _chromeNext(PageController carousel) {
+    final slides = widget.slides;
+    final slide = slides[_page];
+    if (_slideIsPdfAsset(slide) &&
+        (_pdfPageCount ?? 0) > 1 &&
+        _pdfDeckController != null) {
+      final pn = _pdfPageNumber ?? 1;
+      final tc = _pdfPageCount!;
+      if (pn < tc) {
+        _pdfDeckController!.nextPage();
+        return;
+      }
+    }
+    if (slides.length > 1 && _page < slides.length - 1) {
+      carousel.nextPage(
+        duration: const Duration(milliseconds: 65),
+        curve: Curves.easeOut,
+      );
+    }
   }
 
   Future<void> _openFullscreen() async {
@@ -400,171 +573,290 @@ class _SlideViewerState extends State<_SlideViewer> {
       );
     }
 
-    return Column(
-      children: [
-        ClipRRect(
-          borderRadius: BorderRadius.circular(16),
-          child: Stack(
-            children: [
-              SizedBox(
-                height: widget.height,
-                child: PageView.builder(
-                  controller: controller,
-                  itemCount: slides.length,
-                  itemBuilder: (context, index) {
+    final deckSlide = slides[_page];
+    final pdfPaginationKnown = _slideIsPdfAsset(deckSlide) &&
+        (_pdfPageCount != null && _pdfPageCount! > 0);
+    final chromeNumerator =
+        pdfPaginationKnown ? (_pdfPageNumber ?? 1) : (_page + 1);
+    final chromeDenominator =
+        pdfPaginationKnown ? _pdfPageCount! : slides.length;
+    final chromeSubtitle = pdfPaginationKnown
+        ? '$chromeNumerator-sahifa · jami $chromeDenominator ta'
+        : '${_page + 1}-chi rasm · jami ${slides.length} ta';
+
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(16),
+      child: SizedBox(
+        height: widget.height,
+        width: double.infinity,
+        child: Stack(
+          clipBehavior: Clip.hardEdge,
+          fit: StackFit.expand,
+          children: [
+            PageView.builder(
+              controller: controller,
+              scrollDirection: Axis.horizontal,
+              physics: const _SnappyPageScrollPhysics().applyTo(
+                ClampingScrollPhysics(),
+              ),
+              itemCount: slides.length,
+              onPageChanged: _onPageChanged,
+              itemBuilder: (context, index) {
                     final slide = slides[index];
-                    return Container(
-                      color: const Color(0xFF1E6BB8),
-                      child: Padding(
-                        padding: const EdgeInsets.all(20),
-                        child: SingleChildScrollView(
-                          physics: const ClampingScrollPhysics(),
+                    final isPdf = _slideIsPdfAsset(slide);
+                    final isPpt = _slideIsPptAsset(slide);
+                    final cover = _slideHasCoverImage(slide);
+
+                    late final Widget layer;
+                    if (cover) {
+                      layer = ClipRRect(
+                        borderRadius: BorderRadius.circular(4),
+                        child: _SlideImage(
+                          imageUrl: slide.imageUrl,
+                          fit: BoxFit.cover,
+                          width: double.infinity,
+                          height: double.infinity,
+                          placeholderHeight: widget.height,
+                        ),
+                      );
+                    } else if (isPdf) {
+                      layer = Padding(
+                        padding: const EdgeInsets.all(6),
+                        child: ClipRRect(
+                          borderRadius: BorderRadius.circular(10),
+                          child: _InlinePdfPreview(
+                            key: ValueKey(slide.assetFileUrl),
+                            url: slide.assetFileUrl!,
+                            slideIndex: index,
+                            isActiveDeckSlide: index == _page,
+                            onControllerReady: _onPdfControllerReady,
+                            onControllerDisposed: _onPdfControllerDisposed,
+                            onPaginationFromPdf: _onPdfPaginationFromViewer,
+                          ),
+                        ),
+                      );
+                    } else if (isPpt) {
+                      layer = Center(
+                        child: FilledButton.icon(
+                          style: FilledButton.styleFrom(
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.22),
+                            foregroundColor: Colors.white,
+                            padding: const EdgeInsets.symmetric(
+                              horizontal: 20,
+                              vertical: 14,
+                            ),
+                          ),
+                          onPressed: () async {
+                            final uri = Uri.tryParse(slide.assetFileUrl!);
+                            if (uri == null) return;
+                            await launchUrl(
+                              uri,
+                              mode: LaunchMode.externalApplication,
+                            );
+                          },
+                          icon: const Icon(Icons.open_in_new),
+                          label: const Text('PPT ni ochish'),
+                        ),
+                      );
+                    } else {
+                      layer = Center(
+                        child: Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
                           child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            mainAxisSize: MainAxisSize.min,
+                            mainAxisAlignment: MainAxisAlignment.center,
                             children: [
                               Text(
                                 slide.title,
-                                style: Theme.of(context).textTheme.headlineSmall
+                                textAlign: TextAlign.center,
+                                style: Theme.of(context)
+                                    .textTheme
+                                    .titleLarge
                                     ?.copyWith(
                                       color: Colors.white,
-                                      fontWeight: FontWeight.w900,
+                                      fontWeight: FontWeight.w800,
                                     ),
                               ),
                               if (slide.body.trim().isNotEmpty) ...[
                                 const SizedBox(height: 10),
                                 Text(
                                   slide.body,
-                                  style: Theme.of(context).textTheme.bodyMedium
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context)
+                                      .textTheme
+                                      .bodyMedium
                                       ?.copyWith(
                                         color: Colors.white.withValues(
-                                          alpha: 0.88,
+                                          alpha: 0.9,
                                         ),
-                                        height: 1.35,
                                       ),
-                                ),
-                              ],
-                              if (slide.imageUrl.trim().isNotEmpty) ...[
-                                const SizedBox(height: 12),
-                                ClipRRect(
-                                  borderRadius: BorderRadius.circular(12),
-                                  child: _SlideImage(
-                                    imageUrl: slide.imageUrl,
-                                    fit: BoxFit.cover,
-                                    width: double.infinity,
-                                    height: widget.height * 0.38,
-                                    placeholderHeight: widget.height * 0.28,
-                                  ),
-                                ),
-                              ],
-                              if ((slide.assetType ?? '').toLowerCase() ==
-                                      'pdf' &&
-                                  (slide.assetFileUrl ?? '')
-                                      .trim()
-                                      .isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                SizedBox(
-                                  height: widget.height * 0.38,
-                                  child: ClipRRect(
-                                    borderRadius: BorderRadius.circular(12),
-                                    child: _InlinePdfPreview(
-                                      url: slide.assetFileUrl!,
-                                    ),
-                                  ),
-                                ),
-                              ],
-                              if ((slide.assetType ?? '').toLowerCase() ==
-                                      'ppt' &&
-                                  (slide.assetFileUrl ?? '')
-                                      .trim()
-                                      .isNotEmpty) ...[
-                                const SizedBox(height: 10),
-                                FilledButton.icon(
-                                  style: FilledButton.styleFrom(
-                                    backgroundColor: Colors.white.withValues(
-                                      alpha: 0.18,
-                                    ),
-                                    foregroundColor: Colors.white,
-                                  ),
-                                  onPressed: () async {
-                                    final uri = Uri.tryParse(
-                                      slide.assetFileUrl!,
-                                    );
-                                    if (uri == null) return;
-                                    await launchUrl(
-                                      uri,
-                                      mode: LaunchMode.externalApplication,
-                                    );
-                                  },
-                                  icon: const Icon(Icons.open_in_new),
-                                  label: const Text('PPT ni ochish'),
                                 ),
                               ],
                             ],
                           ),
                         ),
-                      ),
+                      );
+                    }
+
+                    return Stack(
+                      fit: StackFit.expand,
+                      children: [
+                        const ColoredBox(color: Color(0xFF1E6BB8)),
+                        Positioned.fill(child: layer),
+                      ],
                     );
                   },
                 ),
+            Positioned(
+              top: 8,
+              right: 8,
+              child: IconButton.filledTonal(
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black.withValues(alpha: 0.4),
+                  foregroundColor: Colors.white,
+                ),
+                onPressed: _openFullscreen,
+                icon: const Icon(Icons.fullscreen),
+                tooltip: 'Katta ko‘rish',
               ),
-              Positioned(
-                bottom: 10,
-                right: 10,
-                child: IconButton.filledTonal(
-                  style: IconButton.styleFrom(
-                    backgroundColor: Colors.black.withValues(alpha: 0.35),
-                    foregroundColor: Colors.white,
+            ),
+            Positioned(
+              left: 0,
+              right: 0,
+              bottom: 0,
+              child: DecoratedBox(
+                decoration: BoxDecoration(
+                  gradient: LinearGradient(
+                    begin: Alignment.bottomCenter,
+                    end: Alignment.topCenter,
+                    colors: [
+                      Colors.black.withValues(alpha: 0.58),
+                      Colors.black.withValues(alpha: 0.08),
+                      Colors.transparent,
+                    ],
                   ),
-                  onPressed: _openFullscreen,
-                  icon: const Icon(Icons.fullscreen),
-                  tooltip: 'Katta ko‘rish',
+                ),
+                child: SafeArea(
+                  top: false,
+                  minimum: const EdgeInsets.only(bottom: 6),
+                  child: Padding(
+                    padding: const EdgeInsets.fromLTRB(4, 20, 4, 10),
+                    child: Row(
+                      crossAxisAlignment: CrossAxisAlignment.center,
+                      children: [
+                        IconButton(
+                          iconSize: 28,
+                          style: IconButton.styleFrom(
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.94),
+                            foregroundColor: const Color(0xFF1E6BB8),
+                            disabledBackgroundColor:
+                                Colors.white.withValues(alpha: 0.45),
+                            disabledForegroundColor:
+                                const Color(0xFF1E6BB8).withValues(
+                              alpha: 0.35,
+                            ),
+                          ),
+                          onPressed: _chromePrevEnabled(slides)
+                              ? () => _chromePrev(controller)
+                              : null,
+                          icon: const Icon(Icons.chevron_left),
+                        ),
+                        Expanded(
+                          child: Column(
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
+                              if (slides.length > 1)
+                                SmoothPageIndicator(
+                                  controller: controller,
+                                  count: slides.length,
+                                  effect: WormEffect(
+                                    dotWidth: 7,
+                                    dotHeight: 7,
+                                    spacing: 6,
+                                    activeDotColor: const Color(0xFF1E6BB8),
+                                    dotColor: const Color(0xFF1E6BB8)
+                                        .withValues(alpha: 0.28),
+                                  ),
+                                ),
+                              if (slides.length > 1) const SizedBox(height: 8),
+                              Container(
+                                padding: const EdgeInsets.symmetric(
+                                  horizontal: 18,
+                                  vertical: 10,
+                                ),
+                                decoration: BoxDecoration(
+                                  color:
+                                      Colors.white.withValues(alpha: 0.94),
+                                  borderRadius: BorderRadius.circular(24),
+                                  boxShadow: [
+                                    BoxShadow(
+                                      color: Colors.black.withValues(
+                                        alpha: 0.14,
+                                      ),
+                                      blurRadius: 10,
+                                      offset: const Offset(0, 3),
+                                    ),
+                                  ],
+                                ),
+                                child: Column(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      '$chromeNumerator / $chromeDenominator',
+                                      textAlign: TextAlign.center,
+                                      style: const TextStyle(
+                                        color: Color(0xFF1E6BB8),
+                                        fontWeight: FontWeight.w900,
+                                        fontSize: 18,
+                                        height: 1.1,
+                                        letterSpacing: 0.6,
+                                      ),
+                                    ),
+                                    const SizedBox(height: 2),
+                                    Text(
+                                      chromeSubtitle,
+                                      textAlign: TextAlign.center,
+                                      style: TextStyle(
+                                        color: const Color(0xFF1E6BB8)
+                                            .withValues(alpha: 0.72),
+                                        fontWeight: FontWeight.w700,
+                                        fontSize: 11,
+                                      ),
+                                    ),
+                                  ],
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        IconButton(
+                          iconSize: 28,
+                          style: IconButton.styleFrom(
+                            backgroundColor:
+                                Colors.white.withValues(alpha: 0.94),
+                            foregroundColor: const Color(0xFF1E6BB8),
+                            disabledBackgroundColor:
+                                Colors.white.withValues(alpha: 0.45),
+                            disabledForegroundColor:
+                                const Color(0xFF1E6BB8).withValues(
+                              alpha: 0.35,
+                            ),
+                          ),
+                          onPressed: _chromeNextEnabled(slides)
+                              ? () => _chromeNext(controller)
+                              : null,
+                          icon: const Icon(Icons.chevron_right),
+                        ),
+                      ],
+                    ),
+                  ),
                 ),
               ),
-            ],
-          ),
-        ),
-        const SizedBox(height: 10),
-        if (slides.length > 1)
-          SmoothPageIndicator(
-            controller: controller,
-            count: slides.length,
-            effect: WormEffect(
-              dotWidth: 8,
-              dotHeight: 8,
-              activeDotColor: const Color(0xFF1E6BB8),
-              dotColor: Colors.black.withValues(alpha: 0.14),
-            ),
-          ),
-        const SizedBox(height: 8),
-        Row(
-          mainAxisAlignment: MainAxisAlignment.center,
-          children: [
-            IconButton(
-              iconSize: 28,
-              onPressed: () => controller.previousPage(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOut,
-              ),
-              icon: const Icon(Icons.chevron_left),
-            ),
-            Text(
-              '${_page + 1} / ${slides.length}',
-              style: Theme.of(
-                context,
-              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
-            ),
-            IconButton(
-              iconSize: 28,
-              onPressed: () => controller.nextPage(
-                duration: const Duration(milliseconds: 260),
-                curve: Curves.easeOut,
-              ),
-              icon: const Icon(Icons.chevron_right),
             ),
           ],
         ),
-      ],
+      ),
     );
   }
 }
@@ -585,6 +877,8 @@ class _FullscreenSlidePage extends StatefulWidget {
 class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
   late final PageController _controller;
   late int _index;
+  int? _fullscreenPdfPage;
+  int? _fullscreenPdfTotal;
 
   @override
   void initState() {
@@ -621,77 +915,129 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
 
   @override
   Widget build(BuildContext context) {
+    final fsSlides = widget.slides;
+    final fsDeck = fsSlides.isEmpty
+        ? null
+        : fsSlides[_index.clamp(0, fsSlides.length - 1)];
+    final fsPdfKnown = fsDeck != null &&
+        _slideIsPdfAsset(fsDeck) &&
+        (_fullscreenPdfTotal != null && _fullscreenPdfTotal! > 0);
+    final fsNum = fsPdfKnown ? (_fullscreenPdfPage ?? 1) : (_index + 1);
+    final fsDenom =
+        fsPdfKnown ? _fullscreenPdfTotal! : fsSlides.length.clamp(1, 1 << 30);
+    final fsSubtitle = fsPdfKnown
+        ? '$fsNum-sahifa · jami $fsDenom ta'
+        : '${_index + 1}-chi rasm · jami ${fsSlides.length} ta';
+
     return Scaffold(
       backgroundColor: Colors.black,
       body: Stack(
         children: [
           PageView.builder(
             controller: _controller,
+            scrollDirection: Axis.horizontal,
+            physics: const _SnappyPageScrollPhysics().applyTo(
+              ClampingScrollPhysics(),
+            ),
             itemCount: widget.slides.length,
-            onPageChanged: (v) => setState(() => _index = v),
+            onPageChanged: (v) => setState(() {
+              _index = v;
+              _fullscreenPdfPage = null;
+              _fullscreenPdfTotal = null;
+            }),
             itemBuilder: (context, i) {
               final slide = widget.slides[i];
+              final isPdf = _slideIsPdfAsset(slide);
+              final isPpt = _slideIsPptAsset(slide);
+              final cover = _slideHasCoverImage(slide);
+
+              late final Widget body;
+              if (cover) {
+                body = _SlideImage(
+                  imageUrl: slide.imageUrl,
+                  fit: BoxFit.cover,
+                  width: double.infinity,
+                  height: double.infinity,
+                  placeholderHeight: MediaQuery.sizeOf(context).shortestSide,
+                );
+              } else if (isPdf) {
+                body = Padding(
+                  padding: const EdgeInsets.all(12),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(12),
+                    child: _InlinePdfPreview(
+                      key: ValueKey(slide.assetFileUrl),
+                      url: slide.assetFileUrl!,
+                      slideIndex: i,
+                      isActiveDeckSlide: i == _index,
+                      onPaginationFromPdf: (slideIndex, page, totalPages) {
+                        if (!mounted ||
+                            slideIndex != _index ||
+                            totalPages <= 0) {
+                          return;
+                        }
+                        setState(() {
+                          _fullscreenPdfPage = page.clamp(1, totalPages);
+                          _fullscreenPdfTotal = totalPages;
+                        });
+                      },
+                    ),
+                  ),
+                );
+              } else if (isPpt) {
+                body = Center(
+                  child: FilledButton.icon(
+                    style: FilledButton.styleFrom(
+                      foregroundColor: Colors.white,
+                      backgroundColor: Colors.white.withValues(alpha: 0.2),
+                    ),
+                    onPressed: () async {
+                      final uri = Uri.tryParse(slide.assetFileUrl!);
+                      if (uri == null) return;
+                      await launchUrl(uri, mode: LaunchMode.externalApplication);
+                    },
+                    icon: const Icon(Icons.open_in_new),
+                    label: const Text('PPT ni ochish'),
+                  ),
+                );
+              } else {
+                body = Center(
+                  child: Padding(
+                    padding: const EdgeInsets.all(24),
+                    child: Column(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        Text(
+                          slide.title,
+                          textAlign: TextAlign.center,
+                          style: Theme.of(context).textTheme.headlineSmall
+                              ?.copyWith(
+                                color: Colors.white,
+                                fontWeight: FontWeight.w800,
+                              ),
+                        ),
+                        if (slide.body.trim().isNotEmpty) ...[
+                          const SizedBox(height: 12),
+                          Text(
+                            slide.body,
+                            textAlign: TextAlign.center,
+                            style: Theme.of(context).textTheme.bodyLarge
+                                ?.copyWith(color: Colors.white70),
+                          ),
+                        ],
+                      ],
+                    ),
+                  ),
+                );
+              }
+
               return Container(
-                color: const Color(0xFF1E6BB8),
+                color: Colors.black,
                 child: Stack(
                   fit: StackFit.expand,
                   children: [
-                    if (slide.imageUrl.trim().isNotEmpty)
-                      _SlideImage(
-                        imageUrl: slide.imageUrl,
-                        fit: BoxFit.cover,
-                        placeholderHeight: double.infinity,
-                      ),
-                    if (slide.title.trim().isNotEmpty ||
-                        slide.body.trim().isNotEmpty)
-                      Align(
-                        alignment: Alignment.topLeft,
-                        child: Container(
-                          margin: const EdgeInsets.fromLTRB(18, 18, 18, 0),
-                          padding: const EdgeInsets.all(12),
-                          decoration: BoxDecoration(
-                            color: Colors.black.withValues(alpha: 0.32),
-                            borderRadius: BorderRadius.circular(12),
-                          ),
-                          child: Column(
-                            mainAxisSize: MainAxisSize.min,
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                'Test slayd ${i + 1}',
-                                style: Theme.of(context).textTheme.titleSmall
-                                    ?.copyWith(
-                                      color: Colors.white70,
-                                      fontWeight: FontWeight.w800,
-                                    ),
-                              ),
-                              if (slide.title.trim().isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  slide.title,
-                                  style: Theme.of(context).textTheme.titleLarge
-                                      ?.copyWith(
-                                        color: Colors.white,
-                                        fontWeight: FontWeight.w900,
-                                      ),
-                                ),
-                              ],
-                              if (slide.body.trim().isNotEmpty) ...[
-                                const SizedBox(height: 6),
-                                Text(
-                                  slide.body,
-                                  style: Theme.of(context).textTheme.bodyMedium
-                                      ?.copyWith(
-                                        color: Colors.white.withValues(
-                                          alpha: 0.9,
-                                        ),
-                                      ),
-                                ),
-                              ],
-                            ],
-                          ),
-                        ),
-                      ),
+                    const ColoredBox(color: Color(0xFF1E6BB8)),
+                    Positioned.fill(child: body),
                   ],
                 ),
               );
@@ -716,30 +1062,75 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
             ),
           ),
           Positioned(
-            bottom: 12,
+            bottom: 8,
             left: 0,
             right: 0,
-            child: Column(
-              children: [
-                AnimatedSmoothIndicator(
-                  activeIndex: _index,
-                  count: widget.slides.length,
-                  effect: const WormEffect(
-                    dotWidth: 8,
-                    dotHeight: 8,
-                    activeDotColor: Colors.white,
-                    dotColor: Color(0x80FFFFFF),
+            child: SafeArea(
+              top: false,
+              minimum: const EdgeInsets.only(bottom: 4),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  if (fsSlides.length > 1)
+                    AnimatedSmoothIndicator(
+                      activeIndex: _index,
+                      count: fsSlides.length,
+                      effect: WormEffect(
+                        dotWidth: 8,
+                        dotHeight: 8,
+                        spacing: 7,
+                        activeDotColor: const Color(0xFF1E6BB8),
+                        dotColor:
+                            const Color(0xFF1E6BB8).withValues(alpha: 0.28),
+                      ),
+                    ),
+                  if (fsSlides.length > 1) const SizedBox(height: 10),
+                  Center(
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(
+                        horizontal: 20,
+                        vertical: 10,
+                      ),
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.94),
+                        borderRadius: BorderRadius.circular(24),
+                        boxShadow: [
+                          BoxShadow(
+                            color: Colors.black.withValues(alpha: 0.2),
+                            blurRadius: 12,
+                            offset: const Offset(0, 3),
+                          ),
+                        ],
+                      ),
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Text(
+                            '$fsNum / $fsDenom',
+                            style: const TextStyle(
+                              color: Color(0xFF1E6BB8),
+                              fontWeight: FontWeight.w900,
+                              fontSize: 19,
+                              letterSpacing: 0.6,
+                            ),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            fsSubtitle,
+                            style: TextStyle(
+                              color: const Color(0xFF1E6BB8).withValues(
+                                alpha: 0.72,
+                              ),
+                              fontWeight: FontWeight.w700,
+                              fontSize: 12,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
                   ),
-                ),
-                const SizedBox(height: 8),
-                Text(
-                  '${_index + 1} / ${widget.slides.length}',
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontWeight: FontWeight.w700,
-                  ),
-                ),
-              ],
+                ],
+              ),
             ),
           ),
         ],
@@ -765,9 +1156,24 @@ class _RenderedSlide {
 }
 
 class _InlinePdfPreview extends StatefulWidget {
-  const _InlinePdfPreview({required this.url});
+  const _InlinePdfPreview({
+    super.key,
+    required this.url,
+    this.slideIndex = 0,
+    this.isActiveDeckSlide = true,
+    this.onControllerReady,
+    this.onControllerDisposed,
+    this.onPaginationFromPdf,
+  });
 
   final String url;
+  final int slideIndex;
+  final bool isActiveDeckSlide;
+  final void Function(int slideIndex, PdfViewerController controller)?
+      onControllerReady;
+  final void Function(PdfViewerController controller)? onControllerDisposed;
+  final void Function(int slideIndex, int page, int totalPages)?
+      onPaginationFromPdf;
 
   @override
   State<_InlinePdfPreview> createState() => _InlinePdfPreviewState();
@@ -775,11 +1181,49 @@ class _InlinePdfPreview extends StatefulWidget {
 
 class _InlinePdfPreviewState extends State<_InlinePdfPreview> {
   late final Future<Uint8List> _bytesFuture;
+  late final PdfViewerController _pdfViewerController = PdfViewerController();
 
   @override
   void initState() {
     super.initState();
     _bytesFuture = _loadBytes(widget.url);
+    if (widget.isActiveDeckSlide) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onControllerReady?.call(widget.slideIndex, _pdfViewerController);
+      });
+    }
+  }
+
+  @override
+  void didUpdateWidget(covariant _InlinePdfPreview oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (!oldWidget.isActiveDeckSlide && widget.isActiveDeckSlide) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        widget.onControllerReady?.call(widget.slideIndex, _pdfViewerController);
+        _syncPaginationFromController();
+      });
+    }
+    if (oldWidget.isActiveDeckSlide && !widget.isActiveDeckSlide) {
+      widget.onControllerDisposed?.call(_pdfViewerController);
+    }
+  }
+
+  void _syncPaginationFromController() {
+    if (!widget.isActiveDeckSlide || !mounted) return;
+    final total = _pdfViewerController.pageCount;
+    if (total <= 0) return;
+    final pn = _pdfViewerController.pageNumber;
+    final cur = pn <= 0 ? 1 : pn.clamp(1, total);
+    widget.onPaginationFromPdf?.call(widget.slideIndex, cur, total);
+  }
+
+  @override
+  void dispose() {
+    widget.onControllerDisposed?.call(_pdfViewerController);
+    _pdfViewerController.dispose();
+    super.dispose();
   }
 
   @override
@@ -802,7 +1246,33 @@ class _InlinePdfPreviewState extends State<_InlinePdfPreview> {
                 : "PDF ni ochib bo'lmadi",
           );
         }
-        return SfPdfViewer.memory(snapshot.data!);
+        return SfPdfViewer.memory(
+          snapshot.data!,
+          controller: _pdfViewerController,
+          canShowScrollHead: false,
+          canShowScrollStatus: false,
+          pageLayoutMode: PdfPageLayoutMode.single,
+          scrollDirection: PdfScrollDirection.horizontal,
+          enableDoubleTapZooming: true,
+          onDocumentLoaded: (details) {
+            if (!widget.isActiveDeckSlide) return;
+            final total = details.document.pages.count;
+            if (total <= 0) return;
+            final pn = _pdfViewerController.pageNumber;
+            final cur = pn <= 0 ? 1 : pn.clamp(1, total);
+            widget.onPaginationFromPdf?.call(widget.slideIndex, cur, total);
+          },
+          onPageChanged: (details) {
+            if (!widget.isActiveDeckSlide) return;
+            final total = _pdfViewerController.pageCount;
+            if (total <= 0) return;
+            widget.onPaginationFromPdf?.call(
+              widget.slideIndex,
+              details.newPageNumber.clamp(1, total),
+              total,
+            );
+          },
+        );
       },
     );
   }
@@ -912,14 +1382,22 @@ class _SlideImage extends StatelessWidget {
   }
 
   Widget _placeholder() {
-    return Container(
-      height: placeholderHeight,
-      alignment: Alignment.center,
+    final bg = ColoredBox(
       color: Colors.white.withValues(alpha: 0.16),
-      child: const Text(
-        'Rasmni yuklab bo\'lmadi',
-        style: TextStyle(color: Colors.white),
+      child: const Center(
+        child: Text(
+          'Rasmni yuklab bo\'lmadi',
+          style: TextStyle(color: Colors.white),
+        ),
       ),
     );
+    if (height != null && height!.isFinite) {
+      return SizedBox(
+        width: width ?? double.infinity,
+        height: height,
+        child: bg,
+      );
+    }
+    return SizedBox.expand(child: bg);
   }
 }

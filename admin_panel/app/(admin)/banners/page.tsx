@@ -12,6 +12,7 @@ import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
+import { Switch } from "@/components/ui/switch";
 import { createBanner, fetchBanners, removeBanner, updateBanner, type BannerItem } from "@/lib/api/banners";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { useStatusModal } from "@/lib/use-status-modal";
@@ -28,12 +29,14 @@ export default function BannersPage() {
     message: "",
     price: "",
     image: "",
+    isActive: false,
   });
   const [editValues, setEditValues] = useState({
     title: "",
     message: "",
     price: "",
     image: "",
+    isActive: false,
   });
   const statusModal = useStatusModal();
 
@@ -80,6 +83,13 @@ export default function BannersPage() {
       },
       { key: "price", label: "Narx", render: (item: BannerItem) => item.price_label || "Kelishiladi" },
       {
+        key: "is_active",
+        label: "Ilovada",
+        render: (item: BannerItem) => (
+          <span className="text-xs font-medium text-slate-600">{item.is_active ? "Ko‘rsatiladi" : "Yashirin"}</span>
+        ),
+      },
+      {
         key: "actions",
         label: "Amallar",
         render: (item: BannerItem) => {
@@ -95,6 +105,7 @@ export default function BannersPage() {
                     message: item.message,
                     price: item.price_label,
                     image: item.image_url,
+                    isActive: item.is_active,
                   });
                 }}
               >
@@ -125,6 +136,7 @@ export default function BannersPage() {
           telegram: DEFAULT_ADMIN_TELEGRAM,
           image_url: formValues.image.trim(),
           course_id: null,
+          is_active: formValues.isActive,
         }),
       });
       setBanners((prev) => [created, ...prev]);
@@ -134,6 +146,7 @@ export default function BannersPage() {
         message: "",
         price: "",
         image: "",
+        isActive: false,
       });
     } catch (error) {
       notifyError(error instanceof Error ? error.message : "Kurs reklamasi qo'shilmadi.");
@@ -155,6 +168,7 @@ export default function BannersPage() {
           telegram: DEFAULT_ADMIN_TELEGRAM,
           image_url: editValues.image ?? "",
           course_id: null,
+          is_active: editValues.isActive,
         }),
       });
       setBanners((prev) => prev.map((item) => (item.id === updated.id ? updated : item)));
@@ -169,7 +183,11 @@ export default function BannersPage() {
 
   return (
     <section className="admin-page">
-      <AppForm title="Kurs reklamasi yaratish" description="Reklama orqali foydalanuvchi onlayn kursga qiziqadi." onSubmit={onSubmit}>
+      <AppForm
+        title="Kurs reklamasi yaratish"
+        description="Reklama orqali foydalanuvchi onlayn kursga qiziqadi. Yangi yozuvlar yashirin; ilovada chiqishi uchun «Ilovada ko‘rsatish»ni yoqing."
+        onSubmit={onSubmit}
+      >
         <div className="grid gap-2">
           <Label htmlFor="title">Reklama sarlavhasi</Label>
           <Input
@@ -206,6 +224,19 @@ export default function BannersPage() {
           helperText="Rasm qo&apos;yilmasa, avtomatik ko&apos;k banner ishlatiladi."
           onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
         />
+        <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3">
+          <div>
+            <Label htmlFor="banner-active-create" className="text-sm font-medium">
+              Ilovada ko‘rsatish
+            </Label>
+            <p className="text-xs text-slate-500">«Kanal yangiliklari» kartochkasi faqat yoqilganda chiqadi.</p>
+          </div>
+          <Switch
+            id="banner-active-create"
+            checked={formValues.isActive}
+            onCheckedChange={(v) => setFormValues((prev) => ({ ...prev, isActive: Boolean(v) }))}
+          />
+        </div>
       </AppForm>
 
       <AppTable columns={columns} data={banners} emptyText="Hali reklama qo'shilmagan." />
@@ -253,6 +284,16 @@ export default function BannersPage() {
             helperText="Rasm qo&apos;yilmasa, avtomatik ko&apos;k banner ishlatiladi."
             onChange={(value) => setEditValues((prev) => ({ ...prev, image: value }))}
           />
+          <div className="flex items-center justify-between gap-3 rounded-xl border border-slate-200 px-4 py-3">
+            <Label htmlFor="banner-active-edit" className="text-sm font-medium">
+              Ilovada ko‘rsatish
+            </Label>
+            <Switch
+              id="banner-active-edit"
+              checked={editValues.isActive}
+              onCheckedChange={(v) => setEditValues((prev) => ({ ...prev, isActive: Boolean(v) }))}
+            />
+          </div>
         </AppForm>
       </AppModal>
 

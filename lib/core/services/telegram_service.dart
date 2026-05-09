@@ -9,7 +9,12 @@ class TelegramService {
     String? courseId,
     String? userName,
     String? userPhone,
+    String? telegramRecipient,
   }) async {
+    var recipient = (telegramRecipient ?? _adminUsername).trim();
+    if (recipient.startsWith('@')) recipient = recipient.substring(1);
+    if (recipient.isEmpty) recipient = _adminUsername;
+
     final normalizedCourseId = (courseId ?? '').trim().isEmpty ? 'noma\'lum' : courseId!.trim();
     final normalizedName = (userName ?? '').trim().isEmpty ? '-' : userName!.trim();
     final normalizedPhone = (userPhone ?? '').trim().isEmpty ? '-' : userPhone!.trim();
@@ -25,9 +30,9 @@ Kurs nomi: "$courseName"
 ''';
     final encoded = Uri.encodeComponent(message);
     final appUri = Uri.parse(
-      'tg://resolve?domain=$_adminUsername&text=$encoded',
+      'tg://resolve?domain=$recipient&text=$encoded',
     );
-    final webUri = Uri.parse('https://t.me/$_adminUsername?text=$encoded');
+    final webUri = Uri.parse('https://t.me/$recipient?text=$encoded');
 
     try {
       final openedInTelegram = await launchUrl(

@@ -15,6 +15,7 @@ Future<void> showPurchaseModal({
   required String description,
   required String price,
   String? courseId,
+  String? telegramRecipient,
 }) async {
   await showModalBottomSheet<void>(
     context: context,
@@ -26,6 +27,7 @@ Future<void> showPurchaseModal({
         description: description,
         price: price,
         courseId: courseId,
+        telegramRecipient: telegramRecipient,
       );
     },
   );
@@ -37,12 +39,14 @@ class _PurchaseModalContent extends ConsumerStatefulWidget {
     required this.description,
     required this.price,
     this.courseId,
+    this.telegramRecipient,
   });
 
   final String courseName;
   final String description;
   final String price;
   final String? courseId;
+  final String? telegramRecipient;
 
   @override
   ConsumerState<_PurchaseModalContent> createState() =>
@@ -156,25 +160,29 @@ class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
                           try {
                             setState(() => _loading = true);
                             final target = _resolvePurchaseTarget(widget.courseId);
-                            await ref.read(purchasesRepositoryProvider).createPurchase(
-                                  userId: auth.userId!,
-                                  courseId: target.courseId,
-                                  sectionId: target.sectionId,
-                                );
-                            if (target.sectionId != null && target.courseId != null) {
-                              ref
-                                  .read(purchaseControllerProvider.notifier)
-                                  .purchaseBase(target.courseId!, target.sectionId!);
-                              ref
-                                  .read(progressControllerProvider.notifier)
-                                  .enroll(target.courseId!);
-                            } else if (target.courseId != null) {
-                              ref
-                                  .read(purchaseControllerProvider.notifier)
-                                  .purchaseCourse(target.courseId!);
-                              ref
-                                  .read(progressControllerProvider.notifier)
-                                  .enroll(target.courseId!);
+                            final platformPurchase =
+                                (target.courseId ?? '').trim().isNotEmpty;
+                            if (platformPurchase) {
+                              await ref.read(purchasesRepositoryProvider).createPurchase(
+                                    userId: auth.userId!,
+                                    courseId: target.courseId,
+                                    sectionId: target.sectionId,
+                                  );
+                              if (target.sectionId != null && target.courseId != null) {
+                                ref
+                                    .read(purchaseControllerProvider.notifier)
+                                    .purchaseBase(target.courseId!, target.sectionId!);
+                                ref
+                                    .read(progressControllerProvider.notifier)
+                                    .enroll(target.courseId!);
+                              } else if (target.courseId != null) {
+                                ref
+                                    .read(purchaseControllerProvider.notifier)
+                                    .purchaseCourse(target.courseId!);
+                                ref
+                                    .read(progressControllerProvider.notifier)
+                                    .enroll(target.courseId!);
+                              }
                             }
                             final opened = await _telegramService.openTelegram(
                               courseName: widget.courseName,
@@ -182,6 +190,7 @@ class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
                               courseId: widget.courseId,
                               userName: auth.name,
                               userPhone: auth.email,
+                              telegramRecipient: widget.telegramRecipient,
                             );
                             if (!context.mounted) return;
 

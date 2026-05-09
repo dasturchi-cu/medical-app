@@ -138,6 +138,10 @@ export default function BooksPage() {
           notifyError("Avval fayl tanlang yoki URL kiriting.");
           return;
         }
+        if (!form.title.trim()) {
+          notifyError("Kitob nomini kiriting.");
+          return;
+        }
         console.log("[books.submit.start]", form);
         const categoryValue = form.category.trim();
         let categoryId: string | null = null;

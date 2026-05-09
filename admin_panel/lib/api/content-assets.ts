@@ -47,8 +47,14 @@ function headers(): HeadersInit {
 
 async function parseError(response: Response, fallback: string) {
   try {
-    const payload = (await response.json()) as { detail?: string };
-    return payload.detail?.trim() || fallback;
+    const payload = (await response.json()) as { detail?: unknown };
+    const detail = payload.detail;
+    if (typeof detail === "string" && detail.trim()) return detail.trim();
+    if (Array.isArray(detail) && detail.length > 0) {
+      const first = detail[0] as { msg?: string };
+      if (typeof first?.msg === "string" && first.msg.trim()) return first.msg.trim();
+    }
+    return fallback;
   } catch {
     return fallback;
   }
