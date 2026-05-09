@@ -5,6 +5,11 @@ function extFromName(fileName: string) {
   return parts.length > 1 ? parts.at(-1)?.toLowerCase() ?? "bin" : "bin";
 }
 
+/** Brauzer/terminaldan kelgan tashqi bo‘shliqlar Next/Image va fetch ni sindirmasin. */
+function normalizePublicUrl(url: string) {
+  return String(url ?? "").replace(/[\s\n\r]+/g, "").trim();
+}
+
 export async function uploadFileToSupabase(params: {
   bucket: string;
   folder: string;
@@ -19,7 +24,7 @@ export async function uploadFileToSupabase(params: {
     console.warn("[storage.upload.fallback.dataurl] Supabase env missing, using inline data URL.");
     return {
       path: `${folder}/inline-${Date.now()}`,
-      publicUrl: dataUrl,
+      publicUrl: normalizePublicUrl(dataUrl),
       storageBacked: false,
     };
   }
@@ -36,7 +41,7 @@ export async function uploadFileToSupabase(params: {
       console.warn("[storage.upload.fallback.dataurl] Bucket not found, using inline data URL.");
       return {
         path: `${folder}/inline-${Date.now()}`,
-        publicUrl: dataUrl,
+        publicUrl: normalizePublicUrl(dataUrl),
         storageBacked: false,
       };
     }
@@ -45,7 +50,7 @@ export async function uploadFileToSupabase(params: {
   const { data } = supabase.storage.from(bucket).getPublicUrl(path);
   return {
     path,
-    publicUrl: data.publicUrl,
+    publicUrl: normalizePublicUrl(data.publicUrl),
     storageBacked: true,
   };
 }

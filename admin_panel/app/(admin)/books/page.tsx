@@ -170,8 +170,8 @@ export default function BooksPage() {
             createBook({
               title: form.title.trim(),
               description: form.description.trim(),
-              cover_image_url: form.thumbnail.trim(),
-              file_url: form.fileUrl.trim(),
+              cover_image_url: form.thumbnail.replace(/\s+/g, "").trim(),
+              file_url: form.fileUrl.replace(/\s+/g, "").trim(),
               file_mime: form.fileMime,
               author: form.author.trim(),
               category_id: categoryId,

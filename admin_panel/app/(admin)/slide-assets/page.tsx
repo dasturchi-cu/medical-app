@@ -156,9 +156,9 @@ export default function SlideAssetsPage() {
             createLessonAsset({
               title: form.title.trim(),
               description: form.description.trim(),
-              file_url: form.file_url.trim(),
+              file_url: form.file_url.replace(/\s+/g, "").trim(),
               file_type: form.type,
-              preview_image_url: form.preview_image_url.trim(),
+              preview_image_url: form.preview_image_url.replace(/\s+/g, "").trim(),
               course_id: form.course_id.trim() || null,
               lesson_id: form.lesson_id.trim() || null,
               order_no: Number(form.order_no) || 1,

@@ -74,7 +74,9 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     }
 
     final remoteSlides = lessonSlidesAsync.valueOrNull ?? const [];
-    final lessonAssets = ref.watch(lessonAssetsProvider(widget.lessonId)).valueOrNull ?? const [];
+    final lessonAssets =
+        ref.watch(lessonAssetsProvider(widget.lessonId)).valueOrNull ??
+        const [];
     final assetSlides = lessonAssets
         .map(
           (asset) => _RenderedSlide(
@@ -88,17 +90,19 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
         .toList(growable: false);
     final renderedSlides = remoteSlides.isNotEmpty
         ? remoteSlides
-            .map(
-              (item) => _RenderedSlide(
-                title: item.title,
-                body: item.body,
-                imageUrl: item.imageUrl,
-              ),
-            )
-            .toList(growable: false)
+              .map(
+                (item) => _RenderedSlide(
+                  title: item.title,
+                  body: item.body,
+                  imageUrl: item.imageUrl,
+                ),
+              )
+              .toList(growable: false)
         : lesson.slides
-            .map((text) => _RenderedSlide(title: text, body: '', imageUrl: ''))
-            .toList(growable: false);
+              .map(
+                (text) => _RenderedSlide(title: text, body: '', imageUrl: ''),
+              )
+              .toList(growable: false);
     final mergedSlides = [...renderedSlides, ...assetSlides];
 
     return Scaffold(
@@ -159,9 +163,9 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
           const SizedBox(height: 12),
           Text(
             'Dars matni',
-            style: Theme.of(context).textTheme.titleMedium?.copyWith(
-                  fontWeight: FontWeight.w900,
-                ),
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w900),
           ),
           const SizedBox(height: 8),
           Card(
@@ -171,9 +175,9 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
               child: Text(
                 lesson.transcriptUz,
                 style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                      height: 1.35,
-                      color: Colors.black87,
-                    ),
+                  height: 1.35,
+                  color: Colors.black87,
+                ),
               ),
             ),
           ),
@@ -191,10 +195,14 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                     ),
                     onPressed: () {
                       if (courseId != null) {
-                        ref.read(selectedCourseIdProvider.notifier).state = courseId;
+                        ref.read(selectedCourseIdProvider.notifier).state =
+                            courseId;
                         ref
                             .read(progressControllerProvider.notifier)
-                            .completeLesson(courseId: courseId, lessonId: widget.lessonId);
+                            .completeLesson(
+                              courseId: courseId,
+                              lessonId: widget.lessonId,
+                            );
                         final course = repo.getCourseById(courseId);
                         String? sectionId;
                         if (course != null) {
@@ -237,10 +245,14 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                     ),
                     onPressed: () {
                       if (courseId != null) {
-                        ref.read(selectedCourseIdProvider.notifier).state = courseId;
+                        ref.read(selectedCourseIdProvider.notifier).state =
+                            courseId;
                         ref
                             .read(progressControllerProvider.notifier)
-                            .completeLesson(courseId: courseId, lessonId: widget.lessonId);
+                            .completeLesson(
+                              courseId: courseId,
+                              lessonId: widget.lessonId,
+                            );
                       }
                       context.push('${AppRoutes.quiz}?id=${widget.lessonId}');
                     },
@@ -347,10 +359,8 @@ class _SlideViewerState extends State<_SlideViewer> {
     if (widget.slides.isEmpty) return;
     await Navigator.of(context, rootNavigator: true).push(
       MaterialPageRoute<void>(
-        builder: (_) => _FullscreenSlidePage(
-          slides: widget.slides,
-          initialIndex: _page,
-        ),
+        builder: (_) =>
+            _FullscreenSlidePage(slides: widget.slides, initialIndex: _page),
       ),
     );
   }
@@ -392,75 +402,91 @@ class _SlideViewerState extends State<_SlideViewer> {
                       color: const Color(0xFF1E6BB8),
                       child: Padding(
                         padding: const EdgeInsets.all(20),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          mainAxisAlignment: MainAxisAlignment.center,
-                          children: [
-                            Text(
-                              'Test slayd ${index + 1}',
-                              style: Theme.of(context).textTheme.labelLarge?.copyWith(
-                                    color: Colors.white70,
-                                    fontWeight: FontWeight.w800,
-                                  ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              slide.title,
-                              style: Theme.of(context).textTheme.headlineSmall?.copyWith(
-                                    color: Colors.white,
-                                    fontWeight: FontWeight.w900,
-                                  ),
-                            ),
-                            if (slide.body.trim().isNotEmpty) ...[
-                              const SizedBox(height: 10),
+                        child: SingleChildScrollView(
+                          physics: const ClampingScrollPhysics(),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            mainAxisSize: MainAxisSize.min,
+                            children: [
                               Text(
-                                slide.body,
-                                style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                      color: Colors.white.withValues(alpha: 0.88),
-                                      height: 1.35,
+                                slide.title,
+                                style: Theme.of(context).textTheme.headlineSmall
+                                    ?.copyWith(
+                                      color: Colors.white,
+                                      fontWeight: FontWeight.w900,
                                     ),
                               ),
-                            ],
-                            if (slide.imageUrl.trim().isNotEmpty) ...[
-                              const SizedBox(height: 12),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(12),
-                                child: _SlideImage(
-                                  imageUrl: slide.imageUrl,
-                                  fit: BoxFit.cover,
-                                  width: double.infinity,
-                                  height: widget.height * 0.38,
-                                  placeholderHeight: widget.height * 0.28,
+                              if (slide.body.trim().isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                Text(
+                                  slide.body,
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.88,
+                                        ),
+                                        height: 1.35,
+                                      ),
                                 ),
-                              ),
-                            ],
-                            if ((slide.assetType ?? '').toLowerCase() == 'pdf' && (slide.assetFileUrl ?? '').trim().isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              SizedBox(
-                                height: widget.height * 0.38,
-                                child: ClipRRect(
+                              ],
+                              if (slide.imageUrl.trim().isNotEmpty) ...[
+                                const SizedBox(height: 12),
+                                ClipRRect(
                                   borderRadius: BorderRadius.circular(12),
-                                  child: _InlinePdfPreview(url: slide.assetFileUrl!),
+                                  child: _SlideImage(
+                                    imageUrl: slide.imageUrl,
+                                    fit: BoxFit.cover,
+                                    width: double.infinity,
+                                    height: widget.height * 0.38,
+                                    placeholderHeight: widget.height * 0.28,
+                                  ),
                                 ),
-                              ),
-                            ],
-                            if ((slide.assetType ?? '').toLowerCase() == 'ppt' && (slide.assetFileUrl ?? '').trim().isNotEmpty) ...[
-                              const SizedBox(height: 10),
-                              FilledButton.icon(
-                                style: FilledButton.styleFrom(
-                                  backgroundColor: Colors.white.withValues(alpha: 0.18),
-                                  foregroundColor: Colors.white,
+                              ],
+                              if ((slide.assetType ?? '').toLowerCase() ==
+                                      'pdf' &&
+                                  (slide.assetFileUrl ?? '')
+                                      .trim()
+                                      .isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                SizedBox(
+                                  height: widget.height * 0.38,
+                                  child: ClipRRect(
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: _InlinePdfPreview(
+                                      url: slide.assetFileUrl!,
+                                    ),
+                                  ),
                                 ),
-                                onPressed: () async {
-                                  final uri = Uri.tryParse(slide.assetFileUrl!);
-                                  if (uri == null) return;
-                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                },
-                                icon: const Icon(Icons.open_in_new),
-                                label: const Text('PPT ni ochish'),
-                              ),
+                              ],
+                              if ((slide.assetType ?? '').toLowerCase() ==
+                                      'ppt' &&
+                                  (slide.assetFileUrl ?? '')
+                                      .trim()
+                                      .isNotEmpty) ...[
+                                const SizedBox(height: 10),
+                                FilledButton.icon(
+                                  style: FilledButton.styleFrom(
+                                    backgroundColor: Colors.white.withValues(
+                                      alpha: 0.18,
+                                    ),
+                                    foregroundColor: Colors.white,
+                                  ),
+                                  onPressed: () async {
+                                    final uri = Uri.tryParse(
+                                      slide.assetFileUrl!,
+                                    );
+                                    if (uri == null) return;
+                                    await launchUrl(
+                                      uri,
+                                      mode: LaunchMode.externalApplication,
+                                    );
+                                  },
+                                  icon: const Icon(Icons.open_in_new),
+                                  label: const Text('PPT ni ochish'),
+                                ),
+                              ],
                             ],
-                          ],
+                          ),
                         ),
                       ),
                     );
@@ -509,9 +535,9 @@ class _SlideViewerState extends State<_SlideViewer> {
             ),
             Text(
               '${_page + 1} / ${slides.length}',
-              style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                    fontWeight: FontWeight.w700,
-                  ),
+              style: Theme.of(
+                context,
+              ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w700),
             ),
             IconButton(
               iconSize: 28,
@@ -601,7 +627,8 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
                         fit: BoxFit.cover,
                         placeholderHeight: double.infinity,
                       ),
-                    if (slide.title.trim().isNotEmpty || slide.body.trim().isNotEmpty)
+                    if (slide.title.trim().isNotEmpty ||
+                        slide.body.trim().isNotEmpty)
                       Align(
                         alignment: Alignment.topLeft,
                         child: Container(
@@ -617,7 +644,8 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
                             children: [
                               Text(
                                 'Test slayd ${i + 1}',
-                                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                                style: Theme.of(context).textTheme.titleSmall
+                                    ?.copyWith(
                                       color: Colors.white70,
                                       fontWeight: FontWeight.w800,
                                     ),
@@ -626,7 +654,8 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
                                 const SizedBox(height: 6),
                                 Text(
                                   slide.title,
-                                  style: Theme.of(context).textTheme.titleLarge?.copyWith(
+                                  style: Theme.of(context).textTheme.titleLarge
+                                      ?.copyWith(
                                         color: Colors.white,
                                         fontWeight: FontWeight.w900,
                                       ),
@@ -636,8 +665,11 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
                                 const SizedBox(height: 6),
                                 Text(
                                   slide.body,
-                                  style: Theme.of(context).textTheme.bodyMedium?.copyWith(
-                                        color: Colors.white.withValues(alpha: 0.9),
+                                  style: Theme.of(context).textTheme.bodyMedium
+                                      ?.copyWith(
+                                        color: Colors.white.withValues(
+                                          alpha: 0.9,
+                                        ),
                                       ),
                                 ),
                               ],
@@ -670,7 +702,7 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
           ),
           Positioned(
             bottom: 12,
-             left: 0,
+            left: 0,
             right: 0,
             child: Column(
               children: [
@@ -741,12 +773,17 @@ class _InlinePdfPreviewState extends State<_InlinePdfPreview> {
       future: _bytesFuture,
       builder: (context, snapshot) {
         if (snapshot.connectionState != ConnectionState.done) {
-          return const Center(child: CircularProgressIndicator(color: Colors.white));
+          return const Center(
+            child: CircularProgressIndicator(color: Colors.white),
+          );
         }
         if (snapshot.hasError || !snapshot.hasData) {
           return _error(
             snapshot.error is Exception
-                ? (snapshot.error as Exception).toString().replaceFirst('Exception: ', '')
+                ? (snapshot.error as Exception).toString().replaceFirst(
+                    'Exception: ',
+                    '',
+                  )
                 : "PDF ni ochib bo'lmadi",
           );
         }
@@ -761,7 +798,9 @@ class _InlinePdfPreviewState extends State<_InlinePdfPreview> {
       final comma = value.indexOf(',');
       if (comma <= 0) throw Exception("PDF formati noto'g'ri.");
       try {
-        return base64Decode(value.substring(comma + 1).replaceAll(RegExp(r'\s'), ''));
+        return base64Decode(
+          value.substring(comma + 1).replaceAll(RegExp(r'\s'), ''),
+        );
       } catch (_) {
         throw Exception("PDF ni o'qib bo'lmadi.");
       }
@@ -816,7 +855,9 @@ class _SlideImage extends StatelessWidget {
     if (raw.startsWith('data:image')) {
       final commaIndex = raw.indexOf(',');
       if (commaIndex > 0) {
-        final payload = raw.substring(commaIndex + 1).replaceAll(RegExp(r'\s'), '');
+        final payload = raw
+            .substring(commaIndex + 1)
+            .replaceAll(RegExp(r'\s'), '');
         try {
           final bytes = base64Decode(payload);
           return Image.memory(
@@ -844,7 +885,9 @@ class _SlideImage extends StatelessWidget {
   }
 
   String _normalizeImageUrl(String value) {
-    if (value.startsWith('http://') || value.startsWith('https://')) return value;
+    if (value.startsWith('http://') || value.startsWith('https://')) {
+      return value;
+    }
     final base = getApiBaseUrl().replaceAll(RegExp(r'/+$'), '');
     final path = value.startsWith('/') ? value : '/$value';
     return '$base$path';
@@ -862,4 +905,3 @@ class _SlideImage extends StatelessWidget {
     );
   }
 }
-
