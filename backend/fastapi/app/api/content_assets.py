@@ -89,12 +89,18 @@ def get_book_categories():
 
 @router.post("/books/categories", response_model=BookCategoryItem, status_code=status.HTTP_201_CREATED)
 def post_book_category(payload: BookCategoryCreate, _: None = Depends(_require_admin_key)):
-    return create_book_category(get_supabase_client(), payload)
+    try:
+        return create_book_category(get_supabase_client(), payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.post("/books", response_model=BookItem, status_code=status.HTTP_201_CREATED)
 def post_book(payload: BookCreate, _: None = Depends(_require_admin_key)):
-    return create_book(get_supabase_client(), payload)
+    try:
+        return create_book(get_supabase_client(), payload)
+    except RuntimeError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
 
 
 @router.patch("/books/{book_id}", response_model=BookItem)

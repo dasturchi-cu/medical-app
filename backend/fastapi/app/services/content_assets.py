@@ -184,31 +184,61 @@ def list_books(client: Client, *, course_id: str | None = None) -> list[BookItem
     return [_to_book(row) for row in rows]
 
 
+def _book_insert_payload(payload: BookCreate) -> dict[str, Any]:
+    """Bo‘sh nullable FK va None qiymatlarni PostgREST uchun tozalaymiz."""
+    data = payload.model_dump(exclude_none=True)
+    for fk in ("category_id", "course_id", "lesson_id"):
+        if data.get(fk) == "":
+            data.pop(fk, None)
+    return data
+
+
+def _raise_book_insert_failure(error: Exception) -> None:
+    message = str(error).lower()
+    if "foreign key" in message or "violates foreign key" in message:
+        raise RuntimeError(
+            "Tanlangan kategoriya yoki bog‘langan kurs/dars bazada yo‘q — "
+            "kategoriyasiz saqlab ko‘ring yoki yangi kategoriya yarating."
+        ) from error
+    if "invalid input syntax for type uuid" in message:
+        raise RuntimeError(
+            "Noto‘g‘ri UUID (masalan bo‘sh kategoriya ID). "
+            "Kategoriya nomini yozib qayta urining yoki kategoriyasiz qoldiring."
+        ) from error
+    if "duplicate" in message or "unique constraint" in message:
+        raise RuntimeError(
+            "Bu yozuv bilan noyoblik qoidasi buzildi (masalan bir xil kitob)."
+        ) from error
+    raise RuntimeError(f"Kitob qo'shib bo'lmadi: {error}") from error
+
+
 def create_book(client: Client, payload: BookCreate) -> BookItem:
-    raw = payload.model_dump()
-    try:
-        inserted = client.table("book_items").insert(raw).execute()
+    raw = _book_insert_payload(payload)
+
+    def _insert_row(data: dict[str, Any]) -> BookItem:
+        inserted = client.table("book_items").insert(data).execute()
         row = (inserted.data or [None])[0]
         if not row:
             raise RuntimeError("Kitob qo'shilmadi.")
         return _to_book(row)
+
+    try:
+        return _insert_row(raw)
     except Exception as error:
         message = str(error).lower()
         if "category_id" in message and "column" in message:
-            fallback = {k: v for k, v in raw.items() if k not in {"category_id"}}
-            inserted = client.table("book_items").insert(fallback).execute()
-            row = (inserted.data or [None])[0]
-            if not row:
-                raise RuntimeError("Kitob qo'shilmadi.")
-            return _to_book(row)
+            fallback = {k: v for k, v in raw.items() if k != "category_id"}
+            try:
+                return _insert_row(fallback)
+            except Exception as err2:
+                _raise_book_insert_failure(err2)
         if "author" in message and "column" in message:
-            fallback = {k: v for k, v in raw.items() if k not in {"author"}}
-            inserted = client.table("book_items").insert(fallback).execute()
-            row = (inserted.data or [None])[0]
-            if not row:
-                raise RuntimeError("Kitob qo'shilmadi.")
-            return _to_book(row)
-        raise
+            fallback = {k: v for k, v in raw.items() if k != "author"}
+            try:
+                return _insert_row(fallback)
+            except Exception as err2:
+                _raise_book_insert_failure(err2)
+        _raise_book_insert_failure(error)
 
 
 def update_book(client: Client, *, book_id: str, payload: BookUpdate) -> BookItem:
@@ -239,15 +269,23 @@ def list_book_categories(client: Client) -> list[BookCategoryItem]:
 
 
 def create_book_category(client: Client, payload: BookCategoryCreate) -> BookCategoryItem:
-    inserted = client.table("book_categories").insert(payload.model_dump()).execute()
-    row = (inserted.data or [None])[0]
-    if not row:
-        raise RuntimeError("Kategoriya qo'shilmadi.")
-    return BookCategoryItem(
-        id=str(row.get("id") or ""),
-        name=str(row.get("name") or ""),
-        slug=str(row.get("slug") or ""),
-    )
+    try:
+        inserted = client.table("book_categories").insert(payload.model_dump()).execute()
+        row = (inserted.data or [None])[0]
+        if not row:
+            raise RuntimeError("Kategoriya qo'shilmadi.")
+        return BookCategoryItem(
+            id=str(row.get("id") or ""),
+            name=str(row.get("name") or ""),
+            slug=str(row.get("slug") or ""),
+        )
+    except Exception as error:
+        message = str(error).lower()
+        if "duplicate" in message or "unique constraint" in message:
+            raise RuntimeError(
+                "Bu nom yoki slug bilan kategoriya allaqachon mavjud — boshqa nom kiriting."
+            ) from error
+        raise RuntimeError(f"Kategoriya qo'shib bo'lmadi: {error}") from error
 
 
 def upsert_book_progress(client: Client, *, book_id: str, payload: BookProgressUpsert) -> BookProgressItem:

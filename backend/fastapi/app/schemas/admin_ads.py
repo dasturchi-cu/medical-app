@@ -1,5 +1,5 @@
 from datetime import datetime
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, Field, field_validator
 
 
 class AdminAdCreate(BaseModel):
@@ -7,8 +7,18 @@ class AdminAdCreate(BaseModel):
     message: str = ""
     image_url: str = ""
     price_label: str = ""
-    course_id: str = Field(min_length=1)
+    course_id: str | None = None
     telegram: str = "Neuroscienceadmin"
+    is_active: bool = False
+
+    @field_validator("course_id", mode="before")
+    @classmethod
+    def _empty_course(cls, v):
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
 
 
 class AdminAdUpdate(BaseModel):
@@ -27,7 +37,7 @@ class AdminAdItem(BaseModel):
     message: str
     image_url: str
     price_label: str
-    course_id: str
+    course_id: str | None = None
     telegram: str
     is_active: bool
     created_at: datetime

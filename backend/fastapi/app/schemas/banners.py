@@ -10,6 +10,7 @@ class BannerCreate(BaseModel):
     price_label: str = ""
     course_id: str | None = None
     telegram: str = "Neuroscienceadmin"
+    is_active: bool = False
 
 
 class BannerUpdate(BaseModel):

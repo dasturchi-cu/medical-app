@@ -55,6 +55,7 @@ def create_banner(client: Client, payload: BannerCreate) -> BannerItem:
                 "price_label": payload.price_label.strip(),
                 "course_id": payload.course_id,
                 "telegram": payload.telegram.replace("@", "").strip() or "Neuroscienceadmin",
+                "is_active": payload.is_active,
             }
         )
         .execute()
