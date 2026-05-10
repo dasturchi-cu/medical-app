@@ -1,7 +1,7 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useMemo, useState } from "react";
+import { useEffect, useMemo, useRef, useState } from "react";
 import { Heart, MessageCircle } from "lucide-react";
 import { ConfirmDialog } from "@/components/confirm-dialog";
 import { PageSkeleton } from "@/components/page-skeleton";
@@ -22,11 +22,18 @@ export default function CommentsPage() {
   const [replyOpenId, setReplyOpenId] = useState<string | null>(null);
   const [replyValues, setReplyValues] = useState<Record<string, string>>({});
   const statusModal = useStatusModal();
+  const reloadDebounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   useEffect(() => {
     let mounted = true;
     const load = async (silent = false) => {
       try {
+        if (silent) {
+          const commentItems = await fetchAdminComments();
+          if (!mounted) return;
+          setComments(commentItems);
+          return;
+        }
         const [commentItems, courseItems] = await Promise.all([fetchAdminComments(), fetchCourses()]);
         if (!mounted) return;
         setComments(commentItems);
@@ -38,27 +45,37 @@ export default function CommentsPage() {
         if (mounted) setLoading(false);
       }
     };
+
+    const scheduleReload = (silent: boolean) => {
+      if (reloadDebounceRef.current) clearTimeout(reloadDebounceRef.current);
+      reloadDebounceRef.current = setTimeout(() => {
+        reloadDebounceRef.current = null;
+        void load(silent);
+      }, 650);
+    };
+
     void load();
 
     const supabase = getSupabaseBrowserClient();
     const channel = supabase
       ?.channel("admin-comments-live")
       .on("postgres_changes", { event: "*", schema: "public", table: "app_comments" }, () => {
-        void load(true);
+        scheduleReload(true);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "app_comment_likes" }, () => {
-        void load(true);
+        scheduleReload(true);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "comments" }, () => {
-        void load(true);
+        scheduleReload(true);
       })
       .on("postgres_changes", { event: "*", schema: "public", table: "comment_reactions" }, () => {
-        void load(true);
+        scheduleReload(true);
       })
       .subscribe();
 
     return () => {
       mounted = false;
+      if (reloadDebounceRef.current) clearTimeout(reloadDebounceRef.current);
       if (channel) {
         void supabase?.removeChannel(channel);
       }

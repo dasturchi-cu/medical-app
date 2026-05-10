@@ -71,7 +71,7 @@ export function DataTable<T extends object>({
         />
       </div>
 
-      <div className="space-y-3 p-3 md:hidden">
+      <div className="space-y-3 p-3 lg:hidden">
         {paginated.length > 0 ? (
           paginated.map((item, index) => (
             <article key={index} className="rounded-xl border border-slate-100 bg-white p-3">
@@ -94,8 +94,8 @@ export function DataTable<T extends object>({
         )}
       </div>
 
-      <div className="hidden w-full overflow-x-auto md:block">
-        <UITable className="min-w-[760px]">
+      <div className="hidden w-full overflow-x-auto lg:block">
+        <UITable className="min-w-[720px]">
           <TableHeader>
             <TableRow className="bg-slate-50/70">
               {columns.map((column) => (

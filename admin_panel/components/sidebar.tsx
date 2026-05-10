@@ -51,9 +51,13 @@ export function Sidebar({ mobileOpen = false, onCloseMobile }: SidebarProps) {
       </aside>
 
       {mobileOpen ? (
-        <div className="fixed inset-0 z-40 bg-slate-900/35 lg:hidden" onClick={onCloseMobile}>
+        <div
+          className="fixed inset-0 z-[55] bg-slate-900/40 backdrop-blur-[2px] lg:hidden"
+          role="presentation"
+          onClick={onCloseMobile}
+        >
           <aside
-            className="surface-card h-full w-[90%] max-w-xs overflow-y-auto rounded-none p-4"
+            className="surface-card h-full w-[min(100vw-2.5rem,20rem)] max-w-sm overflow-y-auto rounded-none border-r border-slate-100 p-4 shadow-xl safe-pad-bottom"
             onClick={(event) => event.stopPropagation()}
           >
             <div className="mb-4 flex items-center justify-between">

@@ -46,8 +46,8 @@ export default function LoginPage() {
   };
 
   return (
-    <main className="flex min-h-screen items-center justify-center px-4">
-      <Card className="surface-card w-full max-w-md border-slate-100">
+    <main className="flex min-h-[100dvh] items-center justify-center px-4 py-10 safe-pad-x safe-pad-bottom safe-pad-top">
+      <Card className="surface-card w-full max-w-md border-slate-100 shadow-lg">
         <CardHeader className="space-y-1">
           <CardTitle className="text-2xl">Admin kirish</CardTitle>
           <p className="text-sm text-slate-500">

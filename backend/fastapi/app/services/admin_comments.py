@@ -75,6 +75,19 @@ def _resolve_course_titles(client: Client, keys: list[str]) -> dict[str, str]:
     return out
 
 
+def _course_title_display(course_key: str, resolved_title: str) -> str:
+    """Nom topilmasa uzun UUID o‘rniga qisqa matn; slug kalitlarini qoldiramiz."""
+    resolved = (resolved_title or "").strip()
+    if resolved:
+        return resolved
+    ck = (course_key or "").strip()
+    if not ck:
+        return ""
+    if _UUID_RE.match(ck):
+        return f"Kurs topilmadi · …{ck[-12:]}"
+    return ck
+
+
 def _resolve_admin_actor(client: Client, configured_admin_user_id: str | None) -> str:
     configured = (configured_admin_user_id or "").strip()
     if configured:
@@ -136,12 +149,12 @@ def list_admin_comments(client: Client, *, configured_admin_user_id: str | None 
 
     items: list[AdminCommentItem] = []
     for row in comments:
-        ck = str(row.get("course_id") or row.get("course_key") or "")
+        ck = str(row.get("course_id") or row.get("course_key") or "").strip()
         items.append(
             AdminCommentItem(
                 id=str(row.get("id") or ""),
                 course_id=ck,
-                course_title=title_by_key.get(ck.strip(), ""),
+                course_title=_course_title_display(ck, title_by_key.get(ck, "")),
                 user_id=str(row.get("user_id") or ""),
                 user_name=str(
                     row.get("author_name")
@@ -212,12 +225,12 @@ def add_admin_reply(client: Client, *, comment_id: str, text: str, configured_ad
             or 0
         )
         client.table("app_comments").update({"replies_count": replies_count}).eq("id", comment_id).execute()
-    ck = str(item.get("course_id") or item.get("course_key") or "")
-    titles = _resolve_course_titles(client, [ck]) if ck.strip() else {}
+    ck = str(item.get("course_id") or item.get("course_key") or "").strip()
+    titles = _resolve_course_titles(client, [ck]) if ck else {}
     return AdminCommentItem(
         id=str(item.get("id") or ""),
         course_id=ck,
-        course_title=titles.get(ck.strip(), ""),
+        course_title=_course_title_display(ck, titles.get(ck, "")),
         user_id=admin_user_id,
         user_name=author,
         text=str(item.get("text") or ""),
@@ -272,12 +285,12 @@ def toggle_admin_heart(client: Client, *, comment_id: str, configured_admin_user
         or row.get("user_id")
         or ""
     )
-    ck = str(row.get(course_column) or "")
-    titles = _resolve_course_titles(client, [ck]) if ck.strip() else {}
+    ck = str(row.get(course_column) or "").strip()
+    titles = _resolve_course_titles(client, [ck]) if ck else {}
     return AdminCommentItem(
         id=str(row.get("id") or ""),
         course_id=ck,
-        course_title=titles.get(ck.strip(), ""),
+        course_title=_course_title_display(ck, titles.get(ck, "")),
         user_id=str(row.get("user_id") or ""),
         user_name=name,
         text=str(row.get("text") or ""),

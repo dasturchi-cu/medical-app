@@ -136,7 +136,20 @@
   }
 
   .admin-page {
-    @apply space-y-6;
+    @apply space-y-4 sm:space-y-6;
+  }
+
+  .safe-pad-x {
+    padding-left: max(0.75rem, env(safe-area-inset-left));
+    padding-right: max(0.75rem, env(safe-area-inset-right));
+  }
+
+  .safe-pad-top {
+    padding-top: env(safe-area-inset-top);
+  }
+
+  .safe-pad-bottom {
+    padding-bottom: env(safe-area-inset-bottom);
   }
 
   .editor-preview-grid {

@@ -6,7 +6,7 @@ from typing import Any
 
 from supabase import Client
 
-from .admin_comments import _resolve_course_titles
+from .admin_comments import _course_title_display, _resolve_course_titles
 from ..schemas.admin_users import (
     AdminUserItem,
     AdminUserUpdateRequest,
@@ -329,7 +329,7 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
     recent_ratings = [
         UserRecentRatingItem(
             course_id=cid,
-            course_title=courses_map.get(cid, cid),
+            course_title=_course_title_display(cid.strip(), courses_map.get(cid.strip(), "")),
             stars=stars,
             created_at=created_at,
         )
@@ -345,7 +345,10 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         UserRecentCommentItem(
             id=str(row.get("id") or ""),
             course_key=str(row.get("course_key") or ""),
-            course_title=courses_map.get(str(row.get("course_key") or ""), str(row.get("course_key") or "")),
+            course_title=_course_title_display(
+                str(row.get("course_key") or "").strip(),
+                courses_map.get(str(row.get("course_key") or "").strip(), ""),
+            ),
             lesson_title="",
             text=str(row.get("text") or ""),
             likes_count=int(row.get("likes_count") or 0),
@@ -357,7 +360,10 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         UserRecentCommentItem(
             id=str(row.get("id") or ""),
             course_key=str(row.get("course_id") or ""),
-            course_title=courses_map.get(str(row.get("course_id") or ""), str(row.get("course_id") or "")),
+            course_title=_course_title_display(
+                str(row.get("course_id") or "").strip(),
+                courses_map.get(str(row.get("course_id") or "").strip(), ""),
+            ),
             lesson_title="",
             text=str(row.get("text") or ""),
             likes_count=int(row.get("hearts_count") or 0),
@@ -380,7 +386,10 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         UserProgressItem(
             lesson_id=str(row.get("lesson_id") or ""),
             course_id=str((row.get("lessons") or {}).get("course_id") or ""),
-            course_title=courses_map.get(str((row.get("lessons") or {}).get("course_id") or ""), str((row.get("lessons") or {}).get("course_id") or "")),
+            course_title=_course_title_display(
+                str((row.get("lessons") or {}).get("course_id") or "").strip(),
+                courses_map.get(str((row.get("lessons") or {}).get("course_id") or "").strip(), ""),
+            ),
             lesson_title=lessons_map.get(str(row.get("lesson_id") or ""), str(row.get("lesson_id") or "")),
             watched_sec=int(row.get("watched_sec") or 0),
             completed=bool(row.get("completed")),
