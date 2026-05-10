@@ -62,7 +62,7 @@ class MyCoursesPage extends ConsumerWidget {
                 final p = progress.byCourseId[c.id];
                 final totalLessons = repo.getFlattenLessons(c.id).length;
                 final watched = p?.watchedLessonIds.length ?? 0;
-                final progressValue = totalLessons == 0
+                  final progressValue = totalLessons == 0
                     ? 0.0
                     : (watched / totalLessons).toDouble().clamp(0.0, 1.0);
                 final buttonText = 'Davom et';
@@ -85,9 +85,7 @@ class MyCoursesPage extends ConsumerWidget {
                       : 'brain',
                   title: c.titleUz,
                   author: c.authorUz,
-                  summary: c.descriptionUz,
                   imageUrl: c.imageUrl,
-                  priceText: c.priceUz,
                   progress: progressValue,
                   ratingText: (cardStats?.ratingAvg ?? c.rating).toStringAsFixed(1),
                   commentCountText: '${cardStats?.commentsCount ?? 0} ta sharh',

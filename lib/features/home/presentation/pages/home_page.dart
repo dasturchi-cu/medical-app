@@ -677,7 +677,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                       horizontal: AppSpacing.s16,
                       vertical: AppSpacing.s8,
                     ),
-                    child: const SizedBox(height: 116),
+                    child: const SizedBox(height: 92),
                   );
                 }
 
@@ -698,9 +698,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                       : 'brain',
                   title: c.titleUz,
                   author: c.authorUz,
-                  summary: c.descriptionUz,
                   imageUrl: c.imageUrl,
-                  priceText: c.priceUz,
                   progress: progressValue,
                   ratingText: (cardStats?.ratingAvg ?? c.rating).toStringAsFixed(1),
                   commentCountText: '${cardStats?.commentsCount ?? 0} ta sharh',

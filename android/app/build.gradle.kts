@@ -38,6 +38,10 @@ android {
             // TODO: Add your own signing config for the release build.
             // Signing with the debug keys for now, so `flutter run --release` works.
             signingConfig = signingConfigs.getByName("debug")
+            // Windows + Gradle 8.14: R8 may fail with "Could not stat usage.txt"
+            // (proguardUsageOutput). Disable minify for stable local release APK builds.
+            isMinifyEnabled = false
+            isShrinkResources = false
         }
     }
 }
