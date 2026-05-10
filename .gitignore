@@ -44,3 +44,11 @@ app.*.map.json
 /android/app/profile
 /android/app/release
 /android/build/
+
+# Environment secrets (never commit real keys)
+.env
+.env.local
+.env.*.local
+backend/fastapi/.env
+admin_panel/.env.local
+!**/.env.example
