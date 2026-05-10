@@ -5,6 +5,15 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
+/// Admin analytics uchun `completed` serverga ishonchli tushishi — oxirgi 1 sekunddan tashqari yumshoq chegaralar.
+bool _isVideoCompleted(int watchedSec, int durationSec) {
+  if (durationSec <= 0) return false;
+  if (durationSec <= 15) return watchedSec >= durationSec - 1;
+  final nearEnd = watchedSec >= durationSec - 5;
+  final pctOk = watchedSec >= (durationSec * 0.90).floor();
+  return nearEnd || pctOk;
+}
+
 // ─────────────────────────────────────────────
 //  PUBLIC WIDGET
 // ─────────────────────────────────────────────
@@ -97,7 +106,7 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
     if (c == null || !c.value.isInitialized) return;
     final watchedSec = c.value.position.inSeconds;
     final durationSec = c.value.duration.inSeconds;
-    final completed = durationSec > 0 && watchedSec >= durationSec - 1;
+    final completed = _isVideoCompleted(watchedSec, durationSec);
     _emitProgress(watchedSec, completed);
   }
 
@@ -106,7 +115,7 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
     if (c == null) return;
     final watchedSec = c.value.position.inSeconds;
     final durationSec = c.metadata.duration.inSeconds;
-    final completed = durationSec > 0 && watchedSec >= durationSec - 1;
+    final completed = _isVideoCompleted(watchedSec, durationSec);
     _emitProgress(watchedSec, completed);
   }
 
@@ -115,14 +124,14 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
     if (c != null && c.value.isInitialized) {
       final w = c.value.position.inSeconds;
       final d = c.value.duration.inSeconds;
-      if (w > 0) widget.onWatchProgress?.call(w, d > 0 && w >= d - 1);
+      if (w > 0) widget.onWatchProgress?.call(w, _isVideoCompleted(w, d));
       return;
     }
     final yc = _ytController;
     if (yc != null) {
       final w = yc.value.position.inSeconds;
       final d = yc.metadata.duration.inSeconds;
-      if (w > 0) widget.onWatchProgress?.call(w, d > 0 && w >= d - 1);
+      if (w > 0) widget.onWatchProgress?.call(w, _isVideoCompleted(w, d));
     }
   }
 

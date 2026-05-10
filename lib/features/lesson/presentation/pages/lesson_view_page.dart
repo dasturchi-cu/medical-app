@@ -344,7 +344,9 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     final baseUrl = getApiBaseUrl();
     if (userId.isEmpty || baseUrl.isEmpty) return;
     final shouldSync = completed || watchedSec >= _lastSyncedWatchSec + 20;
-    if (!shouldSync || _syncingWatch) return;
+    if (!shouldSync) return;
+    // Yakunlanishni oldingi sync bloklamasin — aks holda completed=true serverga umuman ketmaydi.
+    if (_syncingWatch && !completed) return;
     _syncingWatch = true;
     _lastSyncedWatchSec = watchedSec;
     try {
