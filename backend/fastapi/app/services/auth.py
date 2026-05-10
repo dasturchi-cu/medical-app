@@ -52,22 +52,27 @@ def mobile_login(client: Client, payload: MobileLoginRequest, *, admin_contact: 
         .execute()
     )
     primary = (device_resp.data or [None])[0]
+    fcm = (payload.fcm_token or "").strip() or None
     if primary is None:
-        client.table("user_devices").insert(
-            {
-                "user_id": user_id,
-                "device_id": payload.device_id,
-                "platform": payload.platform,
-                "is_primary": True,
-            }
-        ).execute()
+        row: dict = {
+            "user_id": user_id,
+            "device_id": payload.device_id,
+            "platform": payload.platform,
+            "is_primary": True,
+        }
+        if fcm:
+            row["fcm_token"] = fcm
+        client.table("user_devices").insert(row).execute()
     else:
         if str(primary.get("device_id") or "") != payload.device_id:
             raise HTTPException(
                 status_code=status.HTTP_403_FORBIDDEN,
                 detail="Bu raqam boshqa qurilmaga ulangan.",
             )
-        client.table("user_devices").update({"last_seen_at": datetime.utcnow().isoformat()}).eq("id", primary["id"]).execute()
+        updates: dict = {"last_seen_at": datetime.utcnow().isoformat()}
+        if fcm:
+            updates["fcm_token"] = fcm
+        client.table("user_devices").update(updates).eq("id", primary["id"]).execute()
 
     if payload.display_name.strip() and payload.display_name.strip() != str(user.get("full_name") or ""):
         updated = (

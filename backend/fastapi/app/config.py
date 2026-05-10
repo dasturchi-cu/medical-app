@@ -13,6 +13,8 @@ class Settings(BaseSettings):
     admin_api_key: str = ""
     admin_user_id: str = ""
     admin_contact_telegram: str = "Neuroscienceadmin"
+    # Service account JSON (full string) for Firebase Admin — enables FCM after notifications.create
+    firebase_credentials_json: str = ""
 
     model_config = SettingsConfigDict(
         env_file=".env",

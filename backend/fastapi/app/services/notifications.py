@@ -7,6 +7,7 @@ from typing import Any
 from supabase import Client
 
 from ..schemas.notifications import NotificationCreate, NotificationFeedItem, NotificationItem
+from .push_fcm import broadcast_notification_to_tokens
 
 logger = logging.getLogger(__name__)
 
@@ -113,9 +114,39 @@ def create_notification(client: Client, payload: NotificationCreate) -> Notifica
         .execute()
     )
     users = users_resp.data or []
+    user_ids: list[str] = []
     if users:
         deliveries = [{"notification_id": item["id"], "user_id": user["id"]} for user in users]
         client.table("notification_deliveries").insert(deliveries).execute()
+        user_ids = [str(u["id"]) for u in users]
+
+    tokens: list[str] = []
+    if user_ids:
+        devices_resp = (
+            client.table("user_devices")
+            .select("fcm_token")
+            .in_("user_id", user_ids)
+            .eq("is_primary", True)
+            .execute()
+        )
+        for row in devices_resp.data or []:
+            t = (row.get("fcm_token") or "").strip()
+            if t:
+                tokens.append(t)
+
+    if tokens:
+        try:
+            broadcast_notification_to_tokens(
+                tokens=tokens,
+                payload={
+                    "notification_id": str(item["id"]),
+                    "route": "/notifications",
+                    "title": payload.title.strip(),
+                    "body": payload.message.strip(),
+                },
+            )
+        except Exception as exc:
+            logger.warning("FCM broadcast failed (notification still saved): %s", exc)
 
     return _to_notification_item(
         {

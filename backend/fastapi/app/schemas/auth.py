@@ -7,6 +7,7 @@ class MobileLoginRequest(BaseModel):
     display_name: str = ""
     device_id: str = Field(min_length=1)
     platform: str = "android"
+    fcm_token: str | None = None
 
 
 class AuthUserResponse(BaseModel):
