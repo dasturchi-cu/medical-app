@@ -13,6 +13,7 @@ class AppCommentItem(BaseModel):
     replies_count: int = 0
     likes_count: int
     liked_by_me: bool
+    liked_by_admin: bool = False
     created_at: datetime
 
 

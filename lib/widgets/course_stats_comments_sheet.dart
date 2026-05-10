@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
@@ -41,6 +42,9 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   String? _replyToCommentId;
   bool _statsLoading = true;
   String? _statsError;
+  final Set<String> _pendingLikeCommentIds = <String>{};
+  final Map<String, bool> _optimisticLikedByMe = <String, bool>{};
+  final Map<String, int> _optimisticLikesCount = <String, int>{};
 
   @override
   void dispose() {
@@ -134,7 +138,20 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
     final userId = auth.userId ?? '';
     final baseUrl = getApiBaseUrl();
     if (userId.isEmpty || baseUrl.isEmpty || widget.courseId.trim().isEmpty) return;
-    setState(() => _ratingLoading = true);
+    final prevMy = _myRating;
+    final prevCount = _ratingCount;
+    final prevAvg = _ratingAvg;
+    final isNewVote = prevMy == 0;
+    final optimisticCount = isNewVote ? prevCount + 1 : prevCount;
+    final optimisticAvg = optimisticCount == 0
+        ? stars.toDouble()
+        : (((prevAvg * prevCount) - prevMy + stars) / optimisticCount);
+    setState(() {
+      _ratingLoading = true;
+      _myRating = stars;
+      _ratingCount = optimisticCount;
+      _ratingAvg = optimisticAvg.clamp(0, 5).toDouble();
+    });
     try {
       final ratePath = widget.useFeedbackApi
           ? '/api/v1/feedback/${widget.courseId}/rate'
@@ -160,10 +177,14 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
         throw Exception(msg);
       }
       if (!mounted) return;
-      setState(() => _myRating = stars);
-      await _loadCourseStats();
+      unawaited(_loadCourseStats());
     } catch (e) {
       if (!mounted) return;
+      setState(() {
+        _myRating = prevMy;
+        _ratingCount = prevCount;
+        _ratingAvg = prevAvg;
+      });
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
@@ -354,6 +375,9 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                       final c = rootComments[i];
                       final replies = repliesByParent[c.id] ?? const <AppCommentItem>[];
                       final showReplyInput = _replyToCommentId == c.id;
+                      final likedByMe = _optimisticLikedByMe[c.id] ?? c.likedByMe;
+                      final likesCount = _optimisticLikesCount[c.id] ?? c.likesCount;
+                      final likePending = _pendingLikeCommentIds.contains(c.id);
                       return Card(
                         margin: EdgeInsets.zero,
                         child: Padding(
@@ -376,30 +400,67 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                               Row(
                                 children: [
                                   IconButton(
-                                    onPressed: userId.isEmpty
+                                    onPressed: userId.isEmpty || likePending
                                         ? null
                                         : () async {
+                                            final nextLiked = !likedByMe;
+                                            final nextCount = nextLiked
+                                                ? likesCount + 1
+                                                : (likesCount > 0 ? likesCount - 1 : 0);
+                                            setState(() {
+                                              _pendingLikeCommentIds.add(c.id);
+                                              _optimisticLikedByMe[c.id] = nextLiked;
+                                              _optimisticLikesCount[c.id] = nextCount;
+                                            });
                                             try {
                                               await ref.read(commentsRepositoryProvider).toggleLike(
-                                                commentId: c.id,
-                                                userId: userId,
-                                              );
+                                                    commentId: c.id,
+                                                    userId: userId,
+                                                  );
                                               ref.invalidate(
                                                 courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
                                               );
-                                              await _loadCourseStats();
-                                            } catch (_) {}
+                                            } catch (_) {
+                                              if (!mounted) return;
+                                              setState(() {
+                                                _optimisticLikedByMe.remove(c.id);
+                                                _optimisticLikesCount.remove(c.id);
+                                              });
+                                            } finally {
+                                              if (mounted) {
+                                                setState(() => _pendingLikeCommentIds.remove(c.id));
+                                              } else {
+                                                _pendingLikeCommentIds.remove(c.id);
+                                              }
+                                            }
                                           },
                                     icon: Icon(
-                                      c.likedByMe ? Icons.favorite : Icons.favorite_border,
+                                      likedByMe ? Icons.favorite : Icons.favorite_border,
                                       size: 18,
-                                      color: c.likedByMe ? Colors.red : Colors.black54,
+                                      color: likedByMe ? Colors.red : Colors.black54,
                                     ),
                                     visualDensity: VisualDensity.compact,
                                     padding: EdgeInsets.zero,
                                   ),
                                   const SizedBox(width: 4),
-                                  Text('${c.likesCount}'),
+                                  Text('$likesCount'),
+                                  if (c.likedByAdmin) ...[
+                                    const SizedBox(width: 10),
+                                    Container(
+                                      padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                      decoration: BoxDecoration(
+                                        color: Colors.blue.withValues(alpha: 0.12),
+                                        borderRadius: BorderRadius.circular(999),
+                                      ),
+                                      child: Text(
+                                        'Admin like bosdi',
+                                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                                              color: Colors.blue.shade700,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                    ),
+                                  ],
                                   const SizedBox(width: 12),
                                   TextButton(
                                     onPressed: userId.isEmpty
@@ -444,7 +505,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                           ref.invalidate(
                                             courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
                                           );
-                                          await _loadCourseStats();
+                                          if (mounted) setState(() => _commentsCount += 1);
                                         } catch (_) {}
                                       },
                                       child: const Text('Javob'),
@@ -537,10 +598,11 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                               text: text,
                             );
                         _controller.clear();
+                        if (mounted) setState(() => _commentsCount += 1);
                         ref.invalidate(
                           courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
                         );
-                        await _loadCourseStats();
+                        unawaited(_loadCourseStats());
                       } catch (_) {
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(

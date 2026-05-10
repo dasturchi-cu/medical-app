@@ -10,7 +10,7 @@ import '../models/course_models.dart';
 class CatalogService {
   static List<Course> _courses = const [];
   /// Render va boshqa serverlar sovuq holatda birinchi javob 30–60 s kutishi mumkin.
-  static const Duration _bootstrapRequestTimeout = Duration(seconds: 45);
+  static const Duration _bootstrapRequestTimeout = Duration(seconds: 75);
 
   /// Last bootstrap error message (non-null if the last fetch failed or returned no courses).
   static String? lastLoadError;

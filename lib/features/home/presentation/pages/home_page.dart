@@ -5,14 +5,17 @@ import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
+import 'package:http/http.dart' as http;
 import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 
+import '../../../../core/config/api_config.dart';
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/models/course_models.dart';
 import '../../../../core/services/catalog_service.dart';
 import '../../../../core/state/app_state_providers.dart';
+import '../../../../core/state/auth_controller.dart';
 import '../../../../core/state/banners_state.dart';
 import '../../../../core/state/books_state.dart';
 import '../../../../core/state/course_stats_state.dart';
@@ -159,10 +162,43 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
 
   Future<void> _refreshCatalog() async {
     await CatalogService.bootstrap();
+    await _syncRemoteVideoProgress();
     if (!mounted) return;
     ref.invalidate(slidesFeedProvider);
     ref.invalidate(bannersFeedProvider);
     setState(() {});
+  }
+
+  Future<void> _syncRemoteVideoProgress() async {
+    final auth = ref.read(authControllerProvider);
+    final userId = auth.userId ?? '';
+    final baseUrl = getApiBaseUrl();
+    if (userId.isEmpty || baseUrl.isEmpty) return;
+    try {
+      final response = await http.get(
+        Uri.parse('$baseUrl/api/v1/courses/progress?user_id=$userId'),
+      );
+      if (response.statusCode < 200 || response.statusCode >= 300) return;
+      final body = jsonDecode(response.body);
+      if (body is! Map<String, dynamic>) return;
+      final items = body['items'];
+      if (items is! List) return;
+      final completedByCourse = <String, Set<String>>{};
+      for (final raw in items) {
+        if (raw is! Map<String, dynamic>) continue;
+        final completed = raw['completed'] == true;
+        if (!completed) continue;
+        final courseId = (raw['course_id'] ?? '').toString();
+        final lessonId = (raw['lesson_id'] ?? '').toString();
+        if (courseId.isEmpty || lessonId.isEmpty) continue;
+        completedByCourse.putIfAbsent(courseId, () => <String>{}).add(lessonId);
+      }
+      ref
+          .read(progressControllerProvider.notifier)
+          .mergeCompletedFromServer(completedByCourse);
+    } catch (_) {
+      // Ignore network errors; local state still works.
+    }
   }
 
   @override

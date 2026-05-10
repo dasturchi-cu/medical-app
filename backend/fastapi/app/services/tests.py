@@ -14,6 +14,7 @@ from ..schemas.tests import (
     QuizQuestionItem,
     QuizQuestionUpdate,
 )
+from .ranking import compute_watch_score, ensure_user_rank_row
 
 
 def _to_quiz_item(row: dict[str, Any], question_count: int = 0) -> QuizItem:
@@ -152,19 +153,6 @@ def delete_question(client: Client, *, question_id: str) -> None:
     client.table("quiz_questions").delete().eq("id", question_id).execute()
 
 
-def _ensure_rank_row(client: Client, *, user_id: str) -> dict[str, Any]:
-    row_resp = client.table("user_ranks").select("*").eq("user_id", user_id).limit(1).execute()
-    existing = (row_resp.data or [None])[0]
-    if existing:
-        return existing
-    inserted = (
-        client.table("user_ranks")
-        .insert({"user_id": user_id, "total_watched_hours": 0, "completed_lessons": 0, "total_score": 0, "quiz_minutes": 0, "test_points": 0})
-        .execute()
-    )
-    return (inserted.data or [None])[0] or {}
-
-
 def create_attempt(client: Client, *, quiz_id: str, payload: QuizAttemptCreate) -> QuizAttemptResponse:
     client.table("quiz_attempts").insert(
         {
@@ -177,12 +165,15 @@ def create_attempt(client: Client, *, quiz_id: str, payload: QuizAttemptCreate) 
         }
     ).execute()
 
-    # Ranking formula: score + duration bonus (minute-based)
-    points = round(float(payload.score_percent) + float(payload.duration_minutes) * 0.5, 2)
-    rank = _ensure_rank_row(client, user_id=payload.user_id)
-    new_total = round(float(rank.get("total_score") or 0) + points, 2)
-    new_quiz_minutes = round(float(rank.get("quiz_minutes") or 0) + float(payload.duration_minutes), 2)
+    # Testda o'tgan vaqt reytingga qo'shilmaydi; faqat test natijasi (score_percent).
+    points = round(float(payload.score_percent), 2)
+    rank = ensure_user_rank_row(client, user_id=payload.user_id)
+    new_quiz_minutes = float(rank.get("quiz_minutes") or 0)
     new_test_points = round(float(rank.get("test_points") or 0) + points, 2)
+    hours = float(rank.get("total_watched_hours") or 0)
+    completed_n = int(rank.get("completed_lessons") or 0)
+    watch_score = compute_watch_score(total_watched_hours=hours, completed_lessons=completed_n)
+    new_total = round(new_test_points + watch_score, 2)
 
     client.table("user_ranks").update(
         {

@@ -26,9 +26,15 @@ def _require_admin_key(
 def get_comments(
     course_key: str = Query(min_length=1),
     user_id: str | None = Query(default=None),
+    settings: Settings = Depends(get_settings),
 ):
     logger.info("comments.list request course_key=%s user_id=%s", course_key, user_id or "")
-    items = list_comments(get_supabase_client(), course_key=course_key, user_id=user_id)
+    items = list_comments(
+        get_supabase_client(),
+        course_key=course_key,
+        user_id=user_id,
+        admin_user_id=settings.admin_user_id,
+    )
     logger.info("comments.list response count=%s", len(items))
     return AppCommentsResponse(items=items)
 

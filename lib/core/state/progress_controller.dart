@@ -86,5 +86,19 @@ class ProgressController extends Notifier<ProgressState> {
       },
     );
   }
+
+  void mergeCompletedFromServer(Map<String, Set<String>> completedByCourseId) {
+    if (completedByCourseId.isEmpty) return;
+    final next = {...state.byCourseId};
+    for (final entry in completedByCourseId.entries) {
+      final current = _ensure(entry.key);
+      final merged = {...current.completedLessonIds, ...entry.value};
+      next[entry.key] = current.copyWith(
+        completedLessonIds: merged,
+        enrolled: true,
+      );
+    }
+    state = state.copyWith(byCourseId: next);
+  }
 }
 

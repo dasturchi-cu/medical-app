@@ -23,11 +23,13 @@ class VideoPlayerBox extends StatefulWidget {
     super.key,
     required this.url,
     required this.height,
+    this.initialWatchedSec = 0,
     this.onWatchProgress,
   });
 
   final String url;
   final double height;
+  final int initialWatchedSec;
   final void Function(int watchedSec, bool completed)? onWatchProgress;
 
   @override
@@ -43,6 +45,7 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
   double _volume = 1.0;
   int _lastReportedSec = 0;
   bool _completedReported = false;
+  int? _pendingInitialSeekSec;
 
   bool get _isYoutube => _youtubeId != null && _ytController != null;
 
@@ -51,6 +54,9 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
   @override
   void initState() {
     super.initState();
+    _pendingInitialSeekSec = widget.initialWatchedSec > 0
+        ? widget.initialWatchedSec
+        : null;
     _youtubeId = _extractYouTubeId(widget.url);
 
     if (_youtubeId != null) {
@@ -73,9 +79,32 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
     _controller = VideoPlayerController.networkUrl(Uri.parse(widget.url))
       ..initialize().then((_) async {
         await _controller?.setVolume(_volume);
+        final c = _controller;
+        final seekSec = _pendingInitialSeekSec;
+        if (c != null && seekSec != null && c.value.duration.inSeconds > 0) {
+          final maxSeek = (c.value.duration.inSeconds - 1).clamp(0, 1 << 30);
+          final safeSeek = seekSec.clamp(0, maxSeek).toInt();
+          if (safeSeek > 0) {
+            await c.seekTo(Duration(seconds: safeSeek));
+            _lastReportedSec = safeSeek;
+          }
+          _pendingInitialSeekSec = null;
+        }
         if (mounted) setState(() {});
       })
       ..addListener(_handleVideoProgress);
+  }
+
+  @override
+  void didUpdateWidget(covariant VideoPlayerBox oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.url != widget.url) {
+      _pendingInitialSeekSec = widget.initialWatchedSec > 0
+          ? widget.initialWatchedSec
+          : null;
+      _lastReportedSec = 0;
+      _completedReported = false;
+    }
   }
 
   // ── dispose ─────────────────────────────────
@@ -115,6 +144,16 @@ class _VideoPlayerBoxState extends State<VideoPlayerBox> {
     if (c == null) return;
     final watchedSec = c.value.position.inSeconds;
     final durationSec = c.metadata.duration.inSeconds;
+    final seekSec = _pendingInitialSeekSec;
+    if (seekSec != null && durationSec > 0 && watchedSec < seekSec) {
+      final safeSeek = seekSec.clamp(0, durationSec - 1).toInt();
+      if (safeSeek > 0) {
+        c.seekTo(Duration(seconds: safeSeek));
+        _lastReportedSec = safeSeek;
+      }
+      _pendingInitialSeekSec = null;
+      return;
+    }
     final completed = _isVideoCompleted(watchedSec, durationSec);
     _emitProgress(watchedSec, completed);
   }

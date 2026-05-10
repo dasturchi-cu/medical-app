@@ -7,6 +7,7 @@ from typing import Any
 from supabase import Client
 
 from ..schemas.courses import CourseCreate, CourseItem, CourseUpdate
+from .ranking import sync_user_rank_from_video_progress
 
 logger = logging.getLogger(__name__)
 
@@ -237,4 +238,106 @@ def track_course_view(
         next_completed,
         views,
     )
+    sync_user_rank_from_video_progress(client, user_id=user_id)
     return views
+
+
+def list_user_video_progress(
+    client: Client,
+    *,
+    user_id: str,
+    course_id: str | None = None,
+    lesson_id: str | None = None,
+) -> list[dict[str, Any]]:
+    query = client.table("video_progress").select("lesson_id,watched_sec,completed").eq("user_id", user_id)
+    if lesson_id:
+        query = query.eq("lesson_id", lesson_id)
+    rows = query.execute().data or []
+    if not rows:
+        return []
+    lesson_ids = [str(row.get("lesson_id") or "") for row in rows if row.get("lesson_id")]
+    if not lesson_ids:
+        return []
+    lesson_query = client.table("lessons").select("id,course_id").in_("id", lesson_ids)
+    if course_id:
+        lesson_query = lesson_query.eq("course_id", course_id)
+    lesson_rows = lesson_query.execute().data or []
+    course_by_lesson = {
+        str(row.get("id") or ""): str(row.get("course_id") or "")
+        for row in lesson_rows
+        if row.get("id") and row.get("course_id")
+    }
+    items: list[dict[str, Any]] = []
+    for row in rows:
+        lid = str(row.get("lesson_id") or "")
+        cid = course_by_lesson.get(lid)
+        if not cid:
+            continue
+        items.append(
+            {
+                "course_id": cid,
+                "lesson_id": lid,
+                "watched_sec": int(row.get("watched_sec") or 0),
+                "completed": bool(row.get("completed")),
+            }
+        )
+    return items
+
+
+def list_section_progress(
+    client: Client,
+    *,
+    course_id: str,
+    user_id: str,
+) -> list[dict[str, Any]]:
+    sections = (
+        client.table("course_sections")
+        .select("id")
+        .eq("course_id", course_id)
+        .order("order_no", desc=False)
+        .execute()
+    ).data or []
+    section_ids = [str(row.get("id") or "") for row in sections if row.get("id")]
+    if not section_ids:
+        return []
+    lesson_rows = (
+        client.table("lessons")
+        .select("id,section_id")
+        .eq("course_id", course_id)
+        .in_("section_id", section_ids)
+        .execute()
+    ).data or []
+    lessons_by_section: dict[str, list[str]] = {}
+    for row in lesson_rows:
+        sid = str(row.get("section_id") or "")
+        lid = str(row.get("id") or "")
+        if not sid or not lid:
+            continue
+        lessons_by_section.setdefault(sid, []).append(lid)
+    completed_lesson_ids = {
+        str(row.get("lesson_id") or "")
+        for row in (
+            client.table("video_progress")
+            .select("lesson_id")
+            .eq("user_id", user_id)
+            .eq("completed", True)
+            .execute()
+        ).data
+        or []
+        if row.get("lesson_id")
+    }
+    items: list[dict[str, Any]] = []
+    for sid in section_ids:
+        lesson_ids = lessons_by_section.get(sid, [])
+        total = len(lesson_ids)
+        completed = len([lesson_id for lesson_id in lesson_ids if lesson_id in completed_lesson_ids])
+        percent = round((completed / total) * 100, 2) if total > 0 else 0.0
+        items.append(
+            {
+                "section_id": sid,
+                "total_lessons": total,
+                "completed_lessons": completed,
+                "progress_percent": percent,
+            }
+        )
+    return items

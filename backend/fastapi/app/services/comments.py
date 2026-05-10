@@ -8,7 +8,7 @@ from supabase import Client
 from ..schemas.comments import AppCommentItem, AddCommentRequest
 
 
-def _to_item(row: dict[str, Any], *, liked_by_me: bool) -> AppCommentItem:
+def _to_item(row: dict[str, Any], *, liked_by_me: bool, liked_by_admin: bool = False) -> AppCommentItem:
     created_at = row.get("created_at")
     if isinstance(created_at, str):
         created = datetime.fromisoformat(created_at.replace("Z", "+00:00"))
@@ -26,11 +26,18 @@ def _to_item(row: dict[str, Any], *, liked_by_me: bool) -> AppCommentItem:
         replies_count=int(row.get("replies_count") or 0),
         likes_count=int(row.get("likes_count") or 0),
         liked_by_me=liked_by_me,
+        liked_by_admin=liked_by_admin,
         created_at=created,
     )
 
 
-def list_comments(client: Client, *, course_key: str, user_id: str | None = None) -> list[AppCommentItem]:
+def list_comments(
+    client: Client,
+    *,
+    course_key: str,
+    user_id: str | None = None,
+    admin_user_id: str | None = None,
+) -> list[AppCommentItem]:
     rows = (
         client.table("app_comments")
         .select("*")
@@ -54,7 +61,26 @@ def list_comments(client: Client, *, course_key: str, user_id: str | None = None
         ).data or []
         liked_ids = {str(row.get("comment_id")) for row in likes}
 
-    return [_to_item(row, liked_by_me=str(row.get("id")) in liked_ids) for row in rows]
+    admin_liked_ids: set[str] = set()
+    admin_uid = (admin_user_id or "").strip()
+    if admin_uid:
+        admin_likes = (
+            client.table("app_comment_likes")
+            .select("comment_id")
+            .eq("user_id", admin_uid)
+            .in_("comment_id", [row["id"] for row in rows if row.get("id")])
+            .execute()
+        ).data or []
+        admin_liked_ids = {str(row.get("comment_id")) for row in admin_likes}
+
+    return [
+        _to_item(
+            row,
+            liked_by_me=str(row.get("id")) in liked_ids,
+            liked_by_admin=str(row.get("id")) in admin_liked_ids,
+        )
+        for row in rows
+    ]
 
 
 def add_comment(client: Client, payload: AddCommentRequest) -> AppCommentItem:
@@ -101,7 +127,7 @@ def add_comment(client: Client, payload: AddCommentRequest) -> AppCommentItem:
             or 0
         )
         client.table("app_comments").update({"replies_count": replies_count}).eq("id", parent_id).execute()
-    return _to_item(row, liked_by_me=False)
+    return _to_item(row, liked_by_me=False, liked_by_admin=False)
 
 
 def toggle_like(client: Client, *, comment_id: str, user_id: str) -> AppCommentItem:
@@ -137,4 +163,4 @@ def toggle_like(client: Client, *, comment_id: str, user_id: str) -> AppCommentI
     )
     updated = client.table("app_comments").update({"likes_count": likes_count}).eq("id", comment_id).execute()
     updated_row = (updated.data or [row])[0]
-    return _to_item(updated_row, liked_by_me=liked)
+    return _to_item(updated_row, liked_by_me=liked, liked_by_admin=False)

@@ -3,7 +3,7 @@ Supabase va loyiha ulanishi — qisqa yo‘riqnoma (O‘zbek)
 1) Supabase loyihangizda migratsiyalar
    - Dashboard → SQL Editor
    - Fayllarni TARTIB bilan ishga tushiring: medical_app/supabase/migrations/
-     001_initial.sql, 002_..., ... 014_user_devices_fcm.sql
+     001_initial.sql, 002_..., ... 015_user_ranks_backfill_from_video.sql
    - Har birini alohida “Run” qiling (yoki birlashtirib, lekin tartib buzilmasin).
 
    Alternativa: kompyuteringizda Supabase CLI o‘rnatsangiz:

@@ -76,3 +76,27 @@ class CourseCatalogOpenRequest(BaseModel):
 class CourseCatalogOpenResponse(BaseModel):
     course_id: str
     views: int
+
+
+class CourseVideoProgressItem(BaseModel):
+    course_id: str
+    lesson_id: str
+    watched_sec: int = 0
+    completed: bool = False
+
+
+class CourseVideoProgressResponse(BaseModel):
+    items: list[CourseVideoProgressItem]
+
+
+class SectionProgressItem(BaseModel):
+    section_id: str
+    total_lessons: int = 0
+    completed_lessons: int = 0
+    progress_percent: float = 0
+
+
+class SectionProgressResponse(BaseModel):
+    course_id: str
+    user_id: str
+    items: list[SectionProgressItem]

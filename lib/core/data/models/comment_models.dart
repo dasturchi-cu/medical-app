@@ -9,6 +9,7 @@ class AppCommentItem {
     required this.repliesCount,
     required this.likesCount,
     required this.likedByMe,
+    required this.likedByAdmin,
     required this.createdAt,
   });
 
@@ -21,6 +22,7 @@ class AppCommentItem {
   final int repliesCount;
   final int likesCount;
   final bool likedByMe;
+  final bool likedByAdmin;
   final DateTime createdAt;
 
   factory AppCommentItem.fromJson(Map<String, dynamic> json) {
@@ -35,6 +37,7 @@ class AppCommentItem {
       repliesCount: int.tryParse((json['replies_count'] ?? '0').toString()) ?? 0,
       likesCount: int.tryParse((json['likes_count'] ?? '0').toString()) ?? 0,
       likedByMe: json['liked_by_me'] == true,
+      likedByAdmin: json['liked_by_admin'] == true,
       createdAt: DateTime.tryParse(rawCreated)?.toLocal() ?? DateTime.now(),
     );
   }

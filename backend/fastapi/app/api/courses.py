@@ -7,6 +7,8 @@ from ..db import get_supabase_client
 from ..schemas.courses import (
     CourseCatalogOpenRequest,
     CourseCatalogOpenResponse,
+    SectionProgressResponse,
+    CourseVideoProgressResponse,
     CourseCreate,
     CourseItem,
     CourseListResponse,
@@ -24,6 +26,8 @@ from ..services.courses import (
     get_course_rating_summary,
     list_courses,
     record_catalog_view,
+    list_section_progress,
+    list_user_video_progress,
     track_course_view,
     update_course,
     upsert_course_rating,
@@ -148,3 +152,28 @@ def post_course_catalog_open(course_id: str, payload: CourseCatalogOpenRequest):
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(error)) from error
     logger.info("courses.catalog_open response course_id=%s views=%s", course_id, views)
     return CourseCatalogOpenResponse(course_id=course_id, views=views)
+
+
+@router.get("/progress", response_model=CourseVideoProgressResponse)
+def get_user_video_progress(
+    user_id: str = Query(min_length=1),
+    course_id: str | None = Query(default=None),
+    lesson_id: str | None = Query(default=None),
+):
+    items = list_user_video_progress(
+        get_supabase_client(),
+        user_id=user_id,
+        course_id=course_id,
+        lesson_id=lesson_id,
+    )
+    return CourseVideoProgressResponse(items=items)
+
+
+@router.get("/{course_id}/sections/progress", response_model=SectionProgressResponse)
+def get_section_progress(course_id: str, user_id: str = Query(min_length=1)):
+    items = list_section_progress(
+        get_supabase_client(),
+        course_id=course_id,
+        user_id=user_id,
+    )
+    return SectionProgressResponse(course_id=course_id, user_id=user_id, items=items)
