@@ -184,15 +184,24 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       final items = body['items'];
       if (items is! List) return;
       final completedByCourse = <String, Set<String>>{};
+      final watchedByCourse = <String, Set<String>>{};
       for (final raw in items) {
         if (raw is! Map<String, dynamic>) continue;
-        final completed = raw['completed'] == true;
-        if (!completed) continue;
         final courseId = (raw['course_id'] ?? '').toString();
         final lessonId = (raw['lesson_id'] ?? '').toString();
         if (courseId.isEmpty || lessonId.isEmpty) continue;
-        completedByCourse.putIfAbsent(courseId, () => <String>{}).add(lessonId);
+        final watchedSec = int.tryParse((raw['watched_sec'] ?? '0').toString()) ?? 0;
+        if (watchedSec > 0) {
+          watchedByCourse.putIfAbsent(courseId, () => <String>{}).add(lessonId);
+        }
+        final completed = raw['completed'] == true;
+        if (completed) {
+          completedByCourse.putIfAbsent(courseId, () => <String>{}).add(lessonId);
+        }
       }
+      ref
+          .read(progressControllerProvider.notifier)
+          .mergeWatchedFromServer(watchedByCourse);
       ref
           .read(progressControllerProvider.notifier)
           .mergeCompletedFromServer(completedByCourse);
@@ -650,10 +659,10 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                 final cardStats = cardStatsAsync.valueOrNull;
                 final p = progress.byCourseId[c.id];
                 final totalLessons = repo.getFlattenLessons(c.id).length;
-                final completed = p?.completedLessonIds.length ?? 0;
+                final watched = p?.watchedLessonIds.length ?? 0;
                 final progressValue = totalLessons == 0
                     ? 0.0
-                    : (completed / totalLessons).toDouble().clamp(0.0, 1.0);
+                    : (watched / totalLessons).toDouble().clamp(0.0, 1.0);
 
                 final buttonText = (p?.enrolled ?? false) || progressValue > 0
                     ? 'Davom et'

@@ -10,7 +10,7 @@ import { AppTable } from "@/components/table";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
-import { blockUser, fetchUsers, removeUser, type AdminUserItem, unblockUser, updateUser } from "@/lib/api/users";
+import { fetchUsers, removeUser, type AdminUserItem, updateUser } from "@/lib/api/users";
 import { notifyError, notifySuccess } from "@/lib/notify";
 import { getSupabaseBrowserClient } from "@/lib/supabase/client";
 import { useStatusModal } from "@/lib/use-status-modal";
@@ -97,49 +97,6 @@ export default function UsersPage() {
             >
               Tahrirlash
             </Button>
-            {user.is_blocked ? (
-              <Button
-                variant="outline"
-                className="h-8 rounded-lg border-slate-200 px-3 text-xs"
-                onClick={async () => {
-                  try {
-                    await runStatus({
-                      loadingMessage: "Foydalanuvchi blokdan chiqarilmoqda...",
-                      successMessage: "Foydalanuvchi muvaffaqiyatli blokdan chiqarildi",
-                      errorMessage: "Unblockda xatolik.",
-                      action: async () => unblockUser(user.id),
-                    });
-                    setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, is_blocked: false } : u)));
-                    notifySuccess("Foydalanuvchi blokdan chiqarildi.");
-                  } catch (error) {
-                    notifyError(error instanceof Error ? error.message : "Unblockda xatolik.");
-                  }
-                }}
-              >
-                Blokdan chiqarish
-              </Button>
-            ) : (
-              <Button
-                variant="destructive"
-                className="h-8 rounded-lg px-3 text-xs"
-                onClick={async () => {
-                  try {
-                    await runStatus({
-                      loadingMessage: "Foydalanuvchi bloklanmoqda...",
-                      successMessage: "Foydalanuvchi muvaffaqiyatli bloklandi",
-                      errorMessage: "Bloklashda xatolik.",
-                      action: async () => blockUser(user.id),
-                    });
-                    setUsers((prev) => prev.map((u) => (u.id === user.id ? { ...u, is_blocked: true } : u)));
-                    notifySuccess("Foydalanuvchi bloklandi.");
-                  } catch (error) {
-                    notifyError(error instanceof Error ? error.message : "Bloklashda xatolik.");
-                  }
-                }}
-              >
-                Bloklash
-              </Button>
-            )}
             <Button variant="destructive" className="h-8 rounded-lg px-3 text-xs" onClick={() => setDeleteUserId(user.id)}>
               O&apos;chirish
             </Button>

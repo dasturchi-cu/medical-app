@@ -4,24 +4,28 @@ class CourseProgress {
   final String courseId;
   final String? lastLessonId;
   final Set<String> completedLessonIds;
+  final Set<String> watchedLessonIds;
   final bool enrolled;
 
   const CourseProgress({
     required this.courseId,
     required this.lastLessonId,
     required this.completedLessonIds,
+    required this.watchedLessonIds,
     required this.enrolled,
   });
 
   CourseProgress copyWith({
     String? lastLessonId,
     Set<String>? completedLessonIds,
+    Set<String>? watchedLessonIds,
     bool? enrolled,
   }) {
     return CourseProgress(
       courseId: courseId,
       lastLessonId: lastLessonId ?? this.lastLessonId,
       completedLessonIds: completedLessonIds ?? this.completedLessonIds,
+      watchedLessonIds: watchedLessonIds ?? this.watchedLessonIds,
       enrolled: enrolled ?? this.enrolled,
     );
   }
@@ -52,6 +56,7 @@ class ProgressController extends Notifier<ProgressState> {
           courseId: courseId,
           lastLessonId: null,
           completedLessonIds: <String>{},
+          watchedLessonIds: <String>{},
           enrolled: false,
         );
   }
@@ -68,10 +73,15 @@ class ProgressController extends Notifier<ProgressState> {
 
   void openedLesson({required String courseId, required String lessonId}) {
     final current = _ensure(courseId);
+    final watched = {...current.watchedLessonIds, lessonId};
     state = state.copyWith(
       byCourseId: {
         ...state.byCourseId,
-        courseId: current.copyWith(lastLessonId: lessonId, enrolled: true),
+        courseId: current.copyWith(
+          lastLessonId: lessonId,
+          watchedLessonIds: watched,
+          enrolled: true,
+        ),
       },
     );
   }
@@ -79,10 +89,15 @@ class ProgressController extends Notifier<ProgressState> {
   void completeLesson({required String courseId, required String lessonId}) {
     final current = _ensure(courseId);
     final nextSet = {...current.completedLessonIds, lessonId};
+    final watched = {...current.watchedLessonIds, lessonId};
     state = state.copyWith(
       byCourseId: {
         ...state.byCourseId,
-        courseId: current.copyWith(completedLessonIds: nextSet, enrolled: true),
+        courseId: current.copyWith(
+          completedLessonIds: nextSet,
+          watchedLessonIds: watched,
+          enrolled: true,
+        ),
       },
     );
   }
@@ -93,8 +108,24 @@ class ProgressController extends Notifier<ProgressState> {
     for (final entry in completedByCourseId.entries) {
       final current = _ensure(entry.key);
       final merged = {...current.completedLessonIds, ...entry.value};
+      final watched = {...current.watchedLessonIds, ...entry.value};
       next[entry.key] = current.copyWith(
         completedLessonIds: merged,
+        watchedLessonIds: watched,
+        enrolled: true,
+      );
+    }
+    state = state.copyWith(byCourseId: next);
+  }
+
+  void mergeWatchedFromServer(Map<String, Set<String>> watchedByCourseId) {
+    if (watchedByCourseId.isEmpty) return;
+    final next = {...state.byCourseId};
+    for (final entry in watchedByCourseId.entries) {
+      final current = _ensure(entry.key);
+      final merged = {...current.watchedLessonIds, ...entry.value};
+      next[entry.key] = current.copyWith(
+        watchedLessonIds: merged,
         enrolled: true,
       );
     }

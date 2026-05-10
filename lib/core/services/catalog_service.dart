@@ -32,8 +32,11 @@ class CatalogService {
     for (var i = 0; i < attempts; i++) {
       try {
         debugPrint('[API][mobile.courses][request] attempt=${i + 1} baseUrl=$baseUrl');
+        final uri = Uri.parse('$baseUrl/api/v1/mobile/courses').replace(
+          queryParameters: {'t': DateTime.now().millisecondsSinceEpoch.toString()},
+        );
         final response = await http
-            .get(Uri.parse('$baseUrl/api/v1/mobile/courses'))
+            .get(uri, headers: const {'Cache-Control': 'no-cache'})
             .timeout(_bootstrapRequestTimeout);
         debugPrint('[API][mobile.courses][response] status=${response.statusCode}');
         if (response.statusCode < 200 || response.statusCode >= 300) {

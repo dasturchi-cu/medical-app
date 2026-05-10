@@ -61,10 +61,10 @@ class MyCoursesPage extends ConsumerWidget {
                 final cardStats = cardStatsAsync.valueOrNull;
                 final p = progress.byCourseId[c.id];
                 final totalLessons = repo.getFlattenLessons(c.id).length;
-                final completed = p?.completedLessonIds.length ?? 0;
+                final watched = p?.watchedLessonIds.length ?? 0;
                 final progressValue = totalLessons == 0
                     ? 0.0
-                    : (completed / totalLessons).toDouble().clamp(0.0, 1.0);
+                    : (watched / totalLessons).toDouble().clamp(0.0, 1.0);
                 final buttonText = 'Davom et';
 
                 return CourseCard(

@@ -71,6 +71,14 @@ def list_admin_users(client: Client) -> list[AdminUserItem]:
 
 def set_user_blocked(client: Client, *, user_id: str, blocked: bool) -> None:
     client.table("users").update({"is_blocked": blocked, "updated_at": datetime.utcnow().isoformat()}).eq("id", user_id).execute()
+    if blocked:
+        client.table("auth_sessions").update(
+            {
+                "is_active": False,
+                "invalidated_at": datetime.utcnow().isoformat(),
+                "invalidated_reason": "blocked_by_admin",
+            }
+        ).eq("user_id", user_id).eq("is_active", True).execute()
 
 
 def update_admin_user(client: Client, *, user_id: str, payload: AdminUserUpdateRequest) -> AdminUserItem:
@@ -201,9 +209,29 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         .limit(40)
         .execute()
     ).data or []
-    comments_total = client.table("app_comments").select("id", count="exact").eq("user_id", user_id).execute()
+    comments_total = (
+        client.table("app_comments")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .is_("parent_id", None)
+        .execute()
+    )
+    legacy_comments_total = (
+        client.table("comments")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .is_("parent_id", None)
+        .execute()
+    )
     replies_total = (
         client.table("app_comments")
+        .select("id", count="exact")
+        .eq("user_id", user_id)
+        .not_.is_("parent_id", None)
+        .execute()
+    )
+    legacy_replies_total = (
+        client.table("comments")
         .select("id", count="exact")
         .eq("user_id", user_id)
         .not_.is_("parent_id", None)
@@ -218,16 +246,17 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         .execute()
     ).data or []
     likes = client.table("app_comment_likes").select("id", count="exact").eq("user_id", user_id).execute()
+    legacy_likes = client.table("comment_reactions").select("id", count="exact").eq("user_id", user_id).execute()
 
     progress_rows = (
         client.table("video_progress")
         .select("lesson_id,watched_sec,completed,updated_at,lessons!inner(course_id)")
         .eq("user_id", user_id)
         .order("updated_at", desc=True)
-        .limit(50)
+        .limit(5000)
         .execute()
     ).data or []
-    watched_lessons_count = len(progress_rows)
+    watched_lessons_count = len({str(row.get("lesson_id") or "") for row in progress_rows if row.get("lesson_id")})
     completed_lessons_count = len([row for row in progress_rows if row.get("completed")])
     watched_seconds_total = sum(int(row.get("watched_sec") or 0) for row in progress_rows)
 
@@ -242,15 +271,12 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
     paid_payments = [row for row in payments if str(row.get("status") or "").lower() in {"paid", "success"}]
     purchases_count = len(paid_payments)
     paid_total_uzs = float(sum(float(row.get("amount_uzs") or 0) for row in paid_payments))
-    if purchases_count == 0:
-        pay_ent = (
-            client.table("user_entitlements")
-            .select("id", count="exact")
-            .eq("user_id", user_id)
-            .in_("source", ["payment", "payment_flow"])
-            .execute()
-        )
-        purchases_count = int(pay_ent.count or 0)
+    active_entitlement_course_ids = {
+        str(row.get("course_id") or "")
+        for row in entitlements
+        if row.get("is_active") and row.get("course_id")
+    }
+    purchases_count = max(purchases_count, len(active_entitlement_course_ids))
 
     course_ids_from_ratings = [str(row.get("course_id")) for row in ratings if row.get("course_id")]
     course_ids_from_app_ratings = [
@@ -263,12 +289,18 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
             *course_ids_from_app_ratings,
             *course_ids_from_progress,
             *list(active_courses),
+            *list(active_entitlement_course_ids),
         }
     )
     courses_map: dict[str, str] = {}
+    course_price_map: dict[str, float] = {}
     if course_ids:
-        courses_rows = client.table("courses").select("id,title_uz").in_("id", course_ids).execute().data or []
+        courses_rows = client.table("courses").select("id,title_uz,price_uzs").in_("id", course_ids).execute().data or []
         courses_map = {str(row.get("id")): str(row.get("title_uz") or row.get("id") or "") for row in courses_rows}
+        course_price_map = {str(row.get("id")): float(row.get("price_uzs") or 0) for row in courses_rows}
+
+    if paid_total_uzs <= 0 and active_entitlement_course_ids:
+        paid_total_uzs = float(sum(course_price_map.get(course_id, 0.0) for course_id in active_entitlement_course_ids))
 
     merged_rating_rows: list[tuple[str, str, int, str]] = []
     for row in ratings:
@@ -308,7 +340,29 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
             created_at=str(row.get("created_at") or ""),
         )
         for row in comments
+    ] + [
+        UserRecentCommentItem(
+            id=str(row.get("id") or ""),
+            course_key=str(row.get("course_id") or ""),
+            course_title=courses_map.get(str(row.get("course_id") or ""), str(row.get("course_id") or "")),
+            lesson_title="",
+            text=str(row.get("text") or ""),
+            likes_count=int(row.get("hearts_count") or 0),
+            replies_count=0,
+            created_at=str(row.get("created_at") or ""),
+        )
+        for row in (
+            client.table("comments")
+            .select("id,course_id,text,hearts_count,created_at")
+            .eq("user_id", user_id)
+            .order("created_at", desc=True)
+            .limit(20)
+            .execute()
+        ).data
+        or []
     ]
+    recent_comments.sort(key=lambda row: row.created_at, reverse=True)
+    recent_comments = recent_comments[:20]
     progress_items = [
         UserProgressItem(
             lesson_id=str(row.get("lesson_id") or ""),
@@ -328,9 +382,9 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
             active_courses=len(active_courses),
             total_entitlements=total_entitlements,
             ratings_count=int(ratings_total.count or 0) + int(app_ratings_total.count or 0),
-            comments_count=int(comments_total.count or 0),
-            likes_given_count=int(likes.count or 0),
-            replies_count=int(replies_total.count or 0),
+            comments_count=int(comments_total.count or 0) + int(legacy_comments_total.count or 0),
+            likes_given_count=int(likes.count or 0) + int(legacy_likes.count or 0),
+            replies_count=int(replies_total.count or 0) + int(legacy_replies_total.count or 0),
             watched_lessons_count=watched_lessons_count,
             completed_lessons_count=completed_lessons_count,
             watched_seconds_total=watched_seconds_total,
