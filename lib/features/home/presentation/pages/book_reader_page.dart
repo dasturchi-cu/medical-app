@@ -7,6 +7,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_windowmanager/flutter_windowmanager.dart';
 import 'package:http/http.dart' as http;
+import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
 import '../../../../core/di/providers.dart';
@@ -33,7 +34,9 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
   int _totalPages = 0;
   Timer? _debounce;
   Future<Uint8List>? _pdfBytesFuture;
+  Future<File?>? _cachedPdfFuture;
   String? _loadedUrl;
+  bool _isDataPdf = false;
   String _userId = '';
   bool _restoringProgress = true;
   bool _progressRequestStarted = false;
@@ -82,6 +85,40 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
   }
 
   Widget _buildPdfViewer() {
+    if (!_isDataPdf && (_loadedUrl ?? '').isNotEmpty) {
+      return FutureBuilder<File?>(
+        future: _cachedPdfFuture,
+        builder: (context, snapshot) {
+          final file = snapshot.data;
+          final viewer = file != null
+              ? SfPdfViewer.file(
+                  file,
+                  controller: _pdfController,
+                  canShowScrollHead: false,
+                  canShowScrollStatus: false,
+                  enableTextSelection: false,
+                  canShowPaginationDialog: false,
+                  onDocumentLoaded: (details) {
+                    _onDocumentLoaded(details.document.pages.count);
+                  },
+                  onPageChanged: _onPageChanged,
+                )
+              : SfPdfViewer.network(
+                  _loadedUrl!,
+                  controller: _pdfController,
+                  canShowScrollHead: false,
+                  canShowScrollStatus: false,
+                  enableTextSelection: false,
+                  canShowPaginationDialog: false,
+                  onDocumentLoaded: (details) {
+                    _onDocumentLoaded(details.document.pages.count);
+                  },
+                  onPageChanged: _onPageChanged,
+                );
+          return _buildPdfWidget(viewer);
+        },
+      );
+    }
     return FutureBuilder<Uint8List>(
       future: _pdfBytesFuture,
       builder: (context, snapshot) {
@@ -95,39 +132,94 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
             ),
           );
         }
-        return SfPdfViewer.memory(
-          snapshot.data!,
-          controller: _pdfController,
-          canShowScrollHead: false,
-          canShowScrollStatus: false,
-          enableTextSelection: false,
-          canShowPaginationDialog: false,
-          onDocumentLoaded: (details) {
-            _totalPages = details.document.pages.count;
-            final safePage = _initialPage.clamp(1, _totalPages);
-            if (safePage > 1) {
-              WidgetsBinding.instance.addPostFrameCallback((_) {
-                if (!mounted) return;
-                _pdfController.jumpToPage(safePage);
-              });
-            }
-            _lastPage = safePage;
-            _lastSavedPage = safePage;
-            _maxReachedPage = safePage;
-            _restoringProgress = false;
-          },
-          onPageChanged: _onPageChanged,
+        return _buildPdfWidget(
+          SfPdfViewer.memory(
+            snapshot.data!,
+            controller: _pdfController,
+            canShowScrollHead: false,
+            canShowScrollStatus: false,
+            enableTextSelection: false,
+            canShowPaginationDialog: false,
+            onDocumentLoaded: (details) {
+              _onDocumentLoaded(details.document.pages.count);
+            },
+            onPageChanged: _onPageChanged,
+          ),
         );
       },
     );
   }
 
+  Widget _buildPdfWidget(Widget viewer) {
+    return Stack(
+      children: [
+        Positioned.fill(child: viewer),
+        if (_restoringProgress)
+          const Positioned(
+            right: 12,
+            top: 12,
+            child: SizedBox(
+              width: 20,
+              height: 20,
+              child: CircularProgressIndicator(strokeWidth: 2),
+            ),
+          ),
+      ],
+    );
+  }
+
+  void _onDocumentLoaded(int totalPages) {
+    _totalPages = totalPages;
+    final safePage = _initialPage.clamp(1, _totalPages);
+    if (safePage > 1) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        _pdfController.jumpToPage(safePage);
+      });
+    }
+    _lastPage = safePage;
+    _lastSavedPage = safePage;
+    _maxReachedPage = safePage;
+    _restoringProgress = false;
+  }
+
   void _ensurePdfFuture(String fileUrl) {
     final normalized = fileUrl.trim();
-    if (_loadedUrl == normalized && _pdfBytesFuture != null) return;
+    if (_loadedUrl == normalized && (_pdfBytesFuture != null || _cachedPdfFuture != null)) return;
     _loadedUrl = normalized;
-    final isPdfDataUrl = normalized.startsWith('data:application/pdf');
-    _pdfBytesFuture = _resolvePdfBytes(normalized, isPdfDataUrl);
+    _isDataPdf = normalized.startsWith('data:application/pdf');
+    if (_isDataPdf) {
+      _pdfBytesFuture = _resolvePdfBytes(normalized, true);
+      _cachedPdfFuture = null;
+      return;
+    }
+    _pdfBytesFuture = null;
+    _cachedPdfFuture = _resolveCachedPdfFile(normalized);
+  }
+
+  Future<File?> _resolveCachedPdfFile(String url) async {
+    try {
+      final dir = await getTemporaryDirectory();
+      final key = base64Url.encode(utf8.encode(url));
+      final cacheFile = File('${dir.path}${Platform.pathSeparator}book_pdf_$key.pdf');
+      if (await cacheFile.exists()) {
+        return cacheFile;
+      }
+      // Warm cache in background for faster re-open.
+      unawaited(_downloadPdfToFile(url, cacheFile));
+    } catch (_) {}
+    return null;
+  }
+
+  Future<void> _downloadPdfToFile(String url, File outFile) async {
+    try {
+      final uri = Uri.tryParse(url);
+      if (uri == null) return;
+      final response = await http.get(uri).timeout(const Duration(seconds: 30));
+      if (response.statusCode != 200 || response.bodyBytes.isEmpty) return;
+      await outFile.parent.create(recursive: true);
+      await outFile.writeAsBytes(response.bodyBytes, flush: true);
+    } catch (_) {}
   }
 
   Future<void> _ensureProgressLoaded() async {
@@ -160,7 +252,7 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
     }
     final uri = Uri.tryParse(value);
     if (uri == null) throw Exception("PDF URL noto'g'ri.");
-    final response = await http.get(uri);
+    final response = await http.get(uri).timeout(const Duration(seconds: 30));
     if (response.statusCode != 200) {
       final body = response.body.toLowerCase();
       if (body.contains('bucket not found')) {

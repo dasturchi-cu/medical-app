@@ -23,11 +23,23 @@ def get_feedback_stats(client: Client, *, content_key: str, user_id: str | None 
     rating_count = len(stars)
     rating_avg = round(sum(stars) / rating_count, 2) if rating_count > 0 else 0.0
     my_rating = None
-    if user_id:
-        for row in rows:
-            if str(row.get("user_id") or "") == user_id:
-                my_rating = int(row.get("stars") or 0)
-                break
+    uid = (user_id or "").strip()
+    if uid:
+        mine = (
+            client.table("app_ratings")
+            .select("stars")
+            .eq("content_key", content_key)
+            .eq("user_id", uid)
+            .limit(1)
+            .execute()
+        ).data or []
+        if mine:
+            my_rating = int(mine[0].get("stars") or 0)
+        else:
+            for row in rows:
+                if str(row.get("user_id") or "").strip() == uid:
+                    my_rating = int(row.get("stars") or 0)
+                    break
     return comments_count, rating_avg, rating_count, my_rating
 
 

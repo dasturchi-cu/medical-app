@@ -115,11 +115,23 @@ def get_course_rating_summary(client: Client, *, course_id: str, user_id: str | 
     rating_count = len(stars)
     avg = round(sum(stars) / rating_count, 2) if rating_count > 0 else 0.0
     my_rating = None
-    if user_id:
-        for row in rows:
-            if str(row.get("user_id") or "") == user_id:
-                my_rating = int(row.get("stars") or 0)
-                break
+    uid = (user_id or "").strip()
+    if uid:
+        mine = (
+            client.table("ratings")
+            .select("stars")
+            .eq("course_id", course_id)
+            .eq("user_id", uid)
+            .limit(1)
+            .execute()
+        ).data or []
+        if mine:
+            my_rating = int(mine[0].get("stars") or 0)
+        else:
+            for row in rows:
+                if str(row.get("user_id") or "").strip() == uid:
+                    my_rating = int(row.get("stars") or 0)
+                    break
     return avg, rating_count, my_rating
 
 

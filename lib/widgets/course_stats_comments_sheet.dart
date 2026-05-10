@@ -69,6 +69,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
 
   Future<void> _loadCourseStats() async {
     final baseUrl = getApiBaseUrl();
+    final userId = (ref.read(authControllerProvider).userId ?? '').trim();
     if (baseUrl.isEmpty || widget.courseId.trim().isEmpty) {
       if (mounted) setState(() => _statsLoading = false);
       return;
@@ -80,14 +81,16 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       });
     }
     try {
-      final auth = ref.read(authControllerProvider);
-      final userId = auth.userId ?? '';
-      final statsPath = widget.useFeedbackApi
-          ? '/api/v1/feedback/${widget.courseId}/stats?user_id=$userId'
-          : '/api/v1/courses/${widget.courseId}/stats?user_id=$userId';
-      debugPrint('[API][courses.stats][request] path=$statsPath');
+      final statsUri = widget.useFeedbackApi
+          ? Uri.parse('$baseUrl/api/v1/feedback/${widget.courseId}/stats').replace(
+              queryParameters: userId.isEmpty ? null : {'user_id': userId},
+            )
+          : Uri.parse('$baseUrl/api/v1/courses/${widget.courseId}/stats').replace(
+              queryParameters: userId.isEmpty ? null : {'user_id': userId},
+            );
+      debugPrint('[API][courses.stats][request] uri=$statsUri');
       final response = await http
-          .get(Uri.parse('$baseUrl$statsPath'))
+          .get(statsUri)
           .timeout(const Duration(seconds: 12));
       debugPrint('[API][courses.stats][response] status=${response.statusCode}');
       if (widget.useFeedbackApi && response.statusCode == 404) {
@@ -135,7 +138,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
 
   Future<void> _submitRating(int stars) async {
     final auth = ref.read(authControllerProvider);
-    final userId = auth.userId ?? '';
+    final userId = (auth.userId ?? '').trim();
     final baseUrl = getApiBaseUrl();
     if (userId.isEmpty || baseUrl.isEmpty || widget.courseId.trim().isEmpty) return;
     final prevMy = _myRating;
@@ -421,11 +424,18 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                                 courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
                                               );
                                             } catch (_) {
-                                              if (!mounted) return;
-                                              setState(() {
+                                              if (mounted) {
+                                                setState(() {
+                                                  _optimisticLikedByMe.remove(c.id);
+                                                  _optimisticLikesCount.remove(c.id);
+                                                });
+                                                ScaffoldMessenger.of(context).showSnackBar(
+                                                  const SnackBar(content: Text("Like saqlanmadi. Internetni tekshiring.")),
+                                                );
+                                              } else {
                                                 _optimisticLikedByMe.remove(c.id);
                                                 _optimisticLikesCount.remove(c.id);
-                                              });
+                                              }
                                             } finally {
                                               if (mounted) {
                                                 setState(() => _pendingLikeCommentIds.remove(c.id));
@@ -497,7 +507,9 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                           await ref.read(commentsRepositoryProvider).addReply(
                                                 commentId: c.id,
                                                 userId: userId,
-                                                authorName: auth.name,
+                                                authorName: auth.name.trim().isEmpty
+                                                    ? 'Foydalanuvchi'
+                                                    : auth.name.trim(),
                                                 text: text,
                                               );
                                           _replyController.clear();
@@ -506,7 +518,12 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                             courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
                                           );
                                           if (mounted) setState(() => _commentsCount += 1);
-                                        } catch (_) {}
+                                        } catch (e) {
+                                          if (!mounted) return;
+                                          ScaffoldMessenger.of(context).showSnackBar(
+                                            SnackBar(content: Text(e.toString())),
+                                          );
+                                        }
                                       },
                                       child: const Text('Javob'),
                                     ),
@@ -594,7 +611,9 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                         await ref.read(commentsRepositoryProvider).addComment(
                               courseKey: widget.courseId,
                               userId: userId,
-                              authorName: auth.name,
+                              authorName: auth.name.trim().isEmpty
+                                  ? 'Foydalanuvchi'
+                                  : auth.name.trim(),
                               text: text,
                             );
                         _controller.clear();
