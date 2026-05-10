@@ -33,13 +33,28 @@ def get_mobile_catalog(client: Client) -> MobileCatalogResponse:
             .execute()
         ).data or []
 
-        ratings_rows = client.table("ratings").select("course_id,stars").execute().data or []
-        ratings_map: dict[str, list[int]] = {}
+        ratings_rows = client.table("ratings").select("course_id,stars,user_id").execute().data or []
+        app_rating_rows = client.table("app_ratings").select("content_key,stars,user_id").execute().data or []
+        stars_by_course_user: dict[str, dict[str, int]] = {}
         for row in ratings_rows:
             course_id = str(row.get("course_id") or "")
-            if not course_id:
+            uid = str(row.get("user_id") or "").strip()
+            if not course_id or not uid:
                 continue
-            ratings_map.setdefault(course_id, []).append(int(row.get("stars") or 0))
+            s = int(row.get("stars") or 0)
+            inner = stars_by_course_user.setdefault(course_id, {})
+            inner[uid] = max(inner.get(uid, 0), s)
+        for row in app_rating_rows:
+            course_id = str(row.get("content_key") or "")
+            uid = str(row.get("user_id") or "").strip()
+            if not course_id or not uid:
+                continue
+            s = int(row.get("stars") or 0)
+            inner = stars_by_course_user.setdefault(course_id, {})
+            inner[uid] = max(inner.get(uid, 0), s)
+        ratings_map: dict[str, list[int]] = {
+            cid: list(users.values()) for cid, users in stars_by_course_user.items() if users
+        }
 
         lessons_by_section: dict[str, list[MobileLesson]] = {}
         root_lessons_by_course: dict[str, list[MobileLesson]] = {}

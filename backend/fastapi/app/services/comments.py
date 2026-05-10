@@ -49,9 +49,9 @@ def list_comments(
     if not rows:
         return []
 
+    comment_ids = [str(row.get("id") or "") for row in rows if row.get("id")]
     liked_ids: set[str] = set()
     if user_id:
-        comment_ids = [row["id"] for row in rows]
         likes = (
             client.table("app_comment_likes")
             .select("comment_id")
@@ -68,7 +68,7 @@ def list_comments(
             client.table("app_comment_likes")
             .select("comment_id")
             .eq("user_id", admin_uid)
-            .in_("comment_id", [row["id"] for row in rows if row.get("id")])
+            .in_("comment_id", comment_ids)
             .execute()
         ).data or []
         admin_liked_ids = {str(row.get("comment_id")) for row in admin_likes}
@@ -76,8 +76,8 @@ def list_comments(
     return [
         _to_item(
             row,
-            liked_by_me=str(row.get("id")) in liked_ids,
-            liked_by_admin=str(row.get("id")) in admin_liked_ids,
+            liked_by_me=str(row.get("id") or "") in liked_ids,
+            liked_by_admin=str(row.get("id") or "") in admin_liked_ids,
         )
         for row in rows
     ]

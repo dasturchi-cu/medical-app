@@ -1,4 +1,10 @@
+import logging
+
 from supabase import Client
+
+from .courses import _merged_rating_by_user
+
+logger = logging.getLogger(__name__)
 
 
 def get_feedback_stats(client: Client, *, content_key: str, user_id: str | None = None):
@@ -11,35 +17,30 @@ def get_feedback_stats(client: Client, *, content_key: str, user_id: str | None 
         ).count
         or 0
     )
-    rows = (
+    app_rows = (
         client.table("app_ratings")
         .select("stars,user_id")
         .eq("content_key", content_key)
         .execute()
     ).data or []
-    if not rows:
+    legacy_rows = (
+        client.table("ratings")
+        .select("stars,user_id")
+        .eq("course_id", content_key)
+        .execute()
+    ).data or []
+    by_user = _merged_rating_by_user(legacy_rows=legacy_rows, app_rows=app_rows)
+    if not by_user:
         return comments_count, 0.0, 0, None
-    stars = [int(row.get("stars") or 0) for row in rows]
-    rating_count = len(stars)
-    rating_avg = round(sum(stars) / rating_count, 2) if rating_count > 0 else 0.0
+    stars_list = list(by_user.values())
+    rating_count = len(stars_list)
+    rating_avg = round(sum(stars_list) / rating_count, 2) if rating_count > 0 else 0.0
     my_rating = None
     uid = (user_id or "").strip()
     if uid:
-        mine = (
-            client.table("app_ratings")
-            .select("stars")
-            .eq("content_key", content_key)
-            .eq("user_id", uid)
-            .limit(1)
-            .execute()
-        ).data or []
-        if mine:
-            my_rating = int(mine[0].get("stars") or 0)
-        else:
-            for row in rows:
-                if str(row.get("user_id") or "").strip() == uid:
-                    my_rating = int(row.get("stars") or 0)
-                    break
+        my_rating = by_user.get(uid)
+        if my_rating == 0:
+            my_rating = None
     return comments_count, rating_avg, rating_count, my_rating
 
 
@@ -48,3 +49,12 @@ def upsert_feedback_rating(client: Client, *, content_key: str, user_id: str, st
         {"content_key": content_key, "user_id": user_id, "stars": stars},
         on_conflict="content_key,user_id",
     ).execute()
+    try:
+        course_row = client.table("courses").select("id").eq("id", content_key).limit(1).execute().data or []
+        if course_row:
+            client.table("ratings").upsert(
+                {"course_id": content_key, "user_id": user_id, "stars": stars},
+                on_conflict="course_id,user_id",
+            ).execute()
+    except Exception as error:
+        logger.warning("ratings mirror upsert failed (feedback rating): %s", error)

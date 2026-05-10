@@ -107,31 +107,47 @@ def get_course_comments_count(client: Client, *, course_id: str) -> int:
     return int(legacy.count or 0) + int(app.count or 0)
 
 
+def _merged_rating_by_user(
+    *,
+    legacy_rows: list[dict[str, Any]],
+    app_rows: list[dict[str, Any]],
+    legacy_user_key: str = "user_id",
+    app_user_key: str = "user_id",
+) -> dict[str, int]:
+    """One stars value per user; higher wins if duplicates appear in legacy vs app tables."""
+    by_user: dict[str, int] = {}
+    for row in legacy_rows:
+        uid = str(row.get(legacy_user_key) or "").strip()
+        if not uid:
+            continue
+        s = int(row.get("stars") or 0)
+        by_user[uid] = max(by_user.get(uid, 0), s)
+    for row in app_rows:
+        uid = str(row.get(app_user_key) or "").strip()
+        if not uid:
+            continue
+        s = int(row.get("stars") or 0)
+        by_user[uid] = max(by_user.get(uid, 0), s)
+    return by_user
+
+
 def get_course_rating_summary(client: Client, *, course_id: str, user_id: str | None = None) -> tuple[float, int, int | None]:
-    rows = client.table("ratings").select("stars,user_id").eq("course_id", course_id).execute().data or []
-    if not rows:
+    legacy_rows = client.table("ratings").select("stars,user_id").eq("course_id", course_id).execute().data or []
+    app_rows = (
+        client.table("app_ratings").select("stars,user_id").eq("content_key", course_id).execute().data or []
+    )
+    by_user = _merged_rating_by_user(legacy_rows=legacy_rows, app_rows=app_rows)
+    if not by_user:
         return 0.0, 0, None
-    stars = [int(row.get("stars") or 0) for row in rows]
-    rating_count = len(stars)
-    avg = round(sum(stars) / rating_count, 2) if rating_count > 0 else 0.0
-    my_rating = None
+    stars_list = list(by_user.values())
+    rating_count = len(stars_list)
+    avg = round(sum(stars_list) / rating_count, 2) if rating_count > 0 else 0.0
+    my_rating: int | None = None
     uid = (user_id or "").strip()
     if uid:
-        mine = (
-            client.table("ratings")
-            .select("stars")
-            .eq("course_id", course_id)
-            .eq("user_id", uid)
-            .limit(1)
-            .execute()
-        ).data or []
-        if mine:
-            my_rating = int(mine[0].get("stars") or 0)
-        else:
-            for row in rows:
-                if str(row.get("user_id") or "").strip() == uid:
-                    my_rating = int(row.get("stars") or 0)
-                    break
+        my_rating = by_user.get(uid)
+        if my_rating == 0:
+            my_rating = None
     return avg, rating_count, my_rating
 
 
@@ -155,6 +171,13 @@ def upsert_course_rating(client: Client, *, course_id: str, user_id: str, stars:
             client.table("ratings").update({"stars": stars}).eq("course_id", course_id).eq("user_id", user_id).execute()
         else:
             client.table("ratings").insert({"course_id": course_id, "user_id": user_id, "stars": stars}).execute()
+    try:
+        client.table("app_ratings").upsert(
+            {"content_key": course_id, "user_id": user_id, "stars": stars},
+            on_conflict="content_key,user_id",
+        ).execute()
+    except Exception as error:
+        logger.warning("app_ratings mirror upsert failed (course rating): %s", error)
 
 
 def recompute_course_views(client: Client, *, course_id: str) -> int:
