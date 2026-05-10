@@ -3,7 +3,7 @@ import time
 
 from fastapi import FastAPI, Request
 from fastapi.middleware.cors import CORSMiddleware
-from fastapi.responses import JSONResponse
+from fastapi.responses import JSONResponse, Response
 
 from .api.auth import router as auth_router
 from .api.admin_ads import router as admin_ads_router
@@ -99,3 +99,14 @@ async def log_requests(request: Request, call_next):
 @app.get("/health")
 def healthcheck():
     return {"ok": True, "service": settings.app_name, "environment": settings.environment}
+
+
+@app.get("/")
+def root():
+    """Render va boshqa probe lar HEAD/GET / uchun 404 bermaslik."""
+    return {"ok": True, "service": settings.app_name, "health": "/health"}
+
+
+@app.head("/")
+def root_head():
+    return Response(status_code=200)

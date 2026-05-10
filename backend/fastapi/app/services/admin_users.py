@@ -177,7 +177,9 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         .execute()
     ).data or []
     active_courses = {str(row.get("course_id") or "") for row in entitlements if row.get("is_active") and row.get("course_id")}
-    total_entitlements = len([row for row in entitlements if row.get("course_id")])
+    total_entitlements = len(
+        [row for row in entitlements if row.get("course_id") and row.get("is_active")]
+    )
 
     ratings_total = client.table("ratings").select("id", count="exact").eq("user_id", user_id).execute()
     app_ratings_total = (
