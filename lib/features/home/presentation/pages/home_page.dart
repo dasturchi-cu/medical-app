@@ -10,6 +10,7 @@ import 'package:smooth_page_indicator/smooth_page_indicator.dart';
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/models/course_models.dart';
 import '../../../../core/services/catalog_service.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/banners_state.dart';
@@ -23,6 +24,88 @@ import '../../../../widgets/course_card.dart';
 import '../../../../widgets/course_stats_comments_sheet.dart';
 import '../../../course/presentation/widgets/purchase_modal.dart';
 import '../providers/home_providers.dart';
+
+/// Yuqori ko'k slayd uchun `home_slides.course_id`; bo'sh bo'lsa sarlavha bo'yicha bitta mos kurs qidiriladi.
+String? _resolveSlideCourseId(String title, String apiCourseId, List<Course> courses) {
+  final cid = apiCourseId.trim();
+  if (cid.isNotEmpty) return cid;
+  final needle = title.trim().toLowerCase();
+  if (needle.isEmpty) return null;
+  final hits = courses.where((c) => c.titleUz.trim().toLowerCase() == needle).toList();
+  if (hits.length == 1) return hits.single.id;
+  return null;
+}
+
+void _openSlideCourse(
+  BuildContext context,
+  WidgetRef ref, {
+  required String slideTitle,
+  required String slideCourseIdRaw,
+  required List<Course> courses,
+}) {
+  final resolved = _resolveSlideCourseId(slideTitle, slideCourseIdRaw, courses);
+  if (resolved == null || resolved.isEmpty) {
+    ScaffoldMessenger.of(context).showSnackBar(
+      const SnackBar(
+        content: Text(
+          'Bu slayd uchun kurs ulanmagan. Admin panel → «Bosh sahifa slaydi» bo\'limida «Boshlash» uchun kursni tanlang.',
+        ),
+      ),
+    );
+    return;
+  }
+  ref.read(selectedCourseIdProvider.notifier).state = resolved;
+  ref.read(progressControllerProvider.notifier).enroll(resolved);
+  context.push('${AppRoutes.courseDetail}?id=$resolved');
+}
+
+/// Yuqori slayd fon rasmi (URL yoki admin paneldagi `data:image` Base64).
+class _HomeSlideBackdrop extends StatelessWidget {
+  const _HomeSlideBackdrop({required this.imageUrl});
+
+  final String imageUrl;
+
+  @override
+  Widget build(BuildContext context) {
+    final u = imageUrl.trim();
+    if (u.isEmpty) {
+      return const ColoredBox(color: AppColors.primary);
+    }
+    if (u.startsWith('data:image')) {
+      const marker = ';base64,';
+      final idx = u.indexOf(marker);
+      if (idx >= 0) {
+        try {
+          final b64 = u.substring(idx + marker.length).trim();
+          final bytes = base64Decode(b64);
+          return Image.memory(
+            bytes,
+            fit: BoxFit.cover,
+            width: double.infinity,
+            height: double.infinity,
+            gaplessPlayback: true,
+            errorBuilder: (context, error, stackTrace) =>
+                const ColoredBox(color: AppColors.primary),
+          );
+        } catch (_) {
+          return const ColoredBox(color: AppColors.primary);
+        }
+      }
+    }
+    return Image.network(
+      u,
+      fit: BoxFit.cover,
+      width: double.infinity,
+      height: double.infinity,
+      errorBuilder: (context, error, stackTrace) =>
+          const ColoredBox(color: AppColors.primary),
+      loadingBuilder: (context, child, loadingProgress) {
+        if (loadingProgress == null) return child;
+        return const ColoredBox(color: AppColors.primary);
+      },
+    );
+  }
+}
 
 class HomePage extends ConsumerStatefulWidget {
   const HomePage({super.key});
@@ -92,30 +175,18 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     final bannersAsync = ref.watch(bannersFeedProvider);
     final booksAsync = ref.watch(booksFeedProvider);
     final remoteSlides = slidesAsync.valueOrNull ?? const [];
-    final slideItems = remoteSlides.isNotEmpty
-        ? remoteSlides
-            .map(
-              (item) => (
-                title: item.title,
-                courseId: item.courseId ?? '',
-                buttonText: item.buttonText,
-              ),
-            )
-            .toList(growable: false)
-        : allCourses
-            .take(3)
-            .map(
-              (course) => (
-                title: course.titleUz,
-                courseId: course.id,
-                buttonText: 'Boshlash',
-              ),
-            )
-            .toList(growable: false);
-    final effectiveSlides = slideItems.isEmpty
-        ? [(title: "Hozircha slayd yo'q", courseId: '', buttonText: 'Kutilmoqda')]
-        : slideItems;
-    _slideCount = effectiveSlides.length;
+    // Faqat serverdagi home_slides — admin bo'sh qoldirsa kurslardan «soxta» slayd chiqmasin.
+    final slideItems = remoteSlides
+        .map(
+          (item) => (
+            title: item.title,
+            courseId: item.courseId ?? '',
+            buttonText: item.buttonText,
+            imageUrl: item.imageUrl,
+          ),
+        )
+        .toList(growable: false);
+    _slideCount = slideItems.length;
     final courses = allCourses.where((c) {
       final matchesCategory = switch (selectedCat) {
         'cat_books' => false,
@@ -225,124 +296,134 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
               ),
             ),
           ),
+          if (slideItems.isNotEmpty)
           SliverToBoxAdapter(
             child: SizedBox(
               height: 154,
               child: PageView.builder(
                 controller: _pageController,
-                itemCount: effectiveSlides.length,
+                itemCount: slideItems.length,
                 itemBuilder: (context, index) {
-                  final courseId = effectiveSlides[index].courseId;
+                  final slide = slideItems[index];
+                  final courseId = slide.courseId;
                   return Padding(
                     padding: const EdgeInsets.symmetric(horizontal: 6),
                     child: InkWell(
                       borderRadius: BorderRadius.circular(16),
-                      onTap: () {
-                        if (courseId.isEmpty) return;
-                        ref.read(selectedCourseIdProvider.notifier).state =
-                            courseId;
-                        ref
-                            .read(progressControllerProvider.notifier)
-                            .enroll(courseId);
-                        context.push('${AppRoutes.courseDetail}?id=$courseId');
-                      },
+                      onTap: () => _openSlideCourse(context, ref,
+                          slideTitle: slide.title,
+                          slideCourseIdRaw: courseId,
+                          courses: allCourses),
                       child: Card(
                         margin: EdgeInsets.zero,
+                        clipBehavior: Clip.antiAlias,
                         child: Container(
                           decoration: BoxDecoration(
-                            color: AppColors.primary,
                             borderRadius: BorderRadius.circular(AppRadius.card),
                             boxShadow: AppShadows.soft,
                           ),
-                          child: Stack(
-                            children: [
-                              Positioned(
-                                right: -24,
-                                top: 10,
-                                child: Container(
-                                  width: 110,
-                                  height: 110,
-                                  decoration: BoxDecoration(
-                                    color: Colors.white.withValues(alpha: 0.10),
-                                    borderRadius: BorderRadius.circular(
-                                      AppRadius.card,
-                                    ),
-                                  ),
+                          child: ClipRRect(
+                            borderRadius: BorderRadius.circular(AppRadius.card),
+                            child: Stack(
+                              fit: StackFit.expand,
+                              children: [
+                                Positioned.fill(
+                                  child: _HomeSlideBackdrop(imageUrl: slide.imageUrl),
                                 ),
-                              ),
-                              Padding(
-                                padding: const EdgeInsets.all(AppSpacing.s16),
-                                child: Column(
-                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                  mainAxisAlignment: MainAxisAlignment.center,
-                                  children: [
-                                    Text(
-                                      'Kurs',
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .labelLarge
-                                          ?.copyWith(
-                                            color: Colors.white70,
-                                            fontWeight: FontWeight.w600,
-                                          ),
-                                    ),
-                                    const SizedBox(height: AppSpacing.s8),
-                                    Text(
-                                      effectiveSlides[index].title,
-                                      maxLines: 2,
-                                      overflow: TextOverflow.ellipsis,
-                                      style: Theme.of(context)
-                                          .textTheme
-                                          .titleLarge
-                                          ?.copyWith(
-                                            color: Colors.white,
-                                            fontWeight: FontWeight.w700,
-                                          ),
-                                    ),
-                                    const SizedBox(height: AppSpacing.s12),
-                                    SizedBox(
-                                      height: 36,
-                                      child: FilledButton(
-                                        style: FilledButton.styleFrom(
-                                          shape: RoundedRectangleBorder(
-                                            borderRadius: BorderRadius.circular(
-                                              AppRadius.button,
-                                            ),
-                                          ),
-                                          backgroundColor: Colors.white,
-                                          foregroundColor: AppColors.primary,
-                                        ),
-                                        onPressed: () {
-                                          if (courseId.isEmpty) return;
-                                          ref
-                                                  .read(
-                                                    selectedCourseIdProvider
-                                                        .notifier,
-                                                  )
-                                                  .state =
-                                              courseId;
-                                          ref
-                                              .read(
-                                                progressControllerProvider
-                                                    .notifier,
-                                              )
-                                              .enroll(courseId);
-                                          context.push(
-                                            '${AppRoutes.courseDetail}?id=$courseId',
-                                          );
-                                        },
-                                        child: Text(
-                                          effectiveSlides[index].buttonText,
-                                          style: TextStyle(
-                                            fontWeight: FontWeight.w700,
-                                          ),
+                                if (slide.imageUrl.trim().isNotEmpty)
+                                  Positioned.fill(
+                                    child: DecoratedBox(
+                                      decoration: BoxDecoration(
+                                        gradient: LinearGradient(
+                                          begin: Alignment.centerLeft,
+                                          end: Alignment.centerRight,
+                                          stops: const [0.0, 0.45, 1.0],
+                                          colors: [
+                                            AppColors.primary.withValues(alpha: 0.90),
+                                            AppColors.primary.withValues(alpha: 0.48),
+                                            AppColors.primary.withValues(alpha: 0.12),
+                                          ],
                                         ),
                                       ),
                                     ),
-                                  ],
+                                  ),
+                                if (slide.imageUrl.trim().isEmpty)
+                                  Positioned(
+                                    right: -24,
+                                    top: 10,
+                                    child: Container(
+                                      width: 110,
+                                      height: 110,
+                                      decoration: BoxDecoration(
+                                        color: Colors.white.withValues(alpha: 0.10),
+                                        borderRadius: BorderRadius.circular(
+                                          AppRadius.card,
+                                        ),
+                                      ),
+                                    ),
+                                  ),
+                                Padding(
+                                  padding: const EdgeInsets.all(AppSpacing.s16),
+                                  child: Column(
+                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                    mainAxisAlignment: MainAxisAlignment.center,
+                                    children: [
+                                      Text(
+                                        'Kurs',
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .labelLarge
+                                            ?.copyWith(
+                                              color: Colors.white70,
+                                              fontWeight: FontWeight.w600,
+                                            ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.s8),
+                                      Text(
+                                        slide.title,
+                                        maxLines: 2,
+                                        overflow: TextOverflow.ellipsis,
+                                        style: Theme.of(context)
+                                            .textTheme
+                                            .titleLarge
+                                            ?.copyWith(
+                                              color: Colors.white,
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                      ),
+                                      const SizedBox(height: AppSpacing.s12),
+                                      SizedBox(
+                                        height: 36,
+                                        child: FilledButton(
+                                          style: FilledButton.styleFrom(
+                                            shape: RoundedRectangleBorder(
+                                              borderRadius: BorderRadius.circular(
+                                                AppRadius.button,
+                                              ),
+                                            ),
+                                            backgroundColor: Colors.white,
+                                            foregroundColor: AppColors.primary,
+                                          ),
+                                          onPressed: () => _openSlideCourse(
+                                            context,
+                                            ref,
+                                            slideTitle: slide.title,
+                                            slideCourseIdRaw: courseId,
+                                            courses: allCourses,
+                                          ),
+                                          child: Text(
+                                            slide.buttonText,
+                                            style: TextStyle(
+                                              fontWeight: FontWeight.w700,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
                                 ),
-                              ),
-                            ],
+                              ],
+                            ),
                           ),
                         ),
                       ),
@@ -352,14 +433,14 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
               ),
             ),
           ),
-          if (effectiveSlides.length > 1)
+          if (slideItems.length > 1)
             SliverToBoxAdapter(
               child: Padding(
                 padding: const EdgeInsets.only(top: 10),
                 child: Center(
                   child: SmoothPageIndicator(
                     controller: _pageController,
-                    count: effectiveSlides.length,
+                    count: slideItems.length,
                     effect: WormEffect(
                       dotWidth: 8,
                       dotHeight: 8,

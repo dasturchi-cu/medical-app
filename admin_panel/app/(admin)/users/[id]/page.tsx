@@ -1,4 +1,4 @@
- "use client";
+"use client";
 
 import { useEffect, useMemo, useState } from "react";
 import { useParams, useRouter } from "next/navigation";
@@ -130,46 +130,47 @@ export default function UserDetailPage() {
         <p className="mt-2 text-xs text-slate-500">Ro&apos;yxatdan o&apos;tgan: {user.registration_date || "-"}</p>
         <p className="mt-1 text-xs text-slate-500">Foydalanuvchi ID: {user.id}</p>
         <div className="mt-4 flex flex-wrap gap-2">
-          <Button
-            variant="destructive"
-            disabled={user.is_blocked}
-            onClick={async () => {
-              try {
-                await runStatus({
-                  loadingMessage: "Foydalanuvchi bloklanmoqda...",
-                  successMessage: "Foydalanuvchi muvaffaqiyatli bloklandi",
-                  errorMessage: "Bloklashda xatolik.",
-                  action: async () => blockUser(user.id),
-                });
-                setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, is_blocked: true } : item)));
-                notifySuccess("Foydalanuvchi bloklandi.");
-              } catch (error) {
-                notifyError(error instanceof Error ? error.message : "Bloklashda xatolik.");
-              }
-            }}
-          >
-            Bloklash
-          </Button>
-          <Button
-            variant="outline"
-            disabled={!user.is_blocked}
-            onClick={async () => {
-              try {
-                await runStatus({
-                  loadingMessage: "Foydalanuvchi blokdan chiqarilmoqda...",
-                  successMessage: "Foydalanuvchi muvaffaqiyatli blokdan chiqarildi",
-                  errorMessage: "Unblockda xatolik.",
-                  action: async () => unblockUser(user.id),
-                });
-                setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, is_blocked: false } : item)));
-                notifySuccess("Foydalanuvchi blokdan chiqarildi.");
-              } catch (error) {
-                notifyError(error instanceof Error ? error.message : "Unblockda xatolik.");
-              }
-            }}
-          >
-            Blokdan chiqarish
-          </Button>
+          {user.is_blocked ? (
+            <Button
+              variant="outline"
+              onClick={async () => {
+                try {
+                  await runStatus({
+                    loadingMessage: "Foydalanuvchi blokdan chiqarilmoqda...",
+                    successMessage: "Foydalanuvchi muvaffaqiyatli blokdan chiqarildi",
+                    errorMessage: "Unblockda xatolik.",
+                    action: async () => unblockUser(user.id),
+                  });
+                  setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, is_blocked: false } : item)));
+                  notifySuccess("Foydalanuvchi blokdan chiqarildi.");
+                } catch (error) {
+                  notifyError(error instanceof Error ? error.message : "Unblockda xatolik.");
+                }
+              }}
+            >
+              Blokdan chiqarish
+            </Button>
+          ) : (
+            <Button
+              variant="destructive"
+              onClick={async () => {
+                try {
+                  await runStatus({
+                    loadingMessage: "Foydalanuvchi bloklanmoqda...",
+                    successMessage: "Foydalanuvchi muvaffaqiyatli bloklandi",
+                    errorMessage: "Bloklashda xatolik.",
+                    action: async () => blockUser(user.id),
+                  });
+                  setUsers((prev) => prev.map((item) => (item.id === user.id ? { ...item, is_blocked: true } : item)));
+                  notifySuccess("Foydalanuvchi bloklandi.");
+                } catch (error) {
+                  notifyError(error instanceof Error ? error.message : "Bloklashda xatolik.");
+                }
+              }}
+            >
+              Bloklash
+            </Button>
+          )}
           <Button
             variant="outline"
             onClick={() => {
@@ -209,6 +210,9 @@ export default function UserDetailPage() {
 
       <div className="surface-card p-5">
         <h3 className="text-base font-semibold text-slate-900">Kurs berish</h3>
+        <p className="mt-2 text-sm text-slate-600">
+          Bu yerda berilgan kurs <strong>user_entitlements</strong> jadvaliga yoziladi — foydalanuvchi ilovada kirganda «Mening kurslarim» va kurs ochiq deb ko‘rinadi (internet bor-yo‘qligiga qarab bir necha soniya ichida yangilanadi).
+        </p>
         <div className="mt-3 flex flex-col gap-2 sm:flex-row">
           <Select value={selectedCourse} onValueChange={(value) => setSelectedCourse(value ?? "")}>
             <SelectTrigger className="h-10 rounded-xl border-slate-200 sm:max-w-sm">
@@ -240,6 +244,12 @@ export default function UserDetailPage() {
                 });
                 const nextEntitlements = await fetchUserEntitlements(user.id);
                 setEntitlements(nextEntitlements);
+                try {
+                  const overviewData = await fetchUserOverview(user.id);
+                  setOverview(overviewData);
+                } catch {
+                  setOverview(null);
+                }
                 notifySuccess("Kurs muvaffaqiyatli berildi");
               } catch (error) {
                 notifyError(error instanceof Error ? error.message : "Kurs berishda xatolik.");

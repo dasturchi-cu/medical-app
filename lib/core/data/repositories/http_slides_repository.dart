@@ -83,7 +83,7 @@ class HttpSlidesRepository implements SlidesRepository {
             .onPostgresChanges(
               event: PostgresChangeEvent.all,
               schema: 'public',
-              table: 'slides',
+              table: 'home_slides',
               callback: (_) => unawaited(push()),
             )
             .subscribe();

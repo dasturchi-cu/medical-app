@@ -3,7 +3,7 @@
 import { useEffect, useMemo, useState } from "react";
 import { PageSkeleton } from "@/components/page-skeleton";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
-import { fetchBanners, type BannerItem } from "@/lib/api/banners";
+import { fetchAds } from "@/lib/api/ads";
 import { fetchCourses, type CourseItem } from "@/lib/api/courses";
 import { fetchLessons, type LessonItem } from "@/lib/api/lessons";
 import { fetchUsers } from "@/lib/api/users";
@@ -12,7 +12,7 @@ import { notifyError } from "@/lib/notify";
 export default function DashboardPage() {
   const [courses, setCourses] = useState<CourseItem[]>([]);
   const [lessons, setLessons] = useState<LessonItem[]>([]);
-  const [banners, setBanners] = useState<BannerItem[]>([]);
+  const [adsCount, setAdsCount] = useState(0);
   const [usersCount, setUsersCount] = useState(0);
   const [loading, setLoading] = useState(true);
 
@@ -20,16 +20,16 @@ export default function DashboardPage() {
     let mounted = true;
     const load = async () => {
       try {
-        const [courseItems, lessonItems, bannerItems, users] = await Promise.all([
+        const [courseItems, lessonItems, adsItems, users] = await Promise.all([
           fetchCourses(),
           fetchLessons(),
-          fetchBanners(),
+          fetchAds(),
           fetchUsers(),
         ]);
         if (!mounted) return;
         setCourses(courseItems);
         setLessons(lessonItems);
-        setBanners(bannerItems);
+        setAdsCount(adsItems.length);
         setUsersCount(users.length);
       } catch (error) {
         if (!mounted) return;
@@ -57,7 +57,7 @@ export default function DashboardPage() {
   const stats = [
     { label: "Jami kurslar", value: courses.length },
     { label: "Jami darslar", value: lessons.length },
-    { label: "Faol bannerlar", value: banners.length },
+    { label: "Kanal reklamalari", value: adsCount },
     { label: "Faol foydalanuvchilar", value: usersCount },
   ];
 

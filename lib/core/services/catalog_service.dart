@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
@@ -8,7 +9,8 @@ import '../models/course_models.dart';
 
 class CatalogService {
   static List<Course> _courses = const [];
-  static const Duration _requestTimeout = Duration(seconds: 12);
+  /// Render va boshqa serverlar sovuq holatda birinchi javob 30–60 s kutishi mumkin.
+  static const Duration _bootstrapRequestTimeout = Duration(seconds: 45);
 
   /// Last bootstrap error message (non-null if the last fetch failed or returned no courses).
   static String? lastLoadError;
@@ -32,12 +34,12 @@ class CatalogService {
         debugPrint('[API][mobile.courses][request] attempt=${i + 1} baseUrl=$baseUrl');
         final response = await http
             .get(Uri.parse('$baseUrl/api/v1/mobile/courses'))
-            .timeout(_requestTimeout);
+            .timeout(_bootstrapRequestTimeout);
         debugPrint('[API][mobile.courses][response] status=${response.statusCode}');
         if (response.statusCode < 200 || response.statusCode >= 300) {
           lastLoadError = 'Katalog HTTP ${response.statusCode}';
           if (i == attempts - 1) return;
-          await Future<void>.delayed(Duration(milliseconds: 800 * (i + 1)));
+          await Future<void>.delayed(Duration(seconds: 2 + i));
           continue;
         }
         final body = jsonDecode(response.body);
@@ -63,10 +65,12 @@ class CatalogService {
         }
         return;
       } catch (e, st) {
-        lastLoadError = e.toString();
+        lastLoadError = e is TimeoutException
+            ? 'Server javob bermadi (vaqt tugadi). Hosting uxlagan bo\'lishi yoki tarmoq sekin — ilovani qayta ishga tushiring yoki Wi‑Fi tekshiring.'
+            : e.toString();
         debugPrint('[API][mobile.courses][error] $e\n$st');
         if (i == attempts - 1) return;
-        await Future<void>.delayed(Duration(milliseconds: 800 * (i + 1)));
+        await Future<void>.delayed(Duration(seconds: 2 + i));
       }
     }
   }

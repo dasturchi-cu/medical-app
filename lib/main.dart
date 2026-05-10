@@ -8,6 +8,7 @@ import 'core/router/app_router.dart';
 import 'core/localization/language_provider.dart';
 import 'core/services/auth_service.dart';
 import 'core/services/catalog_service.dart';
+import 'core/services/push_messaging.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/startup_guard.dart';
 
@@ -15,7 +16,11 @@ Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
   await AuthService.bootstrap();
   await CatalogService.bootstrap(maxAttempts: 5);
-  runApp(const ProviderScope(child: NeuroscienceApp()));
+  runApp(
+    const ProviderScope(
+      child: FirebasePushBootstrap(child: NeuroscienceApp()),
+    ),
+  );
 }
 
 class NeuroscienceApp extends ConsumerWidget {
@@ -54,7 +59,13 @@ class NeuroscienceApp extends ConsumerWidget {
           ],
           builder: (context, child) {
             return StartupGuard(
-              child: TrScope(state: st, child: child ?? const SizedBox.shrink()),
+              child: PushRouterScope(
+                router: router,
+                child: TrScope(
+                  state: st,
+                  child: child ?? const SizedBox.shrink(),
+                ),
+              ),
             );
           },
         );

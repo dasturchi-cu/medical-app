@@ -5,6 +5,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 
 import '../config/api_config.dart';
 import '../utils/device_id.dart';
+import 'push_messaging.dart';
 
 class AuthServiceError implements Exception {
   AuthServiceError(this.message);
@@ -92,16 +93,21 @@ class AuthService {
     }
 
     final deviceId = await DeviceId.getStableDeviceId();
+    final fcmToken = await getFcmTokenForLogin();
+    final payload = <String, dynamic>{
+      'phone': normalizedPhone,
+      'password': password,
+      'display_name': (displayName ?? '').trim(),
+      'device_id': deviceId,
+      'platform': 'android',
+    };
+    if (fcmToken != null && fcmToken.isNotEmpty) {
+      payload['fcm_token'] = fcmToken;
+    }
     final response = await http.post(
       Uri.parse('$baseUrl/api/v1/auth/mobile-login'),
       headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
-        'phone': normalizedPhone,
-        'password': password,
-        'display_name': (displayName ?? '').trim(),
-        'device_id': deviceId,
-        'platform': 'android',
-      }),
+      body: jsonEncode(payload),
     );
 
     if (response.statusCode < 200 || response.statusCode >= 300) {

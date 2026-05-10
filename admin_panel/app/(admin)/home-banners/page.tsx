@@ -193,7 +193,11 @@ export default function HomeBannersPage() {
 
   return (
     <section className="admin-page">
-      <AppForm title="Home reklama yaratish" description="Ko&apos;k slider uchun reklama qo&apos;shing." onSubmit={onSubmit}>
+      <AppForm
+        title="Home reklama yaratish"
+        description="Ilovaning eng yuqorisidagi «Boshlash» slaydi shu yerda. Kurs tanlash majburiy. Rasm ixtiyoriy — bo‘lmasa ilovada oddiy ko‘k kartochka chiqadi."
+        onSubmit={onSubmit}
+      >
         <div className="grid gap-2">
           <Label htmlFor="title">Banner matni</Label>
           <Input
@@ -215,9 +219,9 @@ export default function HomeBannersPage() {
           />
         </div>
         <ImagePicker
-          label="Rasm (upload yoki link)"
+          label="Rasm (ixtiyoriy)"
           value={formValues.image}
-          helperText="Rasm qo&apos;yilmasa, default ko&apos;k uslub ishlatiladi."
+          helperText="Rasm yuklamasangiz yoki URL qoldirsangiz, ilovada banner oddiy ko‘k fon bilan chiqadi."
           onChange={(value) => setFormValues((prev) => ({ ...prev, image: value }))}
         />
         <div className="grid gap-2">
@@ -267,9 +271,9 @@ export default function HomeBannersPage() {
             />
           </div>
           <ImagePicker
-            label="Rasm (upload yoki link)"
+            label="Rasm (ixtiyoriy)"
             value={editValues.image}
-            helperText="Rasm qo&apos;yilmasa, default ko&apos;k uslub ishlatiladi."
+            helperText="Rasm yuklamasangiz yoki URL qoldirsangiz, ilovada banner oddiy ko‘k fon bilan chiqadi."
             onChange={(value) => setEditValues((prev) => ({ ...prev, image: value }))}
           />
           <div className="grid gap-2">
