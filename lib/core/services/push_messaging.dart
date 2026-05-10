@@ -10,7 +10,6 @@ import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
-import '../../firebase_background_handler.dart';
 import '../../firebase_options.dart';
 import '../config/api_config.dart';
 import '../router/app_routes.dart';
@@ -21,9 +20,10 @@ const _authPrefsKey = 'auth_user_v1';
 final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
 
 bool _firebaseReady = false;
-bool _backgroundHandlerRegistered = false;
 bool _localReady = false;
 bool _openHandlersAttached = false;
+bool _foregroundOnMessageAttached = false;
+bool _tokenRefreshAttached = false;
 GoRouter? _router;
 String? _pendingRoute;
 
@@ -34,11 +34,12 @@ const AndroidNotificationChannel _androidChannel = AndroidNotificationChannel(
   importance: Importance.high,
 );
 
-/// Birinchi frame dan keyin chaqiring — `main()` ichida chaqirish baʼzan channel-error beradi.
-/// Hot Restart (`Restarted application`) Firebase ni buzadi: ilovani to‘xtating va qayta Run qiling.
-Future<void> initializeFirebaseAppAndForegroundPush() async {
-  if (_firebaseReady) return;
-
+/// Firebase Core — [main] va foreground push sozlamalari uchun.
+///
+/// [FirebaseMessaging.onBackgroundMessage] faqat [main] ichida chaqiriladi: IDE Hot Restart
+/// (`Restarted application`) yangi Dart isolate ochadi, lekin Android jarayoni bir xil qoladi;
+/// handler takror ro‘yxatdan o‘tsa **Could not prepare isolate** xatosi chiqishi mumkin.
+Future<bool> ensureFirebaseCoreInitialized() async {
   Object? lastError;
   StackTrace? lastStack;
   for (var attempt = 0; attempt < 12; attempt++) {
@@ -57,8 +58,7 @@ Future<void> initializeFirebaseAppAndForegroundPush() async {
           await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
         }
       }
-      lastError = null;
-      break;
+      return true;
     } catch (e, st) {
       lastError = e;
       lastStack = st;
@@ -69,27 +69,35 @@ Future<void> initializeFirebaseAppAndForegroundPush() async {
   if (lastError != null) {
     debugPrint(
       'Firebase.initializeApp yakunda xato (push o‘chiq): $lastError\n'
-      '>>> Ilovani qurilmadan OLIB TASHLANG, keyin: flutter clean → flutter run '
-      '(Hot Restart emas; APK firebase plaginlarsiz qolgan bo‘lishi mumkin).\n'
+      '>>> Agar Hot Restart dan keyin bo‘lsa: ilovani to‘xtating, qayta Run qiling; kerak bo‘lsa flutter clean.\n'
       '$lastStack',
     );
+  }
+  return false;
+}
+
+Future<void> initializeFirebaseAppAndForegroundPush() async {
+  final coreOk = await ensureFirebaseCoreInitialized();
+  if (!coreOk || Firebase.apps.isEmpty) {
     return;
   }
 
-  if (!_backgroundHandlerRegistered) {
-    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
-    _backgroundHandlerRegistered = true;
-  }
-  _firebaseReady = true;
-
   if (Platform.isAndroid || Platform.isIOS) {
     await _initLocalNotificationsPlugin();
-    FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+    if (!_foregroundOnMessageAttached) {
+      FirebaseMessaging.onMessage.listen(_showForegroundNotification);
+      _foregroundOnMessageAttached = true;
+    }
   }
 
-  FirebaseMessaging.instance.onTokenRefresh.listen((_) {
-    debugPrint('FCM token refreshed (sign in again to sync)');
-  });
+  if (!_tokenRefreshAttached) {
+    FirebaseMessaging.instance.onTokenRefresh.listen((_) {
+      debugPrint('FCM token refreshed (sign in again to sync)');
+    });
+    _tokenRefreshAttached = true;
+  }
+
+  _firebaseReady = true;
 
   await _tryBindFirebaseOpenHandlers();
 }

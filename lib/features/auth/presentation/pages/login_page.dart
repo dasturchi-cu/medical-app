@@ -3,6 +3,7 @@ import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/auth_controller.dart';
 
 class LoginPage extends ConsumerStatefulWidget {
@@ -18,6 +19,7 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   final _passwordController = TextEditingController();
   final _formKey = GlobalKey<FormState>();
   bool _loading = false;
+  bool _loggedInRedirectScheduled = false;
 
   @override
   void dispose() {
@@ -54,6 +56,22 @@ class _LoginPageState extends ConsumerState<LoginPage> {
   @override
   Widget build(BuildContext context) {
     final authState = ref.watch(authControllerProvider);
+    if (authState.isLoggedIn &&
+        !authState.isBlocked &&
+        !_loggedInRedirectScheduled) {
+      _loggedInRedirectScheduled = true;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        if (context.canPop()) {
+          context.pop();
+        } else {
+          context.go(AppRoutes.home);
+        }
+      });
+    }
+    if (!authState.isLoggedIn) {
+      _loggedInRedirectScheduled = false;
+    }
     return Scaffold(
       appBar: AppBar(title: const Text('Kirish')),
       body: SafeArea(

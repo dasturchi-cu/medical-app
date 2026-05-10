@@ -113,7 +113,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       final comments = int.tryParse((body['comments_count'] ?? '0').toString()) ?? 0;
       final ratingAvg = double.tryParse((body['rating_avg'] ?? '0').toString()) ?? 0;
       final ratingCount = int.tryParse((body['rating_count'] ?? '0').toString()) ?? 0;
-      final rawMy = body['my_rating'];
+      final rawMy = body['my_rating'] ?? body['myRating'];
       final myRating = rawMy == null ? 0 : (int.tryParse(rawMy.toString()) ?? 0);
       if (!mounted) return;
       setState(() {
@@ -180,7 +180,13 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
         throw Exception(msg);
       }
       if (!mounted) return;
-      unawaited(_loadCourseStats());
+      await _loadCourseStats();
+      if (!mounted) return;
+      setState(() {
+        if (_myRating == 0 && stars >= 1 && stars <= 5) {
+          _myRating = stars;
+        }
+      });
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -318,7 +324,8 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                     onPressed: _ratingLoading || _feedbackApiMissing ? null : () => _submitRating(i),
                     icon: Icon(
                       i <= _myRating ? Icons.star : Icons.star_border,
-                      color: Colors.amber,
+                      color: i <= _myRating ? Colors.amber.shade700 : Colors.amber,
+                      size: i <= _myRating ? 26 : 24,
                     ),
                     visualDensity: VisualDensity.compact,
                   ),
@@ -423,14 +430,22 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                               ref.invalidate(
                                                 courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
                                               );
-                                            } catch (_) {
+                                            } catch (e) {
                                               if (mounted) {
                                                 setState(() {
                                                   _optimisticLikedByMe.remove(c.id);
                                                   _optimisticLikesCount.remove(c.id);
                                                 });
                                                 ScaffoldMessenger.of(context).showSnackBar(
-                                                  const SnackBar(content: Text("Like saqlanmadi. Internetni tekshiring.")),
+                                                  SnackBar(
+                                                    content: Text(
+                                                      e.toString().contains('SocketException') ||
+                                                              e.toString().contains('ClientException') ||
+                                                              e.toString().contains('TimeoutException')
+                                                          ? "Like saqlanmadi. Internet ulanishini tekshiring."
+                                                          : "Like saqlanmadi: ${e.toString()}",
+                                                    ),
+                                                  ),
                                                 );
                                               } else {
                                                 _optimisticLikedByMe.remove(c.id);
@@ -446,8 +461,8 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                           },
                                     icon: Icon(
                                       likedByMe ? Icons.favorite : Icons.favorite_border,
-                                      size: 18,
-                                      color: likedByMe ? Colors.red : Colors.black54,
+                                      size: 20,
+                                      color: likedByMe ? Colors.red.shade600 : Colors.black45,
                                     ),
                                     visualDensity: VisualDensity.compact,
                                     padding: EdgeInsets.zero,
@@ -622,10 +637,10 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                           courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
                         );
                         unawaited(_loadCourseStats());
-                      } catch (_) {
+                      } catch (e) {
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
-                          const SnackBar(content: Text("Izoh yuborishda xatolik.")),
+                          SnackBar(content: Text(e.toString())),
                         );
                       } finally {
                         if (mounted) setState(() => _sending = false);

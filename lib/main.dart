@@ -1,5 +1,7 @@
 import 'dart:async';
 
+import 'package:firebase_core/firebase_core.dart';
+import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
@@ -11,9 +13,22 @@ import 'core/services/catalog_service.dart';
 import 'core/services/push_messaging.dart';
 import 'core/theme/app_theme.dart';
 import 'core/widgets/startup_guard.dart';
+import 'firebase_background_handler.dart';
 
 Future<void> main() async {
   WidgetsFlutterBinding.ensureInitialized();
+
+  final firebaseOk = await ensureFirebaseCoreInitialized();
+  if (firebaseOk && Firebase.apps.isNotEmpty) {
+    try {
+      FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    } catch (e) {
+      debugPrint(
+        'FirebaseMessaging.onBackgroundMessage — ehtimoliy takror (Hot Restart): $e',
+      );
+    }
+  }
+
   await AuthService.bootstrap();
   await CatalogService.bootstrap(maxAttempts: 5);
   runApp(

@@ -47,12 +47,18 @@ final authControllerProvider =
 
 class AuthController extends Notifier<AuthState> {
   Timer? _accessTimer;
+  /// Bir xil foydalanuvchi uchun [build] qayta chaqirilsa, microtask/spam oldini olish.
+  String? _hydratedUserId;
+  /// Ketma-ket muvaffaqiyatli javoblarda `session_active: false` — tarmoq xatosida nolga qaytaramiz.
+  int _inactiveSessionStreak = 0;
 
   @override
   AuthState build() {
     final user = ref.watch(authServiceProvider).currentUser;
     if (user == null) {
       _accessTimer?.cancel();
+      _hydratedUserId = null;
+      _inactiveSessionStreak = 0;
       return const AuthState(
         isLoggedIn: false,
         name: 'Mehmon',
@@ -62,12 +68,17 @@ class AuthController extends Notifier<AuthState> {
         blockReason: null,
       );
     }
-    Future.microtask(() {
-      ref.read(purchaseControllerProvider.notifier).bindRealtime(user.id);
-      ref.read(purchaseControllerProvider.notifier).syncFromBackend(user.id);
-      _verifyUserAccess(user.id);
-    });
-    _startAccessTimer(user.id);
+    if (_hydratedUserId != user.id) {
+      _hydratedUserId = user.id;
+      _inactiveSessionStreak = 0;
+      _accessTimer?.cancel();
+      Future.microtask(() {
+        ref.read(purchaseControllerProvider.notifier).bindRealtime(user.id);
+        ref.read(purchaseControllerProvider.notifier).syncFromBackend(user.id);
+        _verifyUserAccess(user.id);
+      });
+      _startAccessTimer(user.id);
+    }
     return _fromUser(user);
   }
 
@@ -84,19 +95,44 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> _verifyUserAccess(String userId) async {
     final status = await ref.read(authServiceProvider).checkUserAccess(userId);
-    if (status == null) return;
-    if (!status.isBlocked && status.sessionActive) return;
+    if (status == null) {
+      _inactiveSessionStreak = 0;
+      return;
+    }
+    if (status.isBlocked) {
+      _inactiveSessionStreak = 0;
+      await _applyForcedLogout(
+        isBlocked: true,
+        blockReason: "Siz admin tomonidan bloklangansiz. Admin: @${status.adminContact}",
+      );
+      return;
+    }
+    if (status.sessionActive) {
+      _inactiveSessionStreak = 0;
+      return;
+    }
+    _inactiveSessionStreak++;
+    // Bir martalik server vaqtincha javobi uchun darhol chiqarib yubormaymiz.
+    if (_inactiveSessionStreak < 4) return;
+
+    _inactiveSessionStreak = 0;
+    await _applyForcedLogout(
+      isBlocked: false,
+      blockReason: "Sessiya tugatildi. Qaytadan tizimga kiring.",
+    );
+  }
+
+  Future<void> _applyForcedLogout({required bool isBlocked, required String blockReason}) async {
     await ref.read(authServiceProvider).signOut();
     ref.read(purchaseControllerProvider.notifier).clear();
+    _hydratedUserId = null;
     state = AuthState(
       isLoggedIn: false,
       name: 'Mehmon',
       userId: null,
       email: null,
-      isBlocked: status.isBlocked,
-      blockReason: status.isBlocked
-          ? "Siz admin tomonidan bloklangansiz. Admin: @${status.adminContact}"
-          : "Sessiya tugatildi. Qaytadan tizimga kiring.",
+      isBlocked: isBlocked,
+      blockReason: blockReason,
     );
   }
 
@@ -128,6 +164,7 @@ class AuthController extends Notifier<AuthState> {
       if (user == null) {
         return 'Telefon raqami noto‘g‘ri';
       }
+      _inactiveSessionStreak = 0;
       state = _fromUser(user);
       ref.read(purchaseControllerProvider.notifier).bindRealtime(user.id);
       await ref.read(purchaseControllerProvider.notifier).syncFromBackend(user.id);
@@ -162,6 +199,8 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> logout() async {
     _accessTimer?.cancel();
+    _hydratedUserId = null;
+    _inactiveSessionStreak = 0;
     await ref.read(authServiceProvider).signOut();
     ref.read(purchaseControllerProvider.notifier).clear();
     state = const AuthState(
