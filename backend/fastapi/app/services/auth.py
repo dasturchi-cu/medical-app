@@ -6,7 +6,7 @@ import secrets
 from fastapi import HTTPException, status
 from supabase import Client
 
-from ..schemas.auth import AuthUserResponse, MobileLoginRequest, UserStatusResponse
+from ..schemas.auth import AuthUserResponse, MobileLoginRequest, MobileProfileUpdateRequest, UserStatusResponse
 
 
 def _normalize_phone(phone: str) -> str:
@@ -139,6 +139,32 @@ def mobile_login(client: Client, payload: MobileLoginRequest, *, admin_contact: 
         full_name=str(user.get("full_name") or ""),
         session_token=session_token,
     )
+
+
+def update_mobile_profile(client: Client, payload: MobileProfileUpdateRequest) -> AuthUserResponse:
+    uid = payload.user_id.strip()
+    tok = payload.session_token.strip()
+    name = payload.display_name.strip()
+    sess = (
+        client.table("auth_sessions")
+        .select("id")
+        .eq("user_id", uid)
+        .eq("session_token", tok)
+        .eq("is_active", True)
+        .limit(1)
+        .execute()
+    ).data or []
+    if not sess:
+        raise HTTPException(status_code=status.HTTP_403_FORBIDDEN, detail="Sessiya topilmadi yoki yaroqsiz.")
+
+    client.table("users").update({"full_name": name, "updated_at": datetime.utcnow().isoformat()}).eq("id", uid).execute()
+    user_resp = client.table("users").select("phone,full_name").eq("id", uid).limit(1).execute()
+    user_row = (user_resp.data or [None])[0]
+    if not user_row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="User topilmadi.")
+    phone = str(user_row.get("phone") or "")
+    full_name = str(user_row.get("full_name") or name)
+    return AuthUserResponse(user_id=uid, phone=phone, full_name=full_name, session_token=tok)
 
 
 def get_user_status(

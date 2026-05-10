@@ -7,6 +7,7 @@ import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/auth_controller.dart';
+import '../../../../core/services/auth_service.dart';
 import '../../../../core/state/purchase_controller.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../core/theme/design_system.dart';
@@ -43,7 +44,15 @@ class ProfilePage extends ConsumerWidget {
       },
     );
     if (!context.mounted || newName == null) return;
-    await ref.read(authControllerProvider.notifier).updateName(newName);
+    try {
+      await ref.read(authControllerProvider.notifier).updateName(newName);
+    } on AuthServiceError catch (e) {
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text(e.message)),
+        );
+      }
+    }
   }
 
   @override

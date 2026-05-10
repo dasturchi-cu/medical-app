@@ -21,6 +21,7 @@ const _authPrefsKey = 'auth_user_v1';
 final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
 
 bool _firebaseReady = false;
+bool _backgroundHandlerRegistered = false;
 bool _localReady = false;
 bool _openHandlersAttached = false;
 GoRouter? _router;
@@ -37,18 +38,48 @@ const AndroidNotificationChannel _androidChannel = AndroidNotificationChannel(
 /// Hot Restart (`Restarted application`) Firebase ni buzadi: ilovani to‘xtating va qayta Run qiling.
 Future<void> initializeFirebaseAppAndForegroundPush() async {
   if (_firebaseReady) return;
-  try {
-    await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
-  } catch (e, st) {
+
+  Object? lastError;
+  StackTrace? lastStack;
+  for (var attempt = 0; attempt < 12; attempt++) {
+    if (attempt > 0) {
+      await Future<void>.delayed(Duration(milliseconds: 60 * attempt));
+    }
+    try {
+      if (Firebase.apps.isEmpty) {
+        if (Platform.isAndroid) {
+          try {
+            await Firebase.initializeApp();
+          } catch (_) {
+            await Firebase.initializeApp(options: DefaultFirebaseOptions.android);
+          }
+        } else {
+          await Firebase.initializeApp(options: DefaultFirebaseOptions.currentPlatform);
+        }
+      }
+      lastError = null;
+      break;
+    } catch (e, st) {
+      lastError = e;
+      lastStack = st;
+      debugPrint('Firebase.initializeApp urinish ${attempt + 1}/12: $e');
+    }
+  }
+
+  if (lastError != null) {
     debugPrint(
-      'Firebase.initializeApp xatolik (push o‘chiq): $e\n'
-      '>>> Agar logda "Restarted application" bo‘lsa: Stop ▶ yangidan Run (Hot Restart emas).\n'
-      '$st',
+      'Firebase.initializeApp yakunda xato (push o‘chiq): $lastError\n'
+      '>>> Ilovani qurilmadan OLIB TASHLANG, keyin: flutter clean → flutter run '
+      '(Hot Restart emas; APK firebase plaginlarsiz qolgan bo‘lishi mumkin).\n'
+      '$lastStack',
     );
     return;
   }
 
-  FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+  if (!_backgroundHandlerRegistered) {
+    FirebaseMessaging.onBackgroundMessage(firebaseMessagingBackgroundHandler);
+    _backgroundHandlerRegistered = true;
+  }
   _firebaseReady = true;
 
   if (Platform.isAndroid || Platform.isIOS) {
@@ -78,8 +109,13 @@ class _FirebasePushBootstrapState extends State<FirebasePushBootstrap> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(initializeFirebaseAppAndForegroundPush());
+      unawaited(_delayedFirebaseBootstrap());
     });
+  }
+
+  Future<void> _delayedFirebaseBootstrap() async {
+    await Future<void>.delayed(const Duration(milliseconds: 150));
+    await initializeFirebaseAppAndForegroundPush();
   }
 
   @override

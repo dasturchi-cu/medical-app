@@ -76,6 +76,7 @@ class PurchaseController extends Notifier<PurchaseState> {
   void _applyEntitlements(List<UserEntitlementItem> items) {
     final keys = <String>{};
     for (final item in items) {
+      if (!item.isActive) continue;
       if (item.sectionId != null &&
           item.sectionId!.isNotEmpty &&
           item.courseId != null &&

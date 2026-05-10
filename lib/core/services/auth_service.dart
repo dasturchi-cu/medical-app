@@ -155,8 +155,38 @@ class AuthService {
 
   Future<LocalAuthUser?> updateCurrentUserName(String name) async {
     final current = _currentUser;
-    if (current == null) return null;
-    final updated = current.copyWith(name: name.trim());
+    final baseUrl = getApiBaseUrl();
+    final trimmed = name.trim();
+    if (current == null || trimmed.isEmpty || baseUrl.isEmpty) return null;
+
+    final response = await http.patch(
+      Uri.parse('$baseUrl/api/v1/auth/mobile-profile'),
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': current.id,
+        'session_token': current.sessionToken,
+        'display_name': trimmed,
+      }),
+    );
+
+    if (response.statusCode < 200 || response.statusCode >= 300) {
+      try {
+        final body = jsonDecode(response.body);
+        if (body is Map<String, dynamic> && body['detail'] != null) {
+          throw AuthServiceError(body['detail'].toString());
+        }
+      } catch (_) {}
+      throw AuthServiceError('Ismni serverda yangilab bo‘lmadi (${response.statusCode}).');
+    }
+
+    final body = jsonDecode(response.body);
+    if (body is! Map<String, dynamic>) return null;
+    final updated = LocalAuthUser(
+      id: (body['user_id'] ?? current.id).toString(),
+      email: (body['phone'] ?? current.email).toString(),
+      name: (body['full_name'] ?? trimmed).toString(),
+      sessionToken: (body['session_token'] ?? current.sessionToken).toString(),
+    );
     _currentUser = updated;
     final prefs = await SharedPreferences.getInstance();
     await prefs.setString(_prefsKey, jsonEncode(updated.toJson()));

@@ -96,8 +96,13 @@ export default function UserDetailPage() {
         void load(true);
       })
       .subscribe();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       mounted = false;
+      document.removeEventListener("visibilitychange", onVisible);
       if (channel) {
         void supabase?.removeChannel(channel);
       }
@@ -281,6 +286,12 @@ export default function UserDetailPage() {
                       await revokeCourse(user.id, item.course_id);
                       const nextEntitlements = await fetchUserEntitlements(user.id);
                       setEntitlements(nextEntitlements);
+                      try {
+                        const overviewData = await fetchUserOverview(user.id);
+                        setOverview(overviewData);
+                      } catch {
+                        setOverview(null);
+                      }
                       notifySuccess("Kurs foydalanuvchidan olindi.");
                     } catch (error) {
                       notifyError(error instanceof Error ? error.message : "Kursni olib tashlashda xatolik.");

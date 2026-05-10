@@ -150,11 +150,13 @@ class AuthController extends Notifier<AuthState> {
   }
 
   Future<void> updateName(String name) async {
-    final updated = await ref
-        .read(authServiceProvider)
-        .updateCurrentUserName(name);
-    if (updated != null) {
-      state = _fromUser(updated);
+    try {
+      final updated = await ref.read(authServiceProvider).updateCurrentUserName(name);
+      if (updated != null) {
+        state = _fromUser(updated);
+      }
+    } on AuthServiceError {
+      rethrow;
     }
   }
 

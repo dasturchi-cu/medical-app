@@ -17,6 +17,12 @@ class AuthUserResponse(BaseModel):
     session_token: str
 
 
+class MobileProfileUpdateRequest(BaseModel):
+    user_id: str = Field(min_length=1)
+    session_token: str = Field(min_length=8)
+    display_name: str = Field(min_length=1, max_length=200)
+
+
 class UserStatusResponse(BaseModel):
     user_id: str
     is_blocked: bool

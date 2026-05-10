@@ -84,8 +84,9 @@ def update_admin_user(client: Client, *, user_id: str, payload: AdminUserUpdateR
     if len(patch) == 1:
         raise RuntimeError("No fields to update.")
 
-    result = client.table("users").update(patch).eq("id", user_id).execute()
-    row = (result.data or [None])[0]
+    result = client.table("users").update(patch).eq("id", user_id).select("*").execute()
+    rows = result.data or []
+    row = rows[0] if rows else None
     if not row:
         raise RuntimeError("User not found.")
     created = str(row.get("created_at") or "")
@@ -162,8 +163,9 @@ def list_user_entitlements(client: Client, *, user_id: str) -> list[UserEntitlem
 
 
 def revoke_user_course(client: Client, *, user_id: str, course_id: str) -> None:
-    client.table("user_entitlements").update({"is_active": False}).eq("user_id", user_id).eq("course_id", course_id).is_(
-        "section_id", None
+    # Kurs bo'yicha barcha entitlementlar (bo'lim xaridlari bilan) — aks holda qisman faol qolib ketadi.
+    client.table("user_entitlements").update({"is_active": False}).eq("user_id", user_id).eq(
+        "course_id", course_id
     ).execute()
 
 
@@ -178,12 +180,23 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
     total_entitlements = len([row for row in entitlements if row.get("course_id")])
 
     ratings_total = client.table("ratings").select("id", count="exact").eq("user_id", user_id).execute()
+    app_ratings_total = (
+        client.table("app_ratings").select("id", count="exact").eq("user_id", user_id).execute()
+    )
     ratings = (
         client.table("ratings")
         .select("course_id,stars,created_at")
         .eq("user_id", user_id)
         .order("created_at", desc=True)
-        .limit(20)
+        .limit(40)
+        .execute()
+    ).data or []
+    app_rating_rows = (
+        client.table("app_ratings")
+        .select("content_key,stars,created_at")
+        .eq("user_id", user_id)
+        .order("created_at", desc=True)
+        .limit(40)
         .execute()
     ).data or []
     comments_total = client.table("app_comments").select("id", count="exact").eq("user_id", user_id).execute()
@@ -191,7 +204,7 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         client.table("app_comments")
         .select("id", count="exact")
         .eq("user_id", user_id)
-        .not_.is_("parent_id", "null")
+        .not_.is_("parent_id", None)
         .execute()
     )
     comments = (
@@ -227,23 +240,53 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
     paid_payments = [row for row in payments if str(row.get("status") or "").lower() in {"paid", "success"}]
     purchases_count = len(paid_payments)
     paid_total_uzs = float(sum(float(row.get("amount_uzs") or 0) for row in paid_payments))
+    if purchases_count == 0:
+        pay_ent = (
+            client.table("user_entitlements")
+            .select("id", count="exact")
+            .eq("user_id", user_id)
+            .in_("source", ["payment", "payment_flow"])
+            .execute()
+        )
+        purchases_count = int(pay_ent.count or 0)
 
     course_ids_from_ratings = [str(row.get("course_id")) for row in ratings if row.get("course_id")]
+    course_ids_from_app_ratings = [
+        str(row.get("content_key") or "") for row in app_rating_rows if row.get("content_key")
+    ]
     course_ids_from_progress = [str((row.get("lessons") or {}).get("course_id")) for row in progress_rows if (row.get("lessons") or {}).get("course_id")]
-    course_ids = list({*course_ids_from_ratings, *course_ids_from_progress, *list(active_courses)})
+    course_ids = list(
+        {
+            *course_ids_from_ratings,
+            *course_ids_from_app_ratings,
+            *course_ids_from_progress,
+            *list(active_courses),
+        }
+    )
     courses_map: dict[str, str] = {}
     if course_ids:
         courses_rows = client.table("courses").select("id,title_uz").in_("id", course_ids).execute().data or []
         courses_map = {str(row.get("id")): str(row.get("title_uz") or row.get("id") or "") for row in courses_rows}
 
+    merged_rating_rows: list[tuple[str, str, int, str]] = []
+    for row in ratings:
+        cid = str(row.get("course_id") or "")
+        created_at = str(row.get("created_at") or "")
+        merged_rating_rows.append((created_at, cid, int(row.get("stars") or 0), created_at))
+    for row in app_rating_rows:
+        cid = str(row.get("content_key") or "")
+        created_at = str(row.get("created_at") or "")
+        merged_rating_rows.append((created_at, cid, int(row.get("stars") or 0), created_at))
+    merged_rating_rows.sort(key=lambda item: item[0], reverse=True)
+
     recent_ratings = [
         UserRecentRatingItem(
-            course_id=str(row.get("course_id") or ""),
-            course_title=courses_map.get(str(row.get("course_id") or ""), str(row.get("course_id") or "")),
-            stars=int(row.get("stars") or 0),
-            created_at=str(row.get("created_at") or ""),
+            course_id=cid,
+            course_title=courses_map.get(cid, cid),
+            stars=stars,
+            created_at=created_at,
         )
-        for row in ratings
+        for _, cid, stars, created_at in merged_rating_rows[:20]
     ]
     lesson_ids = [str(row.get("lesson_id") or "") for row in progress_rows if row.get("lesson_id")]
     lessons_map: dict[str, str] = {}
@@ -282,7 +325,7 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         metrics=UserOverviewMetrics(
             active_courses=len(active_courses),
             total_entitlements=total_entitlements,
-            ratings_count=int(ratings_total.count or 0),
+            ratings_count=int(ratings_total.count or 0) + int(app_ratings_total.count or 0),
             comments_count=int(comments_total.count or 0),
             likes_given_count=int(likes.count or 0),
             replies_count=int(replies_total.count or 0),

@@ -81,6 +81,7 @@ def list_purchases_admin(client: Client, *, query: str = "") -> PurchasesAdminRe
     entitlements = (
         client.table("user_entitlements")
         .select("id,user_id,course_id,created_at,is_active")
+        .eq("is_active", True)
         .is_("section_id", None)
         .order("created_at", desc=True)
         .execute()

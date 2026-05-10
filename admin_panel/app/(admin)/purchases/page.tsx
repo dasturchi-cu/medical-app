@@ -41,8 +41,13 @@ export default function PurchasesPage() {
         void load(true);
       })
       .subscribe();
+    const onVisible = () => {
+      if (document.visibilityState === "visible") void load(true);
+    };
+    document.addEventListener("visibilitychange", onVisible);
     return () => {
       mounted = false;
+      document.removeEventListener("visibilitychange", onVisible);
       if (channel) {
         void supabase?.removeChannel(channel);
       }
