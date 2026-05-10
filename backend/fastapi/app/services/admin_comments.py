@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import re
 from datetime import datetime
 from typing import Any
 
@@ -7,25 +8,47 @@ from supabase import Client
 
 from ..schemas.admin_comments import AdminCommentItem
 
+_UUID_RE = re.compile(r"^[0-9a-fA-F]{8}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{4}-[0-9a-fA-F]{12}$")
+_CHUNK = 80
+
+
+def _chunks(keys: list[str]) -> list[list[str]]:
+    return [keys[i : i + _CHUNK] for i in range(0, len(keys), _CHUNK)]
+
 
 def _resolve_course_titles(client: Client, keys: list[str]) -> dict[str, str]:
-    """course_key / course_id → kurs nomi yoki banner sarlavhasi."""
+    """course_key / course_id → kurs nomi yoki banner sarlavhasi.
+
+    UUID bo'lmagan kalitlar (masalan "test") `courses.id` bilan `.in_` ga aralashsa butun so'rov xato/yo'q bo'lishi mumkin —
+    shuning uchun UUID va matn kalitlar ajratiladi.
+    """
     out: dict[str, str] = {}
     uniq = list(dict.fromkeys(k.strip() for k in keys if (k or "").strip()))
     if not uniq:
         return out
 
-    courses_rows = client.table("courses").select("id,title_uz").in_("id", uniq).execute().data or []
-    for row in courses_rows:
-        kid = str(row.get("id") or "")
-        title = str(row.get("title_uz") or "").strip()
-        if kid and title:
-            out[kid] = title
+    uuid_keys = [k for k in uniq if _UUID_RE.match(k)]
+    text_keys = [k for k in uniq if k not in uuid_keys]
 
-    missing = [k for k in uniq if k not in out]
-    if missing:
+    for batch in _chunks(uuid_keys):
+        courses_rows = client.table("courses").select("id,title_uz").in_("id", batch).execute().data or []
+        for row in courses_rows:
+            kid = str(row.get("id") or "")
+            title = str(row.get("title_uz") or "").strip()
+            if kid and title:
+                out[kid] = title
+
+    for tk in text_keys:
+        rows = client.table("courses").select("id,title_uz").eq("title_uz", tk).limit(1).execute().data or []
+        if rows:
+            title = str(rows[0].get("title_uz") or "").strip()
+            if title:
+                out[tk] = title
+
+    missing_uuid = [k for k in uuid_keys if k not in out]
+    for batch in _chunks(missing_uuid):
         banners_by_id = (
-            client.table("course_banners").select("id,title,course_id").in_("id", missing).execute().data or []
+            client.table("course_banners").select("id,title,course_id").in_("id", batch).execute().data or []
         )
         for row in banners_by_id:
             bid = str(row.get("id") or "")
@@ -33,21 +56,21 @@ def _resolve_course_titles(client: Client, keys: list[str]) -> dict[str, str]:
             if bid and title:
                 out[bid] = title
 
-        missing2 = [k for k in missing if k not in out]
-        if missing2:
-            banners_by_course = (
-                client.table("course_banners")
-                .select("id,title,course_id")
-                .in_("course_id", missing2)
-                .execute()
-                .data
-                or []
-            )
-            for row in banners_by_course:
-                cid = str(row.get("course_id") or "")
-                title = str(row.get("title") or "").strip()
-                if cid and title and cid not in out:
-                    out[cid] = title
+    missing2_uuid = [k for k in missing_uuid if k not in out]
+    for batch in _chunks(missing2_uuid):
+        banners_by_course = (
+            client.table("course_banners")
+            .select("id,title,course_id")
+            .in_("course_id", batch)
+            .execute()
+            .data
+            or []
+        )
+        for row in banners_by_course:
+            cid = str(row.get("course_id") or "")
+            title = str(row.get("title") or "").strip()
+            if cid and title and cid not in out:
+                out[cid] = title
 
     return out
 

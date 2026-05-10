@@ -64,7 +64,7 @@ final courseCardStatsProvider = StreamProvider.autoDispose.family<CourseCardStat
     yield last;
   }
 
-  await for (final _ in Stream.periodic(const Duration(seconds: 30))) {
+  await for (final _ in Stream.periodic(const Duration(seconds: 120))) {
     try {
       last = await load();
       yield last;
@@ -116,7 +116,7 @@ final contentCardStatsProvider = StreamProvider.autoDispose.family<CourseCardSta
     yield last;
   }
 
-  await for (final _ in Stream.periodic(const Duration(seconds: 30))) {
+  await for (final _ in Stream.periodic(const Duration(seconds: 120))) {
     try {
       last = await load();
       yield last;

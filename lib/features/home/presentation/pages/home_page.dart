@@ -161,8 +161,10 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   }
 
   Future<void> _refreshCatalog() async {
-    await CatalogService.bootstrap();
-    await _syncRemoteVideoProgress();
+    await Future.wait<void>([
+      CatalogService.bootstrap(),
+      _syncRemoteVideoProgress(),
+    ]);
     if (!mounted) return;
     ref.invalidate(slidesFeedProvider);
     ref.invalidate(bannersFeedProvider);
@@ -175,9 +177,9 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     final baseUrl = getApiBaseUrl();
     if (userId.isEmpty || baseUrl.isEmpty) return;
     try {
-      final response = await http.get(
-        Uri.parse('$baseUrl/api/v1/courses/progress?user_id=$userId'),
-      );
+      final response = await http
+          .get(Uri.parse('$baseUrl/api/v1/courses/progress?user_id=$userId'))
+          .timeout(const Duration(seconds: 20));
       if (response.statusCode < 200 || response.statusCode >= 300) return;
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return;

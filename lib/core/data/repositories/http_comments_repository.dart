@@ -141,7 +141,7 @@ class HttpCommentsRepository implements CommentsRepository {
   Stream<List<AppCommentItem>> watchComments({
     required String courseKey,
     required String userId,
-    Duration pollInterval = const Duration(seconds: 6),
+    Duration pollInterval = const Duration(seconds: 15),
   }) {
     final controller = StreamController<List<AppCommentItem>>();
     RealtimeChannel? channel;
@@ -174,15 +174,12 @@ class HttpCommentsRepository implements CommentsRepository {
               ),
               callback: (_) => unawaited(push()),
             )
-            .onPostgresChanges(
-              event: PostgresChangeEvent.all,
-              schema: 'public',
-              table: 'app_comment_likes',
-              callback: (_) => unawaited(push()),
-            )
             .subscribe();
+        // app_comment_likes uchun filter yo‘q — har bir like butun ilova bo‘yicha qayta GET ga olib kelardi (sekinlik).
+        // Like yangilanishi polling orqali keladi.
       }
-      poller = Timer.periodic(pollInterval, (_) => unawaited(push()));
+      final pollMs = client != null ? pollInterval.inMilliseconds * 3 : pollInterval.inMilliseconds;
+      poller = Timer.periodic(Duration(milliseconds: pollMs.clamp(12000, 120000)), (_) => unawaited(push()));
     }
 
     unawaited(boot());

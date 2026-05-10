@@ -10,6 +10,6 @@ final courseCommentsFeedProvider = StreamProvider.autoDispose.family<List<AppCom
   return ref.read(commentsRepositoryProvider).watchComments(
     courseKey: args.courseKey,
     userId: args.userId,
-    pollInterval: const Duration(seconds: 5),
+    pollInterval: const Duration(seconds: 15),
   );
 });
