@@ -88,7 +88,10 @@ export default function CommentsPage() {
       <div className="surface-card space-y-4 p-4 sm:p-5">
         {commentThreads.length > 0 ? (
           commentThreads.map(({ root, replies }) => {
-            const courseName = courses.find((entry) => entry.id === root.course_id)?.title_uz ?? root.course_id;
+            const courseName =
+              (root.course_title && root.course_title.trim()) ||
+              courses.find((entry) => entry.id === root.course_id)?.title_uz ||
+              root.course_id;
             const isReplyOpen = replyOpenId === root.id;
             const replyValue = replyValues[root.id] ?? "";
             return (

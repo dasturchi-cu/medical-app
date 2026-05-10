@@ -364,10 +364,14 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, _) => const Center(child: Text('Izohlarni yuklashda xatolik.')),
                 data: (comments) {
-                  final rootComments = comments.where((item) => item.parentId == null || item.parentId!.isEmpty).toList(growable: false);
+                  final rootComments = comments.where((item) => item.parentId == null || item.parentId!.isEmpty).toList(growable: true)
+                    ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
                   final repliesByParent = <String, List<AppCommentItem>>{};
                   for (final item in comments.where((item) => item.parentId != null && item.parentId!.isNotEmpty)) {
                     repliesByParent.putIfAbsent(item.parentId!, () => <AppCommentItem>[]).add(item);
+                  }
+                  for (final list in repliesByParent.values) {
+                    list.sort((a, b) => a.createdAt.compareTo(b.createdAt));
                   }
                   if (rootComments.isEmpty) {
                     return Text(

@@ -8,6 +8,50 @@ from supabase import Client
 from ..schemas.admin_comments import AdminCommentItem
 
 
+def _resolve_course_titles(client: Client, keys: list[str]) -> dict[str, str]:
+    """course_key / course_id → kurs nomi yoki banner sarlavhasi."""
+    out: dict[str, str] = {}
+    uniq = list(dict.fromkeys(k.strip() for k in keys if (k or "").strip()))
+    if not uniq:
+        return out
+
+    courses_rows = client.table("courses").select("id,title_uz").in_("id", uniq).execute().data or []
+    for row in courses_rows:
+        kid = str(row.get("id") or "")
+        title = str(row.get("title_uz") or "").strip()
+        if kid and title:
+            out[kid] = title
+
+    missing = [k for k in uniq if k not in out]
+    if missing:
+        banners_by_id = (
+            client.table("course_banners").select("id,title,course_id").in_("id", missing).execute().data or []
+        )
+        for row in banners_by_id:
+            bid = str(row.get("id") or "")
+            title = str(row.get("title") or "").strip()
+            if bid and title:
+                out[bid] = title
+
+        missing2 = [k for k in missing if k not in out]
+        if missing2:
+            banners_by_course = (
+                client.table("course_banners")
+                .select("id,title,course_id")
+                .in_("course_id", missing2)
+                .execute()
+                .data
+                or []
+            )
+            for row in banners_by_course:
+                cid = str(row.get("course_id") or "")
+                title = str(row.get("title") or "").strip()
+                if cid and title and cid not in out:
+                    out[cid] = title
+
+    return out
+
+
 def _resolve_admin_actor(client: Client, configured_admin_user_id: str | None) -> str:
     configured = (configured_admin_user_id or "").strip()
     if configured:
@@ -27,6 +71,13 @@ def list_admin_comments(client: Client, *, configured_admin_user_id: str | None 
         return []
     comments = list(legacy_comments) + list(app_comments)
     comments.sort(key=lambda row: str(row.get("created_at") or ""), reverse=True)
+    course_keys = [
+        str(row.get("course_id") or row.get("course_key") or "").strip()
+        for row in comments
+        if (row.get("course_id") or row.get("course_key"))
+    ]
+    title_by_key = _resolve_course_titles(client, course_keys)
+
     user_ids = list({str(row.get("user_id")) for row in comments if row.get("user_id")})
     users = (
         client.table("users").select("id,full_name,phone").in_("id", user_ids).execute().data
@@ -62,10 +113,12 @@ def list_admin_comments(client: Client, *, configured_admin_user_id: str | None 
 
     items: list[AdminCommentItem] = []
     for row in comments:
+        ck = str(row.get("course_id") or row.get("course_key") or "")
         items.append(
             AdminCommentItem(
                 id=str(row.get("id") or ""),
-                course_id=str(row.get("course_id") or row.get("course_key") or ""),
+                course_id=ck,
+                course_title=title_by_key.get(ck.strip(), ""),
                 user_id=str(row.get("user_id") or ""),
                 user_name=str(
                     row.get("author_name")
@@ -136,9 +189,12 @@ def add_admin_reply(client: Client, *, comment_id: str, text: str, configured_ad
             or 0
         )
         client.table("app_comments").update({"replies_count": replies_count}).eq("id", comment_id).execute()
+    ck = str(item.get("course_id") or item.get("course_key") or "")
+    titles = _resolve_course_titles(client, [ck]) if ck.strip() else {}
     return AdminCommentItem(
         id=str(item.get("id") or ""),
-        course_id=str(item.get("course_id") or item.get("course_key") or ""),
+        course_id=ck,
+        course_title=titles.get(ck.strip(), ""),
         user_id=admin_user_id,
         user_name=author,
         text=str(item.get("text") or ""),
@@ -193,9 +249,12 @@ def toggle_admin_heart(client: Client, *, comment_id: str, configured_admin_user
         or row.get("user_id")
         or ""
     )
+    ck = str(row.get(course_column) or "")
+    titles = _resolve_course_titles(client, [ck]) if ck.strip() else {}
     return AdminCommentItem(
         id=str(row.get("id") or ""),
-        course_id=str(row.get(course_column) or ""),
+        course_id=ck,
+        course_title=titles.get(ck.strip(), ""),
         user_id=str(row.get("user_id") or ""),
         user_name=name,
         text=str(row.get("text") or ""),

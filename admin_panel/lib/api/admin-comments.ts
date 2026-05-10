@@ -3,6 +3,7 @@ import { apiFetch, getApiConfig } from "@/lib/api/config";
 export interface AdminCommentItem {
   id: string;
   course_id: string;
+  course_title?: string;
   user_id: string;
   user_name: string;
   text: string;

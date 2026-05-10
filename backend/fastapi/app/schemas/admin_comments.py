@@ -4,6 +4,7 @@ from pydantic import BaseModel, Field
 class AdminCommentItem(BaseModel):
     id: str
     course_id: str
+    course_title: str = ""
     user_id: str
     user_name: str
     text: str

@@ -6,6 +6,7 @@ from typing import Any
 
 from supabase import Client
 
+from .admin_comments import _resolve_course_titles
 from ..schemas.admin_users import (
     AdminUserItem,
     AdminUserUpdateRequest,
@@ -298,6 +299,18 @@ def get_user_overview(client: Client, *, user_id: str) -> UserOverviewResponse:
         courses_rows = client.table("courses").select("id,title_uz,price_uzs").in_("id", course_ids).execute().data or []
         courses_map = {str(row.get("id")): str(row.get("title_uz") or row.get("id") or "") for row in courses_rows}
         course_price_map = {str(row.get("id")): float(row.get("price_uzs") or 0) for row in courses_rows}
+
+    comment_keys_unique = list(
+        dict.fromkeys(
+            str(row.get("course_key") or "").strip()
+            for row in comments
+            if str(row.get("course_key") or "").strip()
+        )
+    )
+    if comment_keys_unique:
+        for ck, title in _resolve_course_titles(client, comment_keys_unique).items():
+            if title:
+                courses_map[ck] = title
 
     if paid_total_uzs <= 0 and active_entitlement_course_ids:
         paid_total_uzs = float(sum(course_price_map.get(course_id, 0.0) for course_id in active_entitlement_course_ids))

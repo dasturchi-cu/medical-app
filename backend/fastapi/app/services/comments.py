@@ -42,7 +42,7 @@ def list_comments(
         client.table("app_comments")
         .select("*")
         .eq("course_key", course_key)
-        .order("created_at", desc=False)
+        .order("created_at", desc=True)
         .limit(200)
         .execute()
     ).data or []
