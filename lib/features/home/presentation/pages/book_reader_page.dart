@@ -77,6 +77,9 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
         _bookAccessGranted = granted;
         _purchaseGateLoading = false;
       });
+      if (granted) {
+        ref.invalidate(paidBookIdsProvider);
+      }
     } catch (e, st) {
       debugPrint('[book_reader] access check failed: $e\n$st');
       if (!mounted) return;

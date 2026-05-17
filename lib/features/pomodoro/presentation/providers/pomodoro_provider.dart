@@ -1,9 +1,10 @@
 import 'dart:async';
 import 'dart:convert';
 
-import 'package:flutter/foundation.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:flutter/widgets.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/config/api_config.dart';
 import '../../../../core/state/auth_controller.dart';
@@ -84,9 +85,13 @@ final pomodoroProvider =
 );
 
 class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
+  static const _prefsKey = 'pomodoro_state_v1';
   Timer? _timer;
   int _persistedFocusSeconds = 0;
   bool _isDisposed = false;
+  String? _sessionId;
+  int _lastSyncedAtMs = 0;
+  bool _hydrated = false;
 
   @override
   PomodoroState build() {
@@ -94,6 +99,10 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
       _isDisposed = true;
       _cancelTimer();
     });
+    if (!_hydrated) {
+      _hydrated = true;
+      unawaited(_hydrateFromDisk());
+    }
     return PomodoroState.initial();
   }
 
@@ -101,6 +110,7 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
     if (state.sessionType == type) return;
     _cancelTimer();
     _persistedFocusSeconds = 0;
+    _sessionId = null;
     final duration = _durationFor(type);
     state = state.copyWith(
       sessionType: type,
@@ -108,6 +118,7 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
       remainingSeconds: duration,
       isRunning: false,
     );
+    unawaited(_persistToDisk());
   }
 
   void updateFocusMinutes(int minutes) {
@@ -122,7 +133,9 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
     if (isFocus) {
       _cancelTimer();
       _persistedFocusSeconds = 0;
+      _sessionId = null;
     }
+    unawaited(_persistToDisk());
   }
 
   void updateBreakMinutes(int minutes) {
@@ -135,10 +148,12 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
       isRunning: isBreak ? false : state.isRunning,
     );
     if (isBreak) _cancelTimer();
+    unawaited(_persistToDisk());
   }
 
   void toggleSound(bool value) {
     state = state.copyWith(soundOn: value);
+    unawaited(_persistToDisk());
   }
 
   void start() {
@@ -146,29 +161,51 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
     if (state.remainingSeconds <= 0) {
       reset();
     }
+    if (_sessionId == null && state.sessionType == PomodoroSessionType.focus) {
+      unawaited(_sendSessionLifecycle('start', focusSeconds: state.totalSeconds));
+    } else if (_sessionId != null && state.sessionType == PomodoroSessionType.focus) {
+      unawaited(_sendSessionLifecycle('resume'));
+    }
     state = state.copyWith(isRunning: true);
+    _lastSyncedAtMs = DateTime.now().millisecondsSinceEpoch;
     _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+    unawaited(_persistToDisk());
   }
 
-  void pause() {
+  void pause() => _haltRunning(updateProvider: true);
+
+  void _haltRunning({required bool updateProvider}) {
     if (!state.isRunning) return;
     _cancelTimer();
-    state = state.copyWith(isRunning: false);
+    final sendPause =
+        _sessionId != null && state.sessionType == PomodoroSessionType.focus;
+    if (updateProvider && !_isDisposed) {
+      state = state.copyWith(isRunning: false);
+    }
+    if (sendPause) {
+      unawaited(_sendSessionLifecycle('pause'));
+    }
+    if (updateProvider && !_isDisposed) {
+      unawaited(_persistToDisk());
+    }
   }
 
   void reset() {
     _cancelTimer();
     _persistedFocusSeconds = 0;
+    _sessionId = null;
     final duration = _durationFor(state.sessionType);
     state = state.copyWith(
       isRunning: false,
       totalSeconds: duration,
       remainingSeconds: duration,
     );
+    unawaited(_persistToDisk());
   }
 
   void _tick() {
     if (_isDisposed) return;
+    _syncWallClockDrift();
     final seconds = state.remainingSeconds;
     if (seconds <= 1) {
       _cancelTimer();
@@ -196,12 +233,25 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
             ),
           );
         }
+        if (_sessionId != null) {
+          unawaited(
+            _sendSessionLifecycle(
+              'finish',
+              durationSec: state.totalSeconds,
+              status: 'completed',
+            ),
+          );
+          _sessionId = null;
+        }
       }
+      unawaited(_persistToDisk());
       return;
     }
 
     if (_isDisposed) return;
     state = state.copyWith(remainingSeconds: seconds - 1);
+    _lastSyncedAtMs = DateTime.now().millisecondsSinceEpoch;
+    unawaited(_persistToDisk());
   }
 
   int _durationFor(PomodoroSessionType type) {
@@ -215,9 +265,159 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
     _timer = null;
   }
 
+  Future<void> onAppLifecycleChanged(AppLifecycleState stateValue) async {
+    if (stateValue == AppLifecycleState.resumed) {
+      _syncWallClockDrift();
+      if (state.isRunning && _timer == null) {
+        _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+      }
+      await _persistToDisk();
+      return;
+    }
+    if (stateValue == AppLifecycleState.inactive ||
+        stateValue == AppLifecycleState.paused ||
+        stateValue == AppLifecycleState.detached) {
+      _lastSyncedAtMs = DateTime.now().millisecondsSinceEpoch;
+      await _persistToDisk();
+    }
+  }
+
+  void _syncWallClockDrift() {
+    if (!state.isRunning || _lastSyncedAtMs <= 0) return;
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    final delta = ((nowMs - _lastSyncedAtMs) / 1000).floor();
+    if (delta <= 0) return;
+    final next = (state.remainingSeconds - delta).clamp(0, state.totalSeconds);
+    if (next == state.remainingSeconds) return;
+    state = state.copyWith(remainingSeconds: next);
+    _lastSyncedAtMs = nowMs;
+  }
+
+  Future<void> _persistToDisk() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        _prefsKey,
+        jsonEncode({
+          'sessionType': state.sessionType.name,
+          'focusMinutes': state.focusMinutes,
+          'breakMinutes': state.breakMinutes,
+          'soundOn': state.soundOn,
+          'totalSeconds': state.totalSeconds,
+          'remainingSeconds': state.remainingSeconds,
+          'isRunning': state.isRunning,
+          'pomodoroCount': state.pomodoroCount,
+          'completedSessions': state.completedSessions,
+          'persistedFocusSeconds': _persistedFocusSeconds,
+          'sessionId': _sessionId,
+          'lastSyncedAtMs': DateTime.now().millisecondsSinceEpoch,
+        }),
+      );
+    } catch (_) {}
+  }
+
+  Future<void> _hydrateFromDisk() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString(_prefsKey);
+      if (raw == null || raw.trim().isEmpty) return;
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map<String, dynamic>) return;
+      final typeRaw = (decoded['sessionType'] ?? 'focus').toString();
+      final restoredType = typeRaw == PomodoroSessionType.breakTime.name
+          ? PomodoroSessionType.breakTime
+          : PomodoroSessionType.focus;
+      _persistedFocusSeconds =
+          int.tryParse((decoded['persistedFocusSeconds'] ?? '0').toString()) ?? 0;
+      _sessionId = (decoded['sessionId'] ?? '').toString().trim().isEmpty
+          ? null
+          : (decoded['sessionId'] ?? '').toString();
+      _lastSyncedAtMs =
+          int.tryParse((decoded['lastSyncedAtMs'] ?? '0').toString()) ?? 0;
+      final restored = PomodoroState(
+        sessionType: restoredType,
+        focusMinutes: int.tryParse((decoded['focusMinutes'] ?? '25').toString()) ?? 25,
+        breakMinutes: int.tryParse((decoded['breakMinutes'] ?? '5').toString()) ?? 5,
+        soundOn: decoded['soundOn'] != false,
+        totalSeconds: int.tryParse((decoded['totalSeconds'] ?? '1500').toString()) ?? 1500,
+        remainingSeconds:
+            int.tryParse((decoded['remainingSeconds'] ?? '1500').toString()) ?? 1500,
+        isRunning: decoded['isRunning'] == true,
+        pomodoroCount: int.tryParse((decoded['pomodoroCount'] ?? '1').toString()) ?? 1,
+        completedSessions:
+            int.tryParse((decoded['completedSessions'] ?? '0').toString()) ?? 0,
+      );
+      if (_isDisposed) return;
+      state = restored;
+      _syncWallClockDrift();
+      if (state.isRunning && _timer == null) {
+        _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+      }
+    } catch (e) {
+      debugPrint('[Pomodoro][hydrate] $e');
+    }
+  }
+
+  Future<void> _sendSessionLifecycle(
+    String action, {
+    int? focusSeconds,
+    int? durationSec,
+    String status = 'completed',
+  }) async {
+    final auth = ref.read(authControllerProvider);
+    final userId = auth.userId ?? '';
+    final baseUrl = getApiBaseUrl();
+    if (userId.isEmpty || baseUrl.isEmpty) return;
+    final headers = const {'Content-Type': 'application/json'};
+    try {
+      if (action == 'start') {
+        final res = await http.post(
+          Uri.parse('$baseUrl/api/v1/pomodoro/session/start'),
+          headers: headers,
+          body: jsonEncode({
+            'user_id': userId,
+            'focus_seconds': focusSeconds ?? state.totalSeconds,
+          }),
+        );
+        if (res.statusCode >= 200 && res.statusCode < 300) {
+          final body = jsonDecode(res.body);
+          if (body is Map<String, dynamic>) {
+            final sid = (body['session_id'] ?? '').toString().trim();
+            if (sid.isNotEmpty) _sessionId = sid;
+          }
+        }
+        return;
+      }
+      final sid = (_sessionId ?? '').trim();
+      if (sid.isEmpty) return;
+      if (action == 'pause' || action == 'resume') {
+        await http.post(
+          Uri.parse('$baseUrl/api/v1/pomodoro/session/$action'),
+          headers: headers,
+          body: jsonEncode({'user_id': userId, 'session_id': sid}),
+        );
+        return;
+      }
+      if (action == 'finish') {
+        await http.post(
+          Uri.parse('$baseUrl/api/v1/pomodoro/session/finish'),
+          headers: headers,
+          body: jsonEncode({
+            'user_id': userId,
+            'session_id': sid,
+            'duration_sec': durationSec ?? (state.totalSeconds - state.remainingSeconds),
+            'status': status,
+          }),
+        );
+      }
+    } catch (e) {
+      debugPrint('[Pomodoro][lifecycle:$action] $e');
+    }
+  }
+
   Future<void> stopForPageExit() async {
     // Pomodoro sahifadan chiqilganda timer/background yozuvni to'xtatamiz.
-    pause();
+    _haltRunning(updateProvider: false);
     if (state.sessionType != PomodoroSessionType.focus) return;
     final elapsed = (state.totalSeconds - state.remainingSeconds).clamp(
       0,
@@ -230,6 +430,15 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
       focusSeconds: delta,
       completedCycles: 0,
     );
+    if (_sessionId != null) {
+      await _sendSessionLifecycle(
+        'finish',
+        durationSec: elapsed,
+        status: 'stopped',
+      );
+      _sessionId = null;
+    }
+    await _persistToDisk();
   }
 
   Future<void> _sendPomodoroSession({

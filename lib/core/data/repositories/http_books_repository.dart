@@ -26,6 +26,7 @@ class HttpBooksRepository implements BooksRepository {
   DateTime? _cachedAt;
   Future<List<BookItemModel>>? _inFlight;
   static const Duration _cacheTtl = Duration(minutes: 5);
+  bool _entitlementsEndpointUnsupported = false;
 
   @override
   Future<List<BookItemModel>> fetchBooks({bool forceRefresh = false}) async {
@@ -111,7 +112,9 @@ class HttpBooksRepository implements BooksRepository {
 
     Future<void> push() async {
       if (disposed) return;
-      controller.add(await fetchBooks());
+      final items = await fetchBooks();
+      if (disposed || controller.isClosed) return;
+      controller.add(items);
     }
 
     Future<void> boot() async {
@@ -153,30 +156,91 @@ class HttpBooksRepository implements BooksRepository {
     return raw.whereType<Map<String, dynamic>>().map(BookProgressModel.fromJson).toList(growable: false);
   }
 
-  @override
-  Future<Set<String>> fetchPaidBookIds({required String userId}) async {
+  Set<String> _parseEntitlementBookIds(Map<String, dynamic> body) {
+    final ids = <String>{};
+    void addId(dynamic value) {
+      final id = value?.toString().trim() ?? '';
+      if (id.isNotEmpty) ids.add(id);
+    }
+
+    final bookIds = body['book_ids'];
+    if (bookIds is List) {
+      for (final entry in bookIds) {
+        addId(entry);
+      }
+    }
+
+    final flatIds = body['ids'];
+    if (flatIds is List) {
+      for (final entry in flatIds) {
+        addId(entry);
+      }
+    }
+
+    final items = body['items'];
+    if (items is List) {
+      for (final entry in items) {
+        if (entry is Map<String, dynamic>) {
+          addId(entry['book_id'] ?? entry['id']);
+        } else {
+          addId(entry);
+        }
+      }
+    }
+
+    return ids;
+  }
+
+  Future<Set<String>> _fetchEntitlementBookIds({required String userId}) async {
     if (baseUrl.isEmpty || userId.isEmpty) return const <String>{};
+    if (_entitlementsEndpointUnsupported) return const <String>{};
     try {
       final uri = Uri.parse('$baseUrl/api/v1/content/books/entitlements').replace(
         queryParameters: {'user_id': userId},
       );
       final response =
           await _client.get(uri).timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
+      if (response.statusCode == 405) {
+        _entitlementsEndpointUnsupported = true;
+        debugPrint('[API][books.entitlements][unsupported] status=405, fallback to /access only');
+        return const <String>{};
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
+        debugPrint('[API][books.entitlements][response] status=${response.statusCode}');
         return const <String>{};
       }
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return const <String>{};
-      final raw = body['book_ids'];
-      if (raw is! List) return const <String>{};
-      return raw
-          .map((e) => e?.toString().trim() ?? '')
-          .where((e) => e.isNotEmpty)
-          .toSet();
+      return _parseEntitlementBookIds(body);
     } catch (e, st) {
       debugPrint('[API][books.entitlements][error] $e\n$st');
       return const <String>{};
     }
+  }
+
+  @override
+  Future<Set<String>> fetchPaidBookIds({required String userId}) async {
+    if (baseUrl.isEmpty || userId.isEmpty) return const <String>{};
+    debugPrint('[API][books.paidIds][start] userId=$userId');
+
+    final books = await fetchBooks();
+    final paidBooks = books.where((b) => b.isPaid).toList(growable: false);
+    if (paidBooks.isEmpty) return const <String>{};
+
+    final granted = <String>{...await _fetchEntitlementBookIds(userId: userId)};
+
+    // Reader `/access` bilan bir xil manba — entitlements bo'sh/noto'g'ri bo'lsa ham qulf ochiladi.
+    for (final book in paidBooks) {
+      if (granted.contains(book.id)) continue;
+      if (await hasPaidBookAccess(userId: userId, bookId: book.id)) {
+        granted.add(book.id);
+      }
+    }
+
+    if (granted.isNotEmpty) {
+      debugPrint('[API][books.entitlements][resolved] count=${granted.length}');
+    }
+    return granted;
   }
 
   @override
@@ -189,8 +253,10 @@ class HttpBooksRepository implements BooksRepository {
       final uri = Uri.parse('$baseUrl/api/v1/content/books/access').replace(
         queryParameters: {'user_id': userId, 'book_id': bookId},
       );
+      debugPrint('[API][books.access][request] bookId=$bookId');
       final response =
           await _client.get(uri).timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
+      debugPrint('[API][books.access][response] bookId=$bookId status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) return false;
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return false;

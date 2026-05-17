@@ -40,9 +40,7 @@ class HttpRankingRepository implements RankingRepository {
       throw Exception('$label: bo‘sh javob.');
     }
     if (trimmed.startsWith('<')) {
-      throw Exception(
-        '$label: server HTML qaytardi. Backend yangilangan va ishlayotganini tekshiring.',
-      );
+      throw Exception("Reytingni yuklab bo'lmadi. Qayta urinib ko'ring.");
     }
     try {
       return jsonDecode(trimmed);
@@ -50,7 +48,7 @@ class HttpRankingRepository implements RankingRepository {
       debugPrint(
         '[RANKING] JSON parse failed ($label): $e body=${trimmed.length > 240 ? '${trimmed.substring(0, 240)}…' : trimmed}',
       );
-      throw Exception('Reyting javobi JSON emas.');
+      throw Exception("Reytingni yuklab bo'lmadi. Qayta urinib ko'ring.");
     }
   }
 
@@ -63,14 +61,14 @@ class HttpRankingRepository implements RankingRepository {
           .toList(growable: false);
     }
     if (body is! Map<String, dynamic>) {
-      throw Exception('Reyting javobi JSON emas.');
+      throw Exception("Reytingni yuklab bo'lmadi. Qayta urinib ko'ring.");
     }
     final raw = body['items'];
     if (raw == null) {
       return const [];
     }
     if (raw is! List) {
-      throw Exception("Reyting ro'yxati topilmadi.");
+      throw Exception("Reytingni yuklab bo'lmadi. Qayta urinib ko'ring.");
     }
     return raw
         .whereType<Map<String, dynamic>>()

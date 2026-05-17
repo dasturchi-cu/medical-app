@@ -8,6 +8,128 @@ import 'package:supabase/supabase.dart';
 import '../models/notification_models.dart';
 import 'notifications_repository.dart';
 
+/// Bitta foydalanuvchi uchun yagona feed oqimi — Riverpod `invalidate` spamini oldini oladi.
+class _NotificationFeedSession {
+  _NotificationFeedSession({
+    required this.repository,
+    required this.userId,
+    required this.pollInterval,
+  });
+
+  final HttpNotificationsRepository repository;
+  final String userId;
+  final Duration pollInterval;
+
+  final StreamController<List<AppNotificationItem>> controller =
+      StreamController<List<AppNotificationItem>>.broadcast();
+  RealtimeChannel? channel;
+  Timer? poller;
+  Timer? publishDebounce;
+  var disposed = false;
+  var publishInFlight = false;
+  var bootstrapped = false;
+  List<AppNotificationItem>? lastFeed;
+
+  Stream<List<AppNotificationItem>> get stream => controller.stream;
+
+  Future<void> publishLatest({bool force = false}) async {
+    if (disposed) return;
+    if (publishInFlight && !force) return;
+    publishInFlight = true;
+    try {
+      final feed = await repository.fetchFeed(userId: userId);
+      if (disposed) return;
+      lastFeed = feed;
+      controller.add(feed);
+    } catch (error, stackTrace) {
+      if (!disposed) controller.addError(error, stackTrace);
+    } finally {
+      publishInFlight = false;
+    }
+  }
+
+  void schedulePublishLatest({bool force = false}) {
+    if (disposed) return;
+    if (force) {
+      publishDebounce?.cancel();
+      unawaited(publishLatest(force: true));
+      return;
+    }
+    publishDebounce?.cancel();
+    publishDebounce = Timer(const Duration(milliseconds: 800), () {
+      unawaited(publishLatest());
+    });
+  }
+
+  void onRealtimeChange(PostgresChangePayload payload) {
+    debugPrint('[realtime][notifications] ${payload.table} ${payload.eventType}');
+    schedulePublishLatest();
+  }
+
+  Future<void> startRealtime() async {
+    final client = repository.realtimeClient;
+    if (client == null) return;
+
+    channel = client
+        .channel('app-notifications-$userId')
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notification_deliveries',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: onRealtimeChange,
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notifications',
+          callback: onRealtimeChange,
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'notification_click_events',
+          filter: PostgresChangeFilter(
+            type: PostgresChangeFilterType.eq,
+            column: 'user_id',
+            value: userId,
+          ),
+          callback: onRealtimeChange,
+        );
+    channel?.subscribe();
+  }
+
+  Future<void> bootstrap() async {
+    if (bootstrapped || disposed) return;
+    bootstrapped = true;
+    await publishLatest(force: true);
+    await startRealtime();
+    poller = Timer.periodic(pollInterval, (_) => schedulePublishLatest());
+  }
+
+  void ensureStarted() {
+    if (lastFeed != null && !controller.isClosed) {
+      controller.add(lastFeed!);
+    }
+    unawaited(bootstrap());
+  }
+
+  Future<void> dispose() async {
+    if (disposed) return;
+    disposed = true;
+    publishDebounce?.cancel();
+    poller?.cancel();
+    if (channel != null) {
+      await repository.realtimeClient?.removeChannel(channel!);
+    }
+    await controller.close();
+  }
+}
+
 class HttpNotificationsRepository implements NotificationsRepository {
   HttpNotificationsRepository({
     required this.baseUrl,
@@ -18,6 +140,8 @@ class HttpNotificationsRepository implements NotificationsRepository {
   final String baseUrl;
   final http.Client? client;
   final SupabaseClient? realtimeClient;
+
+  static final Map<String, _NotificationFeedSession> _feedSessions = {};
 
   http.Client get _client => client ?? http.Client();
 
@@ -83,6 +207,7 @@ class HttpNotificationsRepository implements NotificationsRepository {
         _errorMessage('Bildirishnomani ko‘rildi belgilashda xatolik (${response.statusCode}).', response.body),
       );
     }
+    requestFeedRefresh(userId: userId);
   }
 
   @override
@@ -108,91 +233,41 @@ class HttpNotificationsRepository implements NotificationsRepository {
     }
   }
 
+  _NotificationFeedSession _sessionFor(String userId, Duration pollInterval) {
+    return _feedSessions.putIfAbsent(
+      userId,
+      () => _NotificationFeedSession(
+        repository: this,
+        userId: userId,
+        pollInterval: pollInterval,
+      ),
+    );
+  }
+
   @override
   Stream<List<AppNotificationItem>> watchFeed({
     required String userId,
-    Duration pollInterval = const Duration(seconds: 8),
+    Duration pollInterval = const Duration(seconds: 30),
   }) {
     if (userId.isEmpty) return Stream.value(const []);
 
-    final controller = StreamController<List<AppNotificationItem>>();
-    RealtimeChannel? channel;
-    Timer? poller;
-    var disposed = false;
+    final session = _sessionFor(userId, pollInterval);
+    session.ensureStarted();
+    return session.stream;
+  }
 
-    Future<void> publishLatest() async {
-      if (disposed) return;
-      try {
-        final feed = await fetchFeed(userId: userId);
-        if (!disposed) controller.add(feed);
-      } catch (error, stackTrace) {
-        if (!disposed) controller.addError(error, stackTrace);
-      }
+  @override
+  void requestFeedRefresh({required String userId}) {
+    if (userId.isEmpty) return;
+    final session = _feedSessions[userId];
+    if (session == null) return;
+    session.schedulePublishLatest(force: true);
+  }
+
+  static void clearFeedSession(String userId) {
+    final session = _feedSessions.remove(userId);
+    if (session != null) {
+      unawaited(session.dispose());
     }
-
-    void onRealtimeChange(PostgresChangePayload payload) {
-      // Any relevant DB change should instantly refresh user's feed.
-      debugPrint('[realtime][notifications] ${payload.table} ${payload.eventType}');
-      unawaited(publishLatest());
-    }
-
-    Future<void> startRealtime() async {
-      final client = realtimeClient;
-      if (client == null) return;
-
-      channel = client
-          .channel('app-notifications-$userId')
-          .onPostgresChanges(
-            event: PostgresChangeEvent.all,
-            schema: 'public',
-            table: 'notification_deliveries',
-            filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'user_id',
-              value: userId,
-            ),
-            callback: onRealtimeChange,
-          )
-          .onPostgresChanges(
-            event: PostgresChangeEvent.all,
-            schema: 'public',
-            table: 'notifications',
-            callback: onRealtimeChange,
-          )
-          .onPostgresChanges(
-            event: PostgresChangeEvent.all,
-            schema: 'public',
-            table: 'notification_click_events',
-            filter: PostgresChangeFilter(
-              type: PostgresChangeFilterType.eq,
-              column: 'user_id',
-              value: userId,
-            ),
-            callback: onRealtimeChange,
-          );
-      channel?.subscribe();
-    }
-
-    Future<void> bootstrap() async {
-      await publishLatest();
-      await startRealtime();
-      poller = Timer.periodic(pollInterval, (_) {
-        // Fallback sync to recover from temporary websocket drops.
-        unawaited(publishLatest());
-      });
-    }
-
-    unawaited(bootstrap());
-
-    controller.onCancel = () async {
-      disposed = true;
-      poller?.cancel();
-      if (channel != null) {
-        await realtimeClient?.removeChannel(channel!);
-      }
-      await controller.close();
-    };
-
-    return controller.stream;
   }
 }

@@ -18,8 +18,7 @@ final bookProgressProvider = FutureProvider<List<BookProgressModel>>((ref) async
 });
 
 final paidBookIdsProvider = StreamProvider<Set<String>>((ref) {
-  final auth = ref.watch(authControllerProvider);
-  final userId = auth.userId ?? '';
+  final userId = ref.watch(authControllerProvider.select((s) => s.userId)) ?? '';
   if (userId.isEmpty) {
     return Stream.value(const <String>{});
   }
@@ -35,7 +34,7 @@ final paidBookIdsProvider = StreamProvider<Set<String>>((ref) {
   }
 
   unawaited(push());
-  timer = Timer.periodic(const Duration(seconds: 15), (_) => unawaited(push()));
+  timer = Timer.periodic(const Duration(seconds: 8), (_) => unawaited(push()));
 
   ref.onDispose(() async {
     disposed = true;

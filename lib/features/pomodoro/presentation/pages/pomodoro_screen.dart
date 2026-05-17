@@ -20,7 +20,8 @@ class PomodoroScreen extends ConsumerStatefulWidget {
   ConsumerState<PomodoroScreen> createState() => _PomodoroScreenState();
 }
 
-class _PomodoroScreenState extends ConsumerState<PomodoroScreen> {
+class _PomodoroScreenState extends ConsumerState<PomodoroScreen>
+    with WidgetsBindingObserver {
   late final ProviderSubscription<PomodoroState> _soundSubscription;
   late final AudioPlayer _audioPlayer;
   late final PomodoroController _pomodoroController;
@@ -28,6 +29,7 @@ class _PomodoroScreenState extends ConsumerState<PomodoroScreen> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
     _pomodoroController = ref.read(pomodoroProvider.notifier);
     _audioPlayer = AudioPlayer();
     _soundSubscription = ref.listenManual<PomodoroState>(pomodoroProvider, (
@@ -44,10 +46,18 @@ class _PomodoroScreenState extends ConsumerState<PomodoroScreen> {
 
   @override
   void dispose() {
-    unawaited(_pomodoroController.stopForPageExit());
+    // Provider yangilanishini widget unmount paytida emas, keyingi microtaskda qilamiz.
+    final controller = _pomodoroController;
+    Future(() => unawaited(controller.stopForPageExit()));
+    WidgetsBinding.instance.removeObserver(this);
     _audioPlayer.dispose();
     _soundSubscription.close();
     super.dispose();
+  }
+
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    unawaited(_pomodoroController.onAppLifecycleChanged(state));
   }
 
   Future<void> _playCompletionAlert() async {

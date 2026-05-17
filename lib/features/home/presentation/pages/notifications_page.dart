@@ -2,9 +2,12 @@ import 'dart:convert';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:go_router/go_router.dart';
 
 import '../../../../core/di/providers.dart';
+import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/auth_controller.dart';
+import '../../../../core/state/books_state.dart';
 import '../../../../core/state/notifications_state.dart';
 
 class NotificationsPage extends ConsumerWidget {
@@ -36,7 +39,22 @@ class NotificationsPage extends ConsumerWidget {
                   final userId = auth.userId ?? '';
                   await repo.markViewed(userId: userId, notificationId: item.id);
                   await repo.markClicked(userId: userId, notificationId: item.id);
-                  ref.invalidate(notificationsFeedProvider);
+                  repo.requestFeedRefresh(userId: userId);
+                  if (item.type == 'book_granted') {
+                    ref.invalidate(paidBookIdsProvider);
+                  }
+                  if (!context.mounted) return;
+                  final bookId = item.data['book_id'] ?? '';
+                  if (item.type == 'book_granted' && bookId.isNotEmpty) {
+                    context.push('${AppRoutes.bookReader}?id=$bookId');
+                    return;
+                  }
+                  final route = item.route.trim();
+                  if (route.isNotEmpty) {
+                    context.push(route.startsWith('/') ? route : '/$route');
+                    return;
+                  }
+                  context.push(AppRoutes.books);
                 },
                 child: Card(
                   margin: EdgeInsets.zero,

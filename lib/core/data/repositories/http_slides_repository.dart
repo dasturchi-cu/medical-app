@@ -111,7 +111,9 @@ class HttpSlidesRepository implements SlidesRepository {
 
     Future<void> push() async {
       if (disposed) return;
-      controller.add(await fetchSlides());
+      final items = await fetchSlides();
+      if (disposed || controller.isClosed) return;
+      controller.add(items);
     }
 
     Future<void> boot() async {

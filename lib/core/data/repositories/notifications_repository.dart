@@ -6,6 +6,9 @@ abstract class NotificationsRepository {
   Future<void> markClicked({required String userId, required String notificationId});
   Stream<List<AppNotificationItem>> watchFeed({
     required String userId,
-    Duration pollInterval = const Duration(seconds: 8),
+    Duration pollInterval = const Duration(seconds: 30),
   });
+
+  /// Debounced manual refresh — StreamProvider ni qayta yaratmasdan feed yangilanadi.
+  void requestFeedRefresh({required String userId});
 }

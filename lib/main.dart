@@ -13,6 +13,8 @@ import 'core/state/auth_controller.dart';
 import 'core/services/catalog_service.dart';
 import 'core/services/home_feeds_disk_cache.dart';
 import 'core/services/push_messaging.dart';
+import 'core/di/providers.dart';
+import 'core/state/books_state.dart';
 import 'core/state/notifications_state.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_provider.dart';
@@ -62,22 +64,36 @@ class NeuroscienceApp extends ConsumerStatefulWidget {
 
 class _NeuroscienceAppState extends ConsumerState<NeuroscienceApp>
     with WidgetsBindingObserver {
+  Timer? _notificationsFeedRefreshDebounce;
+
+  void _scheduleNotificationsFeedRefresh() {
+    _notificationsFeedRefreshDebounce?.cancel();
+    _notificationsFeedRefreshDebounce = Timer(const Duration(milliseconds: 800), () {
+      if (!mounted) return;
+      final userId = ref.read(authControllerProvider).userId ?? '';
+      if (userId.isNotEmpty) {
+        ref.read(notificationsRepositoryProvider).requestFeedRefresh(userId: userId);
+      }
+      ref.invalidate(paidBookIdsProvider);
+    });
+  }
+
   @override
   void initState() {
     super.initState();
-    onNotificationsFeedShouldRefresh = () {
-      ref.invalidate(notificationsFeedProvider);
-    };
+    onNotificationsFeedShouldRefresh = _scheduleNotificationsFeedRefresh;
     WidgetsBinding.instance.addObserver(this);
     WidgetsBinding.instance.addPostFrameCallback((_) {
-      unawaited(
-        ref.read(authControllerProvider.notifier).rehydrateFromStorage(),
-      );
+      unawaited(() async {
+        await ref.read(authControllerProvider.notifier).rehydrateFromStorage();
+        await trySyncDeviceTokenNow();
+      }());
     });
   }
 
   @override
   void dispose() {
+    _notificationsFeedRefreshDebounce?.cancel();
     onNotificationsFeedShouldRefresh = null;
     WidgetsBinding.instance.removeObserver(this);
     super.dispose();
@@ -86,10 +102,11 @@ class _NeuroscienceAppState extends ConsumerState<NeuroscienceApp>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      ref.invalidate(notificationsFeedProvider);
-      unawaited(
-        ref.read(authControllerProvider.notifier).rehydrateFromStorage(),
-      );
+      _scheduleNotificationsFeedRefresh();
+      unawaited(() async {
+        await ref.read(authControllerProvider.notifier).rehydrateFromStorage();
+        await trySyncDeviceTokenNow();
+      }());
     }
   }
 

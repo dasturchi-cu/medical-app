@@ -1,12 +1,17 @@
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 
 import '../data/models/notification_models.dart';
+import '../data/repositories/http_notifications_repository.dart';
 import '../di/providers.dart';
 import 'auth_controller.dart';
 
 final notificationsFeedProvider = StreamProvider<List<AppNotificationItem>>((ref) {
-  final auth = ref.watch(authControllerProvider);
-  final userId = auth.userId ?? '';
+  final userId = ref.watch(authControllerProvider.select((s) => s.userId)) ?? '';
+  ref.listen<String?>(authControllerProvider.select((s) => s.userId), (prev, next) {
+    if (prev != null && prev.isNotEmpty && prev != next) {
+      HttpNotificationsRepository.clearFeedSession(prev);
+    }
+  });
   return ref.read(notificationsRepositoryProvider).watchFeed(userId: userId);
 });
 

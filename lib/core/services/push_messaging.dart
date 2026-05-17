@@ -4,7 +4,7 @@ import 'dart:io';
 
 import 'package:firebase_core/firebase_core.dart';
 import 'package:firebase_messaging/firebase_messaging.dart';
-import 'package:flutter/widgets.dart';
+import 'package:flutter/material.dart';
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:go_router/go_router.dart';
 import 'package:http/http.dart' as http;
@@ -21,12 +21,15 @@ final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin()
 
 bool _firebaseReady = false;
 bool _localReady = false;
+bool _permissionRequested = false;
 
 /// Set from the app root ([NeuroscienceApp]) so push events refresh the notification feed / badge.
 void Function()? onNotificationsFeedShouldRefresh;
 bool _openHandlersAttached = false;
 bool _foregroundOnMessageAttached = false;
 bool _tokenRefreshAttached = false;
+bool _deviceTokenEndpointMissing = false;
+String? _lastKnownFcmToken;
 GoRouter? _router;
 String? _pendingRoute;
 
@@ -88,6 +91,8 @@ Future<void> initializeFirebaseAppAndForegroundPush() async {
     return;
   }
 
+  await _requestNotificationPermissionIfNeeded();
+
   // Android: mahalliy kanal + foregroundda heads-up. iOS hozircha minimal (keyinroq sozlash mumkin).
   if (Platform.isAndroid || Platform.isIOS) {
     await _initLocalNotificationsPlugin();
@@ -98,15 +103,41 @@ Future<void> initializeFirebaseAppAndForegroundPush() async {
   }
 
   if (!_tokenRefreshAttached) {
-    FirebaseMessaging.instance.onTokenRefresh.listen((_) {
-      debugPrint('FCM token refreshed (sign in again to sync)');
+    FirebaseMessaging.instance.onTokenRefresh.listen((token) {
+      _lastKnownFcmToken = token;
+      unawaited(_syncTokenToBackend(token));
     });
     _tokenRefreshAttached = true;
+  }
+
+  final token = await FirebaseMessaging.instance.getToken();
+  if (token != null && token.trim().isNotEmpty) {
+    _lastKnownFcmToken = token;
+    await _syncTokenToBackend(token);
   }
 
   _firebaseReady = true;
 
   await _tryBindFirebaseOpenHandlers();
+}
+
+Future<void> _requestNotificationPermissionIfNeeded() async {
+  if (_permissionRequested) return;
+  try {
+    await FirebaseMessaging.instance.requestPermission(
+      alert: true,
+      badge: true,
+      sound: true,
+      announcement: false,
+      carPlay: false,
+      criticalAlert: false,
+      provisional: false,
+    );
+  } catch (e) {
+    debugPrint('Notification permission request failed: $e');
+  } finally {
+    _permissionRequested = true;
+  }
 }
 
 /// [WidgetsFlutterBinding] tayyor bo‘lgach — [runApp] dan oldin emas, widget daraxti ostida.
@@ -180,10 +211,16 @@ void _showForegroundNotification(RemoteMessage message) {
       : (bodyRaw.contains('UZB Neuroscience') ? bodyRaw : '$bodyRaw\n— UZB Neuroscience');
   if (title.isEmpty && body.isEmpty) return;
 
-  final route =
-      message.data['route']?.toString().trim().isNotEmpty == true
-          ? message.data['route'].toString()
-          : AppRoutes.notifications;
+  String route = AppRoutes.notifications;
+  final routeRaw = message.data['route']?.toString().trim() ?? '';
+  if (routeRaw.isNotEmpty) {
+    route = routeRaw;
+  } else if ((message.data['type']?.toString() ?? '') == 'book_granted') {
+    final bid = message.data['book_id']?.toString().trim() ?? '';
+    if (bid.isNotEmpty) {
+      route = '${AppRoutes.bookReader}?id=$bid';
+    }
+  }
 
   final rawId = message.data['notification_id']?.toString();
   final nid = int.tryParse(rawId ?? '') ?? message.hashCode;
@@ -216,7 +253,25 @@ void _showForegroundNotification(RemoteMessage message) {
         'notification_id': message.data['notification_id'].toString(),
     }),
   );
+  _showInAppBanner(title: title, body: bodyRaw);
   onNotificationsFeedShouldRefresh?.call();
+}
+
+void _showInAppBanner({required String title, required String body}) {
+  final ctx = _router?.routerDelegate.navigatorKey.currentContext;
+  if (ctx == null) return;
+  final messenger = ScaffoldMessenger.maybeOf(ctx);
+  if (messenger == null) return;
+  messenger.hideCurrentSnackBar();
+  messenger.showSnackBar(
+    SnackBar(
+      behavior: SnackBarBehavior.floating,
+      content: Text(
+        [title.trim(), body.trim()].where((e) => e.isNotEmpty).join('\n'),
+      ),
+      duration: const Duration(seconds: 3),
+    ),
+  );
 }
 
 void _handleLocalNotificationPayload(String? payload) {
@@ -277,7 +332,14 @@ Future<void> attachPushNavigation(GoRouter router) async {
 }
 
 void _navigateFromData(Map<String, dynamic> data) {
-  final route = (data['route'] ?? AppRoutes.notifications).toString();
+  final routeRaw = (data['route'] ?? '').toString().trim();
+  final type = (data['type'] ?? '').toString().trim();
+  final bookId = (data['book_id'] ?? '').toString().trim();
+  final route = routeRaw.isNotEmpty
+      ? routeRaw
+      : (type == 'book_granted' && bookId.isNotEmpty
+            ? '${AppRoutes.bookReader}?id=$bookId'
+            : AppRoutes.notifications);
   final path = route.startsWith('/') ? route : '/$route';
   _goRoute(path);
   final nid = data['notification_id']?.toString();
@@ -285,6 +347,69 @@ void _navigateFromData(Map<String, dynamic> data) {
     unawaited(_reportPushClick(nid));
   }
   onNotificationsFeedShouldRefresh?.call();
+}
+
+Future<void> _syncTokenToBackend(String token) async {
+  final trimmed = token.trim();
+  if (trimmed.isEmpty) return;
+  if (_deviceTokenEndpointMissing) {
+    debugPrint('[push] token sync skipped: endpoint previously reported missing');
+    return;
+  }
+  try {
+    final prefs = await SharedPreferences.getInstance();
+    final raw = prefs.getString(_authPrefsKey);
+    if (raw == null || raw.isEmpty) return;
+    final decoded = jsonDecode(raw);
+    if (decoded is! Map<String, dynamic>) return;
+    final userId = decoded['id']?.toString() ?? '';
+    final sessionToken = decoded['session_token']?.toString() ?? '';
+    if (userId.isEmpty || sessionToken.length < 8) return;
+    final base = getApiBaseUrl();
+    if (base.isEmpty) return;
+    final uri = Uri.parse('$base/api/v1/auth/device-token');
+    final res = await http.post(
+      uri,
+      headers: const {'Content-Type': 'application/json'},
+      body: jsonEncode({
+        'user_id': userId,
+        'session_token': sessionToken,
+        'fcm_token': trimmed,
+      }),
+    );
+    if (res.statusCode < 200 || res.statusCode >= 300) {
+      if (res.statusCode == 404) {
+        _deviceTokenEndpointMissing = true;
+        debugPrint('[push] token sync endpoint missing (404): $uri');
+      } else {
+        debugPrint('[push] token sync failed status=${res.statusCode} body=${res.body}');
+      }
+    } else {
+      debugPrint('[push] token sync ok status=${res.statusCode}');
+    }
+  } catch (e) {
+    debugPrint('[push] token sync error: $e');
+  }
+}
+
+/// Session tayyor bo'lgandan keyin token syncni qo'lda qayta urinish.
+Future<void> trySyncDeviceTokenNow() async {
+  if (_deviceTokenEndpointMissing) return;
+  if (!_firebaseReady) return;
+  try {
+    var token = _lastKnownFcmToken;
+    if (token == null || token.trim().isEmpty) {
+      token = await FirebaseMessaging.instance.getToken();
+      _lastKnownFcmToken = token;
+    }
+    if (token == null || token.trim().isEmpty) {
+      debugPrint('[push] token sync skipped: FCM token empty');
+      return;
+    }
+    await _syncTokenToBackend(token);
+  } catch (e) {
+    debugPrint('[push] token sync retry error: $e');
+  }
 }
 
 void _goRoute(String route) {
