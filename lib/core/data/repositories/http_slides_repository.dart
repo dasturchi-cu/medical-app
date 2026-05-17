@@ -25,7 +25,7 @@ class HttpSlidesRepository implements SlidesRepository {
   List<HomeSlideItem> _cached = const [];
   DateTime? _cachedAt;
   Future<List<HomeSlideItem>>? _inFlight;
-  static const Duration _cacheTtl = Duration(seconds: 45);
+  static const Duration _cacheTtl = Duration(seconds: 90);
 
   String _errorMessage(String fallback, String body) {
     try {
@@ -116,18 +116,25 @@ class HttpSlidesRepository implements SlidesRepository {
 
   @override
   Stream<List<HomeSlideItem>> watchSlides({
-    Duration pollInterval = const Duration(seconds: 20),
+    Duration pollInterval = const Duration(seconds: 60),
   }) {
     final controller = StreamController<List<HomeSlideItem>>();
     RealtimeChannel? channel;
     Timer? poller;
     var disposed = false;
+    var pushInFlight = false;
 
     Future<void> push() async {
-      if (disposed) return;
-      final items = await fetchSlides();
-      if (disposed || controller.isClosed) return;
-      controller.add(items);
+      if (disposed || pushInFlight) return;
+      pushInFlight = true;
+      try {
+        final items = await fetchSlides();
+        if (!disposed && !controller.isClosed) {
+          controller.add(items);
+        }
+      } finally {
+        pushInFlight = false;
+      }
     }
 
     Future<void> boot() async {

@@ -22,7 +22,7 @@ class HttpBannersRepository implements BannersRepository {
   List<CourseBannerItem> _cached = const [];
   DateTime? _cachedAt;
   Future<List<CourseBannerItem>>? _inFlight;
-  static const Duration _cacheTtl = Duration(seconds: 45);
+  static const Duration _cacheTtl = Duration(seconds: 90);
 
   String _errorMessage(String fallback, String body) {
     try {
@@ -108,15 +108,24 @@ class HttpBannersRepository implements BannersRepository {
 
   @override
   Stream<List<CourseBannerItem>> watchBanners({
-    Duration pollInterval = const Duration(seconds: 20),
+    Duration pollInterval = const Duration(seconds: 60),
   }) {
     final controller = StreamController<List<CourseBannerItem>>();
     Timer? poller;
     var disposed = false;
+    var pushInFlight = false;
 
     Future<void> push() async {
-      if (disposed) return;
-      controller.add(await fetchBanners());
+      if (disposed || pushInFlight) return;
+      pushInFlight = true;
+      try {
+        final items = await fetchBanners();
+        if (!disposed && !controller.isClosed) {
+          controller.add(items);
+        }
+      } finally {
+        pushInFlight = false;
+      }
     }
 
     unawaited(push());

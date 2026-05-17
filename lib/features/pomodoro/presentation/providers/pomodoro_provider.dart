@@ -93,6 +93,7 @@ class PomodoroController extends Notifier<PomodoroState> {
   int _lastSyncedAtMs = 0;
   int _lastPersistMs = 0;
   bool _hydrated = false;
+  bool _pomodoroSyncEndpointMissing = false;
   static const int _minRankingFocusSeconds = 30;
 
   @override
@@ -466,6 +467,7 @@ class PomodoroController extends Notifier<PomodoroState> {
     final baseUrl = getApiBaseUrl();
     if (userId.isEmpty || baseUrl.isEmpty) return;
     if (focusSeconds <= 0) return;
+    if (_pomodoroSyncEndpointMissing) return;
     try {
       final primary = Uri.parse('$baseUrl/api/v1/ranking/pomodoro/session');
       final fallback = Uri.parse('$baseUrl/api/v1/leaderboard/pomodoro/session');
@@ -486,6 +488,13 @@ class PomodoroController extends Notifier<PomodoroState> {
         res = await http
             .post(fallback, headers: headers, body: bodyStr)
             .timeout(const Duration(seconds: 25));
+        if (res.statusCode == 404) {
+          _pomodoroSyncEndpointMissing = true;
+          debugPrint(
+            '[Pomodoro][sync] endpoint missing (both /ranking and /leaderboard 404).',
+          );
+          return;
+        }
       }
       if (res.statusCode >= 200 && res.statusCode < 300) {
         debugPrint(

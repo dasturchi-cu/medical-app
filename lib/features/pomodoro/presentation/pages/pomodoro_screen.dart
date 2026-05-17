@@ -45,15 +45,12 @@ class _PomodoroScreenState extends ConsumerState<PomodoroScreen>
   }
 
   @override
-  void deactivate() {
-    _pomodoroController.prepareForPageExit();
-    super.deactivate();
-  }
-
-  @override
   void dispose() {
     final controller = _pomodoroController;
-    unawaited(controller.flushRankingOnPageExit());
+    Future(() {
+      controller.prepareForPageExit();
+      unawaited(controller.flushRankingOnPageExit());
+    });
     WidgetsBinding.instance.removeObserver(this);
     _audioPlayer.dispose();
     _soundSubscription.close();

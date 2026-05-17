@@ -17,6 +17,7 @@ class CatalogService {
   static Future<void>? _bootstrapInFlight;
   /// Faqat muvaffaqiyatli tarmoq javobidan keyin — disk keshi TTL ni bloklamasligi uchun.
   static DateTime? _lastNetworkLoadedAt;
+  static DateTime? _lastBootstrapAttemptAt;
   static const Duration _cacheTtl = Duration(minutes: 5);
   static bool _hydratedFromDisk = false;
   /// Katalog yuklangach UI qayta chizilsin (`HomePage` va boshqalar tinglaydi).
@@ -66,6 +67,12 @@ class CatalogService {
       await _hydrateFromDisk();
     }
     final now = DateTime.now();
+    if (!forceRefresh &&
+        _courses.isNotEmpty &&
+        _lastBootstrapAttemptAt != null &&
+        now.difference(_lastBootstrapAttemptAt!) < const Duration(minutes: 2)) {
+      return;
+    }
     if (!forceRefresh &&
         _lastNetworkLoadedAt != null &&
         now.difference(_lastNetworkLoadedAt!) <= _cacheTtl &&
@@ -123,6 +130,7 @@ class CatalogService {
 
   static Future<void> _doBootstrap({int maxAttempts = 3}) async {
     final hadCachedCourses = _courses.isNotEmpty;
+    _lastBootstrapAttemptAt = DateTime.now();
     lastLoadError = null;
     if (!hadCachedCourses) {
       lastLoadOk = false;
