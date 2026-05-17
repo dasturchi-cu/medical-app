@@ -332,7 +332,10 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           return c.localizedTitle(lang).toLowerCase().contains(query) ||
               c.authorUz.toLowerCase().contains(query);
         }).toList();
-        final isCatalogStillLoading = CatalogService.isLoading && allCourses.isEmpty;
+        final isCatalogStillLoading =
+            CatalogService.isLoading &&
+            allCourses.isEmpty &&
+            !CatalogService.isLoadingStuck;
         String? catalogLoadError;
         try {
           catalogLoadError = CatalogService.lastLoadError;
@@ -642,7 +645,9 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: (catalogLoadError != null || (!isCatalogStillLoading && allCourses.isEmpty))
+              child: (catalogLoadError != null ||
+                      CatalogService.isLoadingStuck ||
+                      (!isCatalogStillLoading && allCourses.isEmpty))
                   ? Material(
                       color: const Color(0xFFFFF4E5),
                       borderRadius: BorderRadius.circular(12),
@@ -654,6 +659,8 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                               child: Text(
                                 catalogLoadError != null
                                     ? 'Kurslar yuklanmadi: $catalogLoadError\nInternetni tekshiring va yangilang.'
+                                    : CatalogService.isLoadingStuck
+                                        ? 'Kurslar yuklanishi cho‘zildi. Tarmoq sekin bo‘lishi mumkin.\nQayta urinib ko‘ring.'
                                     : 'Kurslar hozircha yuklanmadi. Qayta urinish mumkin.',
                                 style: Theme.of(context).textTheme.bodySmall?.copyWith(
                                       color: const Color(0xFF92400E),

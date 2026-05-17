@@ -29,6 +29,11 @@ class CatalogService {
   /// True after a successful fetch with a parseable `items` list (may be empty).
   static bool lastLoadOk = false;
   static bool get isLoading => _bootstrapInFlight != null;
+  static bool get isLoadingStuck =>
+      _bootstrapInFlight != null &&
+      _lastBootstrapAttemptAt != null &&
+      DateTime.now().difference(_lastBootstrapAttemptAt!) >
+          const Duration(seconds: 12);
 
   static List<Course> get courses => _courses;
 
@@ -153,7 +158,11 @@ class CatalogService {
         final uri = Uri.parse('$baseUrl/api/v1/mobile/courses');
         final response = await http
             .get(uri, headers: const {'Cache-Control': 'no-cache'})
-            .timeout(catalogBootstrapHttpTimeoutForBaseUrl(baseUrl));
+            .timeout(
+              isLikelyLocalDevBaseUrl(baseUrl)
+                  ? const Duration(seconds: 14)
+                  : const Duration(seconds: 20),
+            );
         debugPrint('[API][mobile.courses][response] status=${response.statusCode}');
         if (response.statusCode < 200 || response.statusCode >= 300) {
           lastLoadError = 'Katalog HTTP ${response.statusCode}';
@@ -221,7 +230,11 @@ class CatalogService {
       debugPrint('[API][home.bundle][request] $uri');
       final response = await http
           .get(uri, headers: const {'Cache-Control': 'no-cache'})
-          .timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
+          .timeout(
+            isLikelyLocalDevBaseUrl(baseUrl)
+                ? const Duration(seconds: 8)
+                : const Duration(seconds: 15),
+          );
       debugPrint('[API][home.bundle][response] status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return false;
