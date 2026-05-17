@@ -171,7 +171,7 @@ class CatalogService {
           unawaited(_persistToDisk(rawMaps));
         }
         return;
-      } catch (e, st) {
+      } catch (e) {
         lastLoadError = e is TimeoutException
             ? 'Server javob bermadi (vaqt tugadi). Hosting uxlagan bo\'lishi yoki tarmoq sekin — ilovani qayta ishga tushiring yoki Wi‑Fi tekshiring.'
             : e.toString();

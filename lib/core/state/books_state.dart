@@ -29,21 +29,7 @@ final paidBookIdsProvider = StreamProvider<Set<String>>((ref) {
   var disposed = false;
   Set<String> lastEmitted = const {};
 
-  Future<void> push({bool force = false}) async {
-    if (disposed) return;
-    if (pushInFlight != null) {
-      await pushInFlight;
-      return;
-    }
-    pushInFlight = _pushImpl(force: force);
-    try {
-      await pushInFlight;
-    } finally {
-      pushInFlight = null;
-    }
-  }
-
-  Future<void> _pushImpl({required bool force}) async {
+  Future<void> pushImpl({required bool force}) async {
     if (disposed) return;
     final ids = await repo.fetchPaidBookIds(userId: userId, forceRefresh: force);
     if (disposed || controller.isClosed) return;
@@ -52,6 +38,20 @@ final paidBookIdsProvider = StreamProvider<Set<String>>((ref) {
     }
     lastEmitted = Set<String>.from(ids);
     controller.add(lastEmitted);
+  }
+
+  Future<void> push({bool force = false}) async {
+    if (disposed) return;
+    if (pushInFlight != null) {
+      await pushInFlight;
+      return;
+    }
+    pushInFlight = pushImpl(force: force);
+    try {
+      await pushInFlight;
+    } finally {
+      pushInFlight = null;
+    }
   }
 
   void schedulePush({bool force = false}) {
