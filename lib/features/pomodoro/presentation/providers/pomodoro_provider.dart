@@ -79,19 +79,21 @@ class PomodoroState {
   }
 }
 
-final pomodoroProvider =
-    AutoDisposeNotifierProvider<PomodoroController, PomodoroState>(
+/// AutoDispose emas — sahifadan chiqganda `prepareForPageExit` timer to‘xtatadi.
+final pomodoroProvider = NotifierProvider<PomodoroController, PomodoroState>(
   PomodoroController.new,
 );
 
-class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
+class PomodoroController extends Notifier<PomodoroState> {
   static const _prefsKey = 'pomodoro_state_v1';
   Timer? _timer;
   int _persistedFocusSeconds = 0;
   bool _isDisposed = false;
   String? _sessionId;
   int _lastSyncedAtMs = 0;
+  int _lastPersistMs = 0;
   bool _hydrated = false;
+  static const int _minRankingFocusSeconds = 30;
 
   @override
   PomodoroState build() {
@@ -205,7 +207,6 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
 
   void _tick() {
     if (_isDisposed) return;
-    _syncWallClockDrift();
     final seconds = state.remainingSeconds;
     if (seconds <= 1) {
       _cancelTimer();
@@ -220,31 +221,26 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
             : state.pomodoroCount,
       );
       if (finishedFocus) {
-        final delta = (state.totalSeconds - _persistedFocusSeconds).clamp(
-          0,
-          state.totalSeconds,
+        final elapsed = state.totalSeconds.clamp(1, 24 * 3600);
+        _persistedFocusSeconds = 0;
+        unawaited(
+          _sendPomodoroSession(
+            focusSeconds: elapsed,
+            completedCycles: 1,
+          ),
         );
-        if (delta > 0) {
-          _persistedFocusSeconds += delta;
-          unawaited(
-            _sendPomodoroSession(
-              focusSeconds: delta,
-              completedCycles: 1,
-            ),
-          );
-        }
         if (_sessionId != null) {
           unawaited(
             _sendSessionLifecycle(
               'finish',
-              durationSec: state.totalSeconds,
+              durationSec: elapsed,
               status: 'completed',
             ),
           );
           _sessionId = null;
         }
       }
-      unawaited(_persistToDisk());
+      unawaited(_persistToDisk(force: true));
       return;
     }
 
@@ -267,18 +263,23 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
 
   Future<void> onAppLifecycleChanged(AppLifecycleState stateValue) async {
     if (stateValue == AppLifecycleState.resumed) {
-      _syncWallClockDrift();
-      if (state.isRunning && _timer == null) {
-        _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+      if (state.isRunning) {
+        _syncWallClockDrift();
+        if (_timer == null) {
+          _timer = Timer.periodic(const Duration(seconds: 1), (_) => _tick());
+        }
       }
-      await _persistToDisk();
+      await _persistToDisk(force: true);
       return;
     }
     if (stateValue == AppLifecycleState.inactive ||
         stateValue == AppLifecycleState.paused ||
         stateValue == AppLifecycleState.detached) {
-      _lastSyncedAtMs = DateTime.now().millisecondsSinceEpoch;
-      await _persistToDisk();
+      if (state.isRunning) {
+        _syncWallClockDrift();
+        _cancelTimer();
+      }
+      await _persistToDisk(force: true);
     }
   }
 
@@ -293,7 +294,12 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
     _lastSyncedAtMs = nowMs;
   }
 
-  Future<void> _persistToDisk() async {
+  Future<void> _persistToDisk({bool force = false}) async {
+    final nowMs = DateTime.now().millisecondsSinceEpoch;
+    if (!force && state.isRunning && nowMs - _lastPersistMs < 4000) {
+      return;
+    }
+    _lastPersistMs = nowMs;
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setString(
@@ -415,16 +421,25 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
     }
   }
 
-  Future<void> stopForPageExit() async {
-    // Pomodoro sahifadan chiqilganda timer/background yozuvni to'xtatamiz.
-    _haltRunning(updateProvider: false);
+  /// Sahifadan chiqishda darhol timer to‘xtatiladi (async reyting alohida).
+  void prepareForPageExit() {
+    _cancelTimer();
+    if (_isDisposed) return;
+    if (state.isRunning) {
+      state = state.copyWith(isRunning: false);
+    }
+    _lastSyncedAtMs = DateTime.now().millisecondsSinceEpoch;
+    unawaited(_persistToDisk(force: true));
+  }
+
+  Future<void> flushRankingOnPageExit() async {
     if (state.sessionType != PomodoroSessionType.focus) return;
     final elapsed = (state.totalSeconds - state.remainingSeconds).clamp(
       0,
       state.totalSeconds,
     );
     final delta = elapsed - _persistedFocusSeconds;
-    if (delta < 60) return; // juda qisqa sessiyalarni shovqin qilmaymiz
+    if (delta < _minRankingFocusSeconds) return;
     _persistedFocusSeconds += delta;
     await _sendPomodoroSession(
       focusSeconds: delta,
@@ -438,7 +453,7 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
       );
       _sessionId = null;
     }
-    await _persistToDisk();
+    await _persistToDisk(force: true);
   }
 
   Future<void> _sendPomodoroSession({
@@ -463,12 +478,20 @@ class PomodoroController extends AutoDisposeNotifier<PomodoroState> {
         'break_minutes': ((breakSeconds + 59) ~/ 60).clamp(0, 9999),
       });
       const headers = {'Content-Type': 'application/json'};
-      var res = await http.post(primary, headers: headers, body: bodyStr);
+      var res = await http
+          .post(primary, headers: headers, body: bodyStr)
+          .timeout(const Duration(seconds: 25));
       if (res.statusCode == 404) {
         debugPrint('[Pomodoro][sync][fallback] POST $fallback');
-        res = await http.post(fallback, headers: headers, body: bodyStr);
+        res = await http
+            .post(fallback, headers: headers, body: bodyStr)
+            .timeout(const Duration(seconds: 25));
       }
-      if (res.statusCode < 200 || res.statusCode >= 300) {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        debugPrint(
+          '[Pomodoro][sync] ok focus_seconds=$focusSeconds cycles=$completedCycles',
+        );
+      } else {
         debugPrint('[Pomodoro][sync] status=${res.statusCode} body=${res.body}');
       }
     } catch (e) {

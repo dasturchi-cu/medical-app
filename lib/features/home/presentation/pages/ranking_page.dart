@@ -120,6 +120,40 @@ class _RankingPageState extends ConsumerState<RankingPage>
     if (!_tabs.indexIsChanging) return;
     if (_tabs.index == 0) {
       unawaited(_loadDaily(force: true));
+    } else if (_tabs.index == 2) {
+      unawaited(_loadPomodoroOnly());
+    }
+  }
+
+  Future<void> _loadPomodoroOnly() async {
+    if (!mounted) return;
+    setState(() {
+      _pomodoroLoading = true;
+      _pomodoroError = null;
+    });
+    final currentUserId = ref.read(authControllerProvider).userId;
+    final repo = ref.read(rankingRepositoryProvider);
+    try {
+      final items = await repo.fetchPomodoroLeaderboard(
+        currentUserId: currentUserId,
+        limit: 10,
+      );
+      if (!mounted) return;
+      setState(() {
+        _pomodoro = _TabLeaderboard.fromRows(items);
+        _pomodoroError = items.isEmpty
+            ? 'Hali Pomodoro reyting faolligi yo‘q.'
+            : null;
+      });
+    } catch (e, st) {
+      debugPrint('[RANKING] fetch pomodoro tab failed: $e\n$st');
+      if (!mounted) return;
+      setState(() {
+        _pomodoro = const _TabLeaderboard(top: []);
+        _pomodoroError = 'Pomodoro reytingini yuklashda xatolik. Qayta urinib ko‘ring.';
+      });
+    } finally {
+      if (mounted) setState(() => _pomodoroLoading = false);
     }
   }
 
