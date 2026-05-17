@@ -157,6 +157,8 @@ class CatalogService {
         debugPrint('[API][mobile.courses][response] status=${response.statusCode}');
         if (response.statusCode < 200 || response.statusCode >= 300) {
           lastLoadError = 'Katalog HTTP ${response.statusCode}';
+          final seeded = await _tryBootstrapFromHomeBundle(baseUrl);
+          if (seeded) return;
           if (i == attempts - 1) return;
           await Future<void>.delayed(
             isLikelyLocalDevBaseUrl(baseUrl)
@@ -192,6 +194,8 @@ class CatalogService {
             ? 'Server javob bermadi (vaqt tugadi). Hosting uxlagan bo\'lishi yoki tarmoq sekin — ilovani qayta ishga tushiring yoki Wi‑Fi tekshiring.'
             : e.toString();
         debugPrint('[API][mobile.courses][error] $e');
+        final seeded = await _tryBootstrapFromHomeBundle(baseUrl);
+        if (seeded) return;
         if (i == attempts - 1) {
           if (_courses.isNotEmpty) {
             lastLoadOk = true;
@@ -208,6 +212,41 @@ class CatalogService {
     }
     } finally {
       _bumpCatalogRevision();
+    }
+  }
+
+  static Future<bool> _tryBootstrapFromHomeBundle(String baseUrl) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/home');
+      debugPrint('[API][home.bundle][request] $uri');
+      final response = await http
+          .get(uri, headers: const {'Cache-Control': 'no-cache'})
+          .timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
+      debugPrint('[API][home.bundle][response] status=${response.statusCode}');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        return false;
+      }
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return false;
+      final coursesWrapper = decoded['courses'];
+      if (coursesWrapper is! Map<String, dynamic>) return false;
+      final raw = coursesWrapper['items'];
+      if (raw is! List) return false;
+      final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
+      _courses = rawMaps.map(_toCourse).toList(growable: false);
+      lastLoadOk = true;
+      _lastNetworkLoadedAt = DateTime.now();
+      if (_courses.isEmpty) {
+        lastLoadError = 'Serverdan faol kurslar ro\'yxati bo\'sh.';
+      } else {
+        lastLoadError = null;
+        unawaited(_persistToDisk(rawMaps));
+      }
+      debugPrint('[API][home.bundle][courses.parsed] courses=${_courses.length}');
+      return true;
+    } catch (e) {
+      debugPrint('[API][home.bundle][error] $e');
+      return false;
     }
   }
 
