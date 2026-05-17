@@ -110,6 +110,10 @@ class CatalogService {
           .toList(growable: false);
       lastLoadOk = true;
       lastLoadError = null;
+      // Diskdan muvaffaqiyatli ko'tarilganda ham qisqa muddatga "fresh" deb hisoblaymiz,
+      // aks holda ilova ochilishida darhol network timeout urib ketadi.
+      _lastNetworkLoadedAt = DateTime.now();
+      _lastBootstrapAttemptAt = DateTime.now();
       _bumpCatalogRevision();
       debugPrint('[CatalogService] hydrated ${_courses.length} courses from disk');
     } catch (e, st) {

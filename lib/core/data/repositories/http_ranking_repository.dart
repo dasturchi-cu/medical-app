@@ -17,6 +17,7 @@ class HttpRankingRepository implements RankingRepository {
   http.Client get _client => client ?? http.Client();
 
   Duration get _timeout => homeAggregateHttpTimeoutForBaseUrl(baseUrl);
+  Duration get _pomodoroTimeout => pomodoroRankingTimeoutForBaseUrl(baseUrl);
 
   String _errorMessage(String fallback, String body) {
     try {
@@ -157,7 +158,7 @@ class HttpRankingRepository implements RankingRepository {
       try {
         final response = await _client
             .get(uri, headers: const {'Accept': 'application/json'})
-            .timeout(_timeout);
+            .timeout(_pomodoroTimeout);
         if (response.statusCode == 404) {
           if (kDebugMode) {
             debugPrint('[RANKING] fetch pomodoro 404 (skip) $uri');

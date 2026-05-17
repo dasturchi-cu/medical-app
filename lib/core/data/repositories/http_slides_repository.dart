@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
@@ -26,6 +27,7 @@ class HttpSlidesRepository implements SlidesRepository {
   DateTime? _cachedAt;
   Future<List<HomeSlideItem>>? _inFlight;
   static const Duration _cacheTtl = Duration(seconds: 90);
+  DateTime? _lastTimeoutLogAt;
 
   String _errorMessage(String fallback, String body) {
     try {
@@ -93,7 +95,22 @@ class HttpSlidesRepository implements SlidesRepository {
       }
       return items;
     } catch (e) {
-      debugPrint('[API][slides.fetch][error] $e (using cache)');
+      final hasCached = _cached.isNotEmpty || HomeFeedsDiskCache.slides.isNotEmpty;
+      if (e is TimeoutException || e is SocketException) {
+        final now = DateTime.now();
+        final shouldLog = _lastTimeoutLogAt == null ||
+            now.difference(_lastTimeoutLogAt!) > const Duration(minutes: 1);
+        if (shouldLog) {
+          _lastTimeoutLogAt = now;
+          debugPrint(
+            hasCached
+                ? '[API][slides.fetch][timeout] server sekin (cache ishlatilmoqda)'
+                : '[API][slides.fetch][timeout] server javob bermadi',
+          );
+        }
+      } else {
+        debugPrint('[API][slides.fetch][error] $e');
+      }
       if (_cached.isNotEmpty) return _cached;
       final disk = HomeFeedsDiskCache.slides;
       if (disk.isNotEmpty) {
@@ -116,7 +133,7 @@ class HttpSlidesRepository implements SlidesRepository {
 
   @override
   Stream<List<HomeSlideItem>> watchSlides({
-    Duration pollInterval = const Duration(seconds: 60),
+    Duration pollInterval = const Duration(seconds: 120),
   }) {
     final controller = StreamController<List<HomeSlideItem>>();
     RealtimeChannel? channel;

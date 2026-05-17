@@ -34,3 +34,9 @@ Duration homeAggregateHttpTimeoutForBaseUrl(String baseUrl) =>
     isLikelyLocalDevBaseUrl(baseUrl)
         ? const Duration(seconds: 40)
         : const Duration(seconds: 60);
+
+/// Pomodoro reyting endpointi sekin bo'lsa tabni ushlab turmasin.
+Duration pomodoroRankingTimeoutForBaseUrl(String baseUrl) =>
+    isLikelyLocalDevBaseUrl(baseUrl)
+        ? const Duration(seconds: 6)
+        : const Duration(seconds: 10);

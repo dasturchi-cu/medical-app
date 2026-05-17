@@ -91,9 +91,16 @@ class HttpBannersRepository implements BannersRepository {
         unawaited(HomeFeedsDiskCache.saveBanners(items));
       }
       return items;
-    } catch (e, st) {
-      debugPrint('[API][banners.fetch][error] $e\n$st');
-      return _cached;
+    } catch (e) {
+      debugPrint('[API][banners.fetch][error] $e (using cache)');
+      if (_cached.isNotEmpty) return _cached;
+      final disk = HomeFeedsDiskCache.banners;
+      if (disk.isNotEmpty) {
+        _cached = disk;
+        _cachedAt = DateTime.now();
+        return disk;
+      }
+      return const [];
     }
   }
 
@@ -108,7 +115,7 @@ class HttpBannersRepository implements BannersRepository {
 
   @override
   Stream<List<CourseBannerItem>> watchBanners({
-    Duration pollInterval = const Duration(seconds: 60),
+    Duration pollInterval = const Duration(seconds: 120),
   }) {
     final controller = StreamController<List<CourseBannerItem>>();
     Timer? poller;

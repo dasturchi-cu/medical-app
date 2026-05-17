@@ -57,6 +57,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
   bool _isLoggedIn = false;
   List<String> _dailyOverallTitles = const ['Kunlik', 'Umumiy'];
   bool _loading = true;
+  bool _overallLoading = false;
   bool _pomodoroLoading = true;
   _TabLeaderboard _daily = const _TabLeaderboard(top: []);
   _TabLeaderboard _overall = const _TabLeaderboard(top: []);
@@ -168,7 +169,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
 
   void _scheduleRealtimeRefetch() {
     _realtimeDebounce?.cancel();
-    _realtimeDebounce = Timer(const Duration(seconds: 4), () {
+    _realtimeDebounce = Timer(const Duration(seconds: 8), () {
       if (!mounted || _realtimeDisposed) return;
       unawaited(_loadVisibleTab(force: true));
     });
@@ -241,6 +242,9 @@ class _RankingPageState extends ConsumerState<RankingPage>
   }
 
   Future<void> _loadOverallOnly() async {
+    if (mounted) {
+      setState(() => _overallLoading = true);
+    }
     final currentUserId = ref.read(authControllerProvider).userId;
     final repo = ref.read(rankingRepositoryProvider);
     try {
@@ -262,6 +266,10 @@ class _RankingPageState extends ConsumerState<RankingPage>
         _overallRankingError =
             'Umumiy reytingni yuklashda xatolik. Internetni tekshiring.';
       });
+    } finally {
+      if (mounted) {
+        setState(() => _overallLoading = false);
+      }
     }
   }
 
@@ -280,6 +288,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
     _loadInFlight = true;
     setState(() {
       _loading = true;
+      _overallLoading = false;
       _pomodoroLoading = false;
       _pomodoroError = null;
       _dailyRankingError = null;
@@ -289,16 +298,12 @@ class _RankingPageState extends ConsumerState<RankingPage>
     try {
       await _loadDaily(force: true);
       if (!mounted) return;
-
-      await _loadOverallOnly();
+      setState(() => _loading = false);
+      // `Umumiy` tabni fonda isitib qo'yamiz; `Kunlik` ochilishi bloklanmaydi.
+      unawaited(_loadOverallOnly());
     } finally {
       _loadInFlight = false;
-      if (mounted) {
-        setState(() {
-          _loading = false;
-          _pomodoroLoading = false;
-        });
-      }
+      if (mounted) setState(() => _pomodoroLoading = false);
     }
   }
 
@@ -380,7 +385,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
           ),
           _RankingList(
             data: _overall,
-            loading: _loading,
+            loading: _overallLoading,
             rankingError: _overallRankingError,
             emptyRankingMessage: context.tr('ranking_empty_overall'),
             noActivityMessage: 'Sizda hali reyting faolligi yo‘q',
@@ -481,7 +486,7 @@ class _RankingListState extends State<_RankingList>
   @override
   Widget build(BuildContext context) {
     super.build(context);
-    if (widget.loading) {
+    if (widget.loading && !widget.data.hasAnyActivity) {
       return const Center(child: CircularProgressIndicator());
     }
 

@@ -219,7 +219,8 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     ref.read(homeFeedReadyProvider.notifier).state = true;
 
     if (!seededFromHome && !CatalogService.lastLoadOk) {
-      await CatalogService.bootstrap(maxAttempts: 2);
+      // UI ni bloklamaymiz: bo'limlar fon rejimida yuklanadi.
+      unawaited(CatalogService.bootstrap(maxAttempts: 1));
     }
     if (!mounted) return;
     unawaited(ref.read(slidesRepositoryProvider).fetchSlides());
@@ -753,17 +754,31 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
               ),
             ),
             if (isCatalogStillLoading)
-              SliverList.builder(
-                itemCount: 4,
-                itemBuilder: (context, index) {
-                  return Card(
-                    margin: const EdgeInsets.symmetric(
-                      horizontal: AppSpacing.s16,
-                      vertical: AppSpacing.s8,
+              SliverToBoxAdapter(
+                child: Padding(
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+                  child: Card(
+                    child: Padding(
+                      padding: const EdgeInsets.all(16),
+                      child: Row(
+                        children: [
+                          const SizedBox(
+                            width: 18,
+                            height: 18,
+                            child: CircularProgressIndicator(strokeWidth: 2.2),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              'Bo‘limlar yuklanmoqda...',
+                              style: Theme.of(context).textTheme.bodyMedium,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    child: const SizedBox(height: 104),
-                  );
-                },
+                  ),
+                ),
               )
             else
               SliverList.builder(
