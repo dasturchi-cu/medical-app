@@ -22,11 +22,15 @@ class LeaderboardRowModel {
   bool get isCurrentUserRow => rowType == 'current_user';
 
   factory LeaderboardRowModel.fromJson(Map<String, dynamic> json) {
+    final totalSecondsRaw =
+        int.tryParse((json['total_seconds'] ?? '0').toString()) ?? 0;
+    final watchedSecondsRaw =
+        int.tryParse((json['watched_seconds'] ?? '0').toString()) ?? 0;
     return LeaderboardRowModel(
       rank: int.tryParse((json['rank'] ?? '0').toString()) ?? 0,
       userId: (json['user_id'] ?? '').toString(),
       fullName: (json['full_name'] ?? 'Foydalanuvchi').toString(),
-      totalSeconds: int.tryParse((json['total_seconds'] ?? '0').toString()) ?? 0,
+      totalSeconds: totalSecondsRaw > 0 ? totalSecondsRaw : watchedSecondsRaw,
       completedCount: int.tryParse(
             (json['completed_lessons'] ?? json['completed_sessions'] ?? '0').toString(),
           ) ??

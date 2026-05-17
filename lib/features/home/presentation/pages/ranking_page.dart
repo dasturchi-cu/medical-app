@@ -120,6 +120,8 @@ class _RankingPageState extends ConsumerState<RankingPage>
     if (!_tabs.indexIsChanging) return;
     if (_tabs.index == 0) {
       unawaited(_loadDaily(force: true));
+    } else if (_tabs.index == 1) {
+      unawaited(_loadOverallOnly());
     } else if (_tabs.index == 2) {
       unawaited(_loadPomodoroOnly());
     }
@@ -160,7 +162,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      unawaited(_loadDaily(force: true));
+      unawaited(_loadVisibleTab(force: true));
     }
   }
 
@@ -168,7 +170,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
     _realtimeDebounce?.cancel();
     _realtimeDebounce = Timer(const Duration(seconds: 4), () {
       if (!mounted || _realtimeDisposed) return;
-      unawaited(_load());
+      unawaited(_loadVisibleTab(force: true));
     });
   }
 
@@ -238,71 +240,57 @@ class _RankingPageState extends ConsumerState<RankingPage>
     }
   }
 
+  Future<void> _loadOverallOnly() async {
+    final currentUserId = ref.read(authControllerProvider).userId;
+    final repo = ref.read(rankingRepositoryProvider);
+    try {
+      final items = await repo.fetchVideoLeaderboard(
+        scope: RankingScope.overall,
+        currentUserId: currentUserId,
+        limit: 10,
+      );
+      if (!mounted) return;
+      setState(() {
+        _overall = _TabLeaderboard.fromRows(items);
+        _overallRankingError = null;
+      });
+    } catch (e, st) {
+      debugPrint('[RANKING] fetch overall failed: $e\n$st');
+      if (!mounted) return;
+      setState(() {
+        _overall = const _TabLeaderboard(top: []);
+        _overallRankingError =
+            'Umumiy reytingni yuklashda xatolik. Internetni tekshiring.';
+      });
+    }
+  }
+
+  Future<void> _loadVisibleTab({bool force = false}) async {
+    if (_tabs.index == 0) {
+      await _loadDaily(force: force);
+    } else if (_tabs.index == 1) {
+      await _loadOverallOnly();
+    } else {
+      await _loadPomodoroOnly();
+    }
+  }
+
   Future<void> _load() async {
     if (!mounted || _loadInFlight) return;
     _loadInFlight = true;
     setState(() {
       _loading = true;
-      _pomodoroLoading = true;
+      _pomodoroLoading = false;
       _pomodoroError = null;
       _dailyRankingError = null;
       _overallRankingError = null;
     });
 
-    final currentUserId = ref.read(authControllerProvider).userId;
-    final repo = ref.read(rankingRepositoryProvider);
-
     try {
       await _loadDaily(force: true);
       if (!mounted) return;
 
-      try {
-        final items = await repo.fetchVideoLeaderboard(
-          scope: RankingScope.overall,
-          currentUserId: currentUserId,
-          limit: 10,
-        );
-        if (!mounted) return;
-        setState(() {
-          _overall = _TabLeaderboard.fromRows(items);
-          _overallRankingError = null;
-        });
-      } catch (e, st) {
-        debugPrint('[RANKING] fetch overall failed: $e\n$st');
-        if (!mounted) return;
-        setState(() {
-          _overall = const _TabLeaderboard(top: []);
-          _overallRankingError =
-              'Umumiy reytingni yuklashda xatolik. Internetni tekshiring.';
-        });
-      }
-
-      try {
-        final items = await repo.fetchPomodoroLeaderboard(
-          currentUserId: currentUserId,
-          limit: 10,
-        );
-        if (!mounted) return;
-        setState(() {
-          _pomodoro = _TabLeaderboard.fromRows(items);
-          _pomodoroError = items.isEmpty
-              ? 'Hali Pomodoro reyting faolligi yo‘q.'
-              : null;
-        });
-      } catch (e, st) {
-        debugPrint('[RANKING] fetch pomodoro failed: $e\n$st');
-        if (!mounted) return;
-        var msg = e.toString();
-        if (msg.startsWith('Exception: ')) {
-          msg = msg.substring('Exception: '.length).trim();
-        }
-        setState(() {
-          _pomodoro = const _TabLeaderboard(top: []);
-          _pomodoroError = msg.isEmpty
-              ? 'Pomodoro reytingini yuklashda xatolik. Internetni tekshiring.'
-              : msg;
-        });
-      }
+      await _loadOverallOnly();
     } finally {
       _loadInFlight = false;
       if (mounted) {
@@ -398,7 +386,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
             noActivityMessage: 'Sizda hali reyting faolligi yo‘q',
             isPomodoro: false,
             isLoggedIn: _isLoggedIn,
-            onRefresh: _load,
+            onRefresh: _loadOverallOnly,
           ),
           _RankingList(
             data: _pomodoro,
@@ -408,7 +396,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
             noActivityMessage: 'Sizda hali Pomodoro faolligi yo‘q',
             isPomodoro: true,
             isLoggedIn: _isLoggedIn,
-            onRefresh: _load,
+            onRefresh: _loadPomodoroOnly,
           ),
         ],
       ),
