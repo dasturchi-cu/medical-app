@@ -727,8 +727,12 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                                 ),
                               )
                               .valueOrNull;
-                          final newsStats =
-                              contentStatsOverrides[news.feedbackKey] ?? fetchedNewsStats;
+                          final linkedCourseStats = news.platformCourseId == null
+                              ? null
+                              : neurologyStatsMap[news.platformCourseId!];
+                          final newsStats = contentStatsOverrides[news.feedbackKey] ??
+                              fetchedNewsStats ??
+                              linkedCourseStats;
                           return _NewsCard(
                             item: news,
                             ratingValue: newsStats?.ratingAvg ?? news.rating,
