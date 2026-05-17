@@ -205,10 +205,7 @@ Future<void> _initLocalNotificationsPlugin() async {
 void _showForegroundNotification(RemoteMessage message) {
   if (!_localReady) return;
   final title = message.notification?.title ?? message.data['title']?.toString() ?? '';
-  final bodyRaw = message.notification?.body ?? message.data['body']?.toString() ?? '';
-  final body = bodyRaw.trim().isEmpty
-      ? ''
-      : (bodyRaw.contains('UZB Neuroscience') ? bodyRaw : '$bodyRaw\n— UZB Neuroscience');
+  final body = (message.notification?.body ?? message.data['body']?.toString() ?? '').trim();
   if (title.isEmpty && body.isEmpty) return;
 
   String route = AppRoutes.notifications;
@@ -238,7 +235,6 @@ void _showForegroundNotification(RemoteMessage message) {
       enableVibration: true,
       playSound: true,
       icon: '@mipmap/ic_launcher',
-      subText: 'UZB Neuroscience',
     ),
     iOS: const DarwinNotificationDetails(),
   );
@@ -253,7 +249,7 @@ void _showForegroundNotification(RemoteMessage message) {
         'notification_id': message.data['notification_id'].toString(),
     }),
   );
-  _showInAppBanner(title: title, body: bodyRaw);
+  _showInAppBanner(title: title, body: body);
   onNotificationsFeedShouldRefresh?.call();
 }
 

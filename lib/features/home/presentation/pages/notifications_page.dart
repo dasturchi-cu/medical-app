@@ -82,14 +82,6 @@ class NotificationsPage extends ConsumerWidget {
                             ),
                             const SizedBox(height: 6),
                             Text(item.message),
-                            const SizedBox(height: 4),
-                            Text(
-                              'UZB Neuroscience',
-                              style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                                    color: const Color(0xFF2563EB),
-                                    fontWeight: FontWeight.w700,
-                                  ),
-                            ),
                             const SizedBox(height: 8),
                             Text(
                               _formatDate(item.sentAt),
