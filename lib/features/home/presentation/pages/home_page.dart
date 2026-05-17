@@ -249,7 +249,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     final repo = ref.watch(courseRepositoryProvider);
     final lang =
         ref.watch(localizationProvider).valueOrNull?.langCode ?? 'uz';
-    final allCourses = repo.getCourses();
     final feedReady = ref.watch(homeFeedReadyProvider);
     final deferHomeFeeds = HomeAggregateConfig.enabled && !feedReady;
     final slidesAsync = deferHomeFeeds ? null : ref.watch(slidesFeedProvider);
@@ -277,26 +276,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         )
         .toList(growable: false);
     _slideCount = slideItems.length;
-    final courses = allCourses.where((c) {
-      final matchesCategory = switch (selectedCat) {
-        'cat_books' => false,
-        'cat_nevralogiya' => true,
-        'cat_online' => false,
-        _ => false,
-      };
-      if (!matchesCategory) return false;
-      if (query.isEmpty) return true;
-      return c.localizedTitle(lang).toLowerCase().contains(query) ||
-          c.authorUz.toLowerCase().contains(query);
-    }).toList();
-    final isCatalogStillLoading = !CatalogService.lastLoadOk && allCourses.isEmpty;
-    String? catalogLoadError;
-    try {
-      catalogLoadError = CatalogService.lastLoadError;
-    } catch (_) {
-      // Hot-reload paytida eski state qolib ketsa build crash bo'lmasin.
-      catalogLoadError = null;
-    }
     final remoteBanners = deferHomeFeeds
         ? const []
         : (bannersAsync!.valueOrNull ?? HomeFeedsDiskCache.banners);
@@ -339,6 +318,27 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     return ListenableBuilder(
       listenable: CatalogService.catalogRevision,
       builder: (context, _) {
+        final allCourses = repo.getCourses();
+        final courses = allCourses.where((c) {
+          final matchesCategory = switch (selectedCat) {
+            'cat_books' => false,
+            'cat_nevralogiya' => true,
+            'cat_online' => false,
+            _ => false,
+          };
+          if (!matchesCategory) return false;
+          if (query.isEmpty) return true;
+          return c.localizedTitle(lang).toLowerCase().contains(query) ||
+              c.authorUz.toLowerCase().contains(query);
+        }).toList();
+        final isCatalogStillLoading = !CatalogService.lastLoadOk && allCourses.isEmpty;
+        String? catalogLoadError;
+        try {
+          catalogLoadError = CatalogService.lastLoadError;
+        } catch (_) {
+          // Hot-reload paytida eski state qolib ketsa build crash bo'lmasin.
+          catalogLoadError = null;
+        }
         return SafeArea(
       child: RefreshIndicator(
         onRefresh: _refreshCatalog,
