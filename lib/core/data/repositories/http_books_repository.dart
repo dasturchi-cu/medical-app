@@ -26,7 +26,12 @@ class HttpBooksRepository implements BooksRepository {
   DateTime? _cachedAt;
   Future<List<BookItemModel>>? _inFlight;
   static const Duration _cacheTtl = Duration(minutes: 5);
+  static const Duration _paidIdsCacheTtl = Duration(seconds: 60);
   bool _entitlementsEndpointUnsupported = false;
+  Set<String>? _paidIdsCache;
+  String? _paidIdsCacheUserId;
+  DateTime? _paidIdsCacheAt;
+  Future<Set<String>>? _paidIdsInFlight;
 
   @override
   Future<List<BookItemModel>> fetchBooks({bool forceRefresh = false}) async {
@@ -219,17 +224,60 @@ class HttpBooksRepository implements BooksRepository {
   }
 
   @override
-  Future<Set<String>> fetchPaidBookIds({required String userId}) async {
-    if (baseUrl.isEmpty || userId.isEmpty) return const <String>{};
-    debugPrint('[API][books.paidIds][start] userId=$userId');
+  void clearPaidBookIdsCache() {
+    _paidIdsCache = null;
+    _paidIdsCacheUserId = null;
+    _paidIdsCacheAt = null;
+    _paidIdsInFlight = null;
+  }
 
+  @override
+  Future<Set<String>> fetchPaidBookIds({
+    required String userId,
+    bool forceRefresh = false,
+  }) async {
+    if (baseUrl.isEmpty || userId.isEmpty) return const <String>{};
+
+    if (!forceRefresh &&
+        _paidIdsCacheUserId == userId &&
+        _paidIdsCache != null &&
+        _paidIdsCacheAt != null &&
+        DateTime.now().difference(_paidIdsCacheAt!) <= _paidIdsCacheTtl) {
+      return Set<String>.from(_paidIdsCache!);
+    }
+
+    final pending = _paidIdsInFlight;
+    if (pending != null && !forceRefresh) {
+      return pending;
+    }
+
+    final future = _fetchPaidBookIdsNetwork(userId);
+    _paidIdsInFlight = future;
+    try {
+      return await future;
+    } finally {
+      if (identical(_paidIdsInFlight, future)) {
+        _paidIdsInFlight = null;
+      }
+    }
+  }
+
+  Future<Set<String>> _fetchPaidBookIdsNetwork(String userId) async {
     final books = await fetchBooks();
     final paidBooks = books.where((b) => b.isPaid).toList(growable: false);
-    if (paidBooks.isEmpty) return const <String>{};
+    if (paidBooks.isEmpty) {
+      _paidIdsCache = const {};
+      _paidIdsCacheUserId = userId;
+      _paidIdsCacheAt = DateTime.now();
+      return const <String>{};
+    }
 
-    final granted = <String>{...await _fetchEntitlementBookIds(userId: userId)};
+    final granted = <String>{};
+    if (!_entitlementsEndpointUnsupported) {
+      granted.addAll(await _fetchEntitlementBookIds(userId: userId));
+    }
 
-    // Reader `/access` bilan bir xil manba — entitlements bo'sh/noto'g'ri bo'lsa ham qulf ochiladi.
+    // `/access` — entitlements 405 bo'lsa ham qulf ochiladi (bir marta tekshiriladi).
     for (final book in paidBooks) {
       if (granted.contains(book.id)) continue;
       if (await hasPaidBookAccess(userId: userId, bookId: book.id)) {
@@ -237,8 +285,11 @@ class HttpBooksRepository implements BooksRepository {
       }
     }
 
+    _paidIdsCache = Set<String>.from(granted);
+    _paidIdsCacheUserId = userId;
+    _paidIdsCacheAt = DateTime.now();
     if (granted.isNotEmpty) {
-      debugPrint('[API][books.entitlements][resolved] count=${granted.length}');
+      debugPrint('[API][books.paidIds] resolved count=${granted.length}');
     }
     return granted;
   }
@@ -253,10 +304,8 @@ class HttpBooksRepository implements BooksRepository {
       final uri = Uri.parse('$baseUrl/api/v1/content/books/access').replace(
         queryParameters: {'user_id': userId, 'book_id': bookId},
       );
-      debugPrint('[API][books.access][request] bookId=$bookId');
       final response =
           await _client.get(uri).timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
-      debugPrint('[API][books.access][response] bookId=$bookId status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) return false;
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return false;

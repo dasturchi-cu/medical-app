@@ -41,7 +41,7 @@ class NotificationsPage extends ConsumerWidget {
                   await repo.markClicked(userId: userId, notificationId: item.id);
                   repo.requestFeedRefresh(userId: userId);
                   if (item.type == 'book_granted') {
-                    ref.invalidate(paidBookIdsProvider);
+                    refreshPaidBookIds(ref);
                   }
                   if (!context.mounted) return;
                   final bookId = item.data['book_id'] ?? '';

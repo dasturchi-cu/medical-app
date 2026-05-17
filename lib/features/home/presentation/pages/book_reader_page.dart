@@ -78,7 +78,7 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
         _purchaseGateLoading = false;
       });
       if (granted) {
-        ref.invalidate(paidBookIdsProvider);
+        refreshPaidBookIds(ref);
       }
     } catch (e, st) {
       debugPrint('[book_reader] access check failed: $e\n$st');

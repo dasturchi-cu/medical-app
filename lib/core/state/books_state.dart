@@ -11,8 +11,7 @@ final booksFeedProvider = StreamProvider<List<BookItemModel>>((ref) {
 });
 
 final bookProgressProvider = FutureProvider<List<BookProgressModel>>((ref) async {
-  final auth = ref.watch(authControllerProvider);
-  final userId = auth.userId ?? '';
+  final userId = ref.watch(authControllerProvider.select((s) => s.userId)) ?? '';
   if (userId.isEmpty) return const [];
   return ref.read(booksRepositoryProvider).fetchProgress(userId: userId);
 });
@@ -25,22 +24,58 @@ final paidBookIdsProvider = StreamProvider<Set<String>>((ref) {
   final repo = ref.read(booksRepositoryProvider);
   final controller = StreamController<Set<String>>();
   Timer? timer;
+  Timer? debounce;
+  Future<void>? pushInFlight;
   var disposed = false;
+  Set<String> lastEmitted = const {};
 
-  Future<void> push() async {
+  Future<void> push({bool force = false}) async {
     if (disposed) return;
-    final ids = await repo.fetchPaidBookIds(userId: userId);
-    if (!disposed) controller.add(ids);
+    if (pushInFlight != null) {
+      await pushInFlight;
+      return;
+    }
+    pushInFlight = _pushImpl(force: force);
+    try {
+      await pushInFlight;
+    } finally {
+      pushInFlight = null;
+    }
   }
 
-  unawaited(push());
-  timer = Timer.periodic(const Duration(seconds: 8), (_) => unawaited(push()));
+  Future<void> _pushImpl({required bool force}) async {
+    if (disposed) return;
+    final ids = await repo.fetchPaidBookIds(userId: userId, forceRefresh: force);
+    if (disposed || controller.isClosed) return;
+    if (ids.length == lastEmitted.length && ids.containsAll(lastEmitted)) {
+      return;
+    }
+    lastEmitted = Set<String>.from(ids);
+    controller.add(lastEmitted);
+  }
+
+  void schedulePush({bool force = false}) {
+    debounce?.cancel();
+    debounce = Timer(const Duration(milliseconds: 400), () {
+      unawaited(push(force: force));
+    });
+  }
+
+  unawaited(push(force: true));
+  timer = Timer.periodic(const Duration(seconds: 45), (_) => schedulePush());
 
   ref.onDispose(() async {
     disposed = true;
+    debounce?.cancel();
     timer?.cancel();
     await controller.close();
   });
 
   return controller.stream;
 });
+
+/// Kitob ruxsati yangilanganda cache tozalash.
+void refreshPaidBookIds(WidgetRef ref) {
+  ref.read(booksRepositoryProvider).clearPaidBookIdsCache();
+  ref.invalidate(paidBookIdsProvider);
+}

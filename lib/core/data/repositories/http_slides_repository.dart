@@ -41,6 +41,13 @@ class HttpSlidesRepository implements SlidesRepository {
   @override
   Future<List<HomeSlideItem>> fetchSlides({bool forceRefresh = false}) async {
     if (baseUrl.isEmpty) return const [];
+    if (_cached.isEmpty) {
+      final disk = HomeFeedsDiskCache.slides;
+      if (disk.isNotEmpty) {
+        _cached = disk;
+        _cachedAt = DateTime.now();
+      }
+    }
     final now = DateTime.now();
     if (!forceRefresh &&
         _cachedAt != null &&
@@ -85,9 +92,16 @@ class HttpSlidesRepository implements SlidesRepository {
         unawaited(HomeFeedsDiskCache.saveSlides(items));
       }
       return items;
-    } catch (e, st) {
-      debugPrint('[API][slides.fetch][error] $e\n$st');
-      return _cached;
+    } catch (e) {
+      debugPrint('[API][slides.fetch][error] $e (using cache)');
+      if (_cached.isNotEmpty) return _cached;
+      final disk = HomeFeedsDiskCache.slides;
+      if (disk.isNotEmpty) {
+        _cached = disk;
+        _cachedAt = DateTime.now();
+        return disk;
+      }
+      return const [];
     }
   }
 

@@ -175,8 +175,14 @@ class CatalogService {
         lastLoadError = e is TimeoutException
             ? 'Server javob bermadi (vaqt tugadi). Hosting uxlagan bo\'lishi yoki tarmoq sekin — ilovani qayta ishga tushiring yoki Wi‑Fi tekshiring.'
             : e.toString();
-        debugPrint('[API][mobile.courses][error] $e\n$st');
-        if (i == attempts - 1) return;
+        debugPrint('[API][mobile.courses][error] $e');
+        if (i == attempts - 1) {
+          if (_courses.isNotEmpty) {
+            lastLoadOk = true;
+            lastLoadError = null;
+          }
+          return;
+        }
         await Future<void>.delayed(
           isLikelyLocalDevBaseUrl(baseUrl)
               ? Duration(milliseconds: 350 * (i + 1))

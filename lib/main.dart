@@ -74,6 +74,7 @@ class _NeuroscienceAppState extends ConsumerState<NeuroscienceApp>
       if (userId.isNotEmpty) {
         ref.read(notificationsRepositoryProvider).requestFeedRefresh(userId: userId);
       }
+      ref.read(booksRepositoryProvider).clearPaidBookIdsCache();
       ref.invalidate(paidBookIdsProvider);
     });
   }

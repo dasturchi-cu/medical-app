@@ -10,7 +10,7 @@ bool isLikelyLocalDevBaseUrl(String baseUrl) {
 Duration apiListFetchTimeoutForBaseUrl(String baseUrl) =>
     isLikelyLocalDevBaseUrl(baseUrl)
         ? const Duration(seconds: 18)
-        : const Duration(seconds: 32);
+        : const Duration(seconds: 50);
 
 /// Xarid huquqlari — Railway cold start uchun biroz uzoqroq.
 Duration purchasesFetchTimeoutForBaseUrl(String baseUrl) =>
@@ -21,7 +21,7 @@ Duration purchasesFetchTimeoutForBaseUrl(String baseUrl) =>
 Duration catalogBootstrapHttpTimeoutForBaseUrl(String baseUrl) =>
     isLikelyLocalDevBaseUrl(baseUrl)
         ? const Duration(seconds: 28)
-        : const Duration(seconds: 45);
+        : const Duration(seconds: 55);
 
 /// Single-request home bundle (`GET /api/v1/home`) — allow cold Render wake + DB.
 Duration homeAggregateHttpTimeoutForBaseUrl(String baseUrl) =>

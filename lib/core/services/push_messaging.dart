@@ -385,6 +385,7 @@ Future<void> _syncTokenToBackend(String token) async {
         debugPrint('[push] token sync failed status=${res.statusCode} body=${res.body}');
       }
     } else {
+      _deviceTokenEndpointMissing = false;
       debugPrint('[push] token sync ok status=${res.statusCode}');
     }
   } catch (e) {
