@@ -122,8 +122,11 @@ class CatalogService {
   }
 
   static Future<void> _doBootstrap({int maxAttempts = 3}) async {
+    final hadCachedCourses = _courses.isNotEmpty;
     lastLoadError = null;
-    lastLoadOk = false;
+    if (!hadCachedCourses) {
+      lastLoadOk = false;
+    }
     try {
     final baseUrl = getApiBaseUrl();
     if (baseUrl.isEmpty) {

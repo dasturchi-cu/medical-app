@@ -185,7 +185,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       }
     }
     await Future.wait<void>([
-      CatalogService.bootstrap(maxAttempts: 3, forceRefresh: true),
+      CatalogService.bootstrap(maxAttempts: 2, forceRefresh: false),
       _syncRemoteVideoProgress(),
     ]);
     if (!mounted) return;
@@ -223,7 +223,11 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     }
     if (!mounted) return;
     unawaited(ref.read(slidesRepositoryProvider).fetchSlides());
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
     unawaited(ref.read(bannersRepositoryProvider).fetchBanners());
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
     unawaited(ref.read(booksRepositoryProvider).fetchBooks());
   }
 

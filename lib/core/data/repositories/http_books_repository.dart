@@ -3,6 +3,7 @@ import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
+import 'package:shared_preferences/shared_preferences.dart';
 import 'package:supabase/supabase.dart';
 
 import '../../http_request_timeouts.dart';
@@ -26,7 +27,8 @@ class HttpBooksRepository implements BooksRepository {
   DateTime? _cachedAt;
   Future<List<BookItemModel>>? _inFlight;
   static const Duration _cacheTtl = Duration(minutes: 5);
-  static const Duration _paidIdsCacheTtl = Duration(seconds: 60);
+  static const Duration _paidIdsCacheTtl = Duration(minutes: 5);
+  static const String _paidIdsDiskKeyPrefix = 'books_paid_ids_v1_';
   bool _entitlementsEndpointUnsupported = false;
   Set<String>? _paidIdsCache;
   String? _paidIdsCacheUserId;
@@ -109,7 +111,7 @@ class HttpBooksRepository implements BooksRepository {
   }
 
   @override
-  Stream<List<BookItemModel>> watchBooks({Duration pollInterval = const Duration(seconds: 10)}) {
+  Stream<List<BookItemModel>> watchBooks({Duration pollInterval = const Duration(seconds: 45)}) {
     final controller = StreamController<List<BookItemModel>>();
     RealtimeChannel? channel;
     Timer? poller;
@@ -196,30 +198,32 @@ class HttpBooksRepository implements BooksRepository {
     return ids;
   }
 
-  Future<Set<String>> _fetchEntitlementBookIds({required String userId}) async {
+  /// `null` — endpoint yo‘q yoki xato; `/access` fallback kerak.
+  Future<Set<String>?> _fetchEntitlementBookIds({required String userId}) async {
     if (baseUrl.isEmpty || userId.isEmpty) return const <String>{};
-    if (_entitlementsEndpointUnsupported) return const <String>{};
+    if (_entitlementsEndpointUnsupported) return null;
     try {
       final uri = Uri.parse('$baseUrl/api/v1/content/books/entitlements').replace(
         queryParameters: {'user_id': userId},
       );
-      final response =
-          await _client.get(uri).timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
+      final response = await _client
+          .get(uri)
+          .timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
       if (response.statusCode == 405) {
         _entitlementsEndpointUnsupported = true;
         debugPrint('[API][books.entitlements][unsupported] status=405, fallback to /access only');
-        return const <String>{};
+        return null;
       }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint('[API][books.entitlements][response] status=${response.statusCode}');
-        return const <String>{};
+        return null;
       }
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return const <String>{};
       return _parseEntitlementBookIds(body);
     } catch (e, st) {
       debugPrint('[API][books.entitlements][error] $e\n$st');
-      return const <String>{};
+      return null;
     }
   }
 
@@ -229,6 +233,29 @@ class HttpBooksRepository implements BooksRepository {
     _paidIdsCacheUserId = null;
     _paidIdsCacheAt = null;
     _paidIdsInFlight = null;
+  }
+
+  Future<Set<String>?> _loadPaidIdsFromDisk(String userId) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final raw = prefs.getString('$_paidIdsDiskKeyPrefix$userId');
+      if (raw == null || raw.isEmpty) return null;
+      final decoded = jsonDecode(raw);
+      if (decoded is! List) return null;
+      return decoded.map((e) => e.toString()).where((id) => id.isNotEmpty).toSet();
+    } catch (_) {
+      return null;
+    }
+  }
+
+  Future<void> _savePaidIdsToDisk(String userId, Set<String> ids) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(
+        '$_paidIdsDiskKeyPrefix$userId',
+        jsonEncode(ids.toList(growable: false)),
+      );
+    } catch (_) {}
   }
 
   @override
@@ -246,6 +273,15 @@ class HttpBooksRepository implements BooksRepository {
       return Set<String>.from(_paidIdsCache!);
     }
 
+    if (!forceRefresh && (_paidIdsCache == null || _paidIdsCacheUserId != userId)) {
+      final disk = await _loadPaidIdsFromDisk(userId);
+      if (disk != null) {
+        _paidIdsCache = disk;
+        _paidIdsCacheUserId = userId;
+        _paidIdsCacheAt = DateTime.now();
+      }
+    }
+
     final pending = _paidIdsInFlight;
     if (pending != null && !forceRefresh) {
       return pending;
@@ -255,6 +291,14 @@ class HttpBooksRepository implements BooksRepository {
     _paidIdsInFlight = future;
     try {
       return await future;
+    } catch (e, st) {
+      debugPrint('[API][books.paidIds][error] $e\n$st');
+      if (_paidIdsCache != null && _paidIdsCacheUserId == userId) {
+        return Set<String>.from(_paidIdsCache!);
+      }
+      final disk = await _loadPaidIdsFromDisk(userId);
+      if (disk != null) return disk;
+      return const <String>{};
     } finally {
       if (identical(_paidIdsInFlight, future)) {
         _paidIdsInFlight = null;
@@ -263,35 +307,53 @@ class HttpBooksRepository implements BooksRepository {
   }
 
   Future<Set<String>> _fetchPaidBookIdsNetwork(String userId) async {
+    final granted = <String>{};
+
+    final fromEntitlements = await _fetchEntitlementBookIds(userId: userId);
+    if (fromEntitlements != null) {
+      granted.addAll(fromEntitlements);
+      await _commitPaidIdsCache(userId, granted);
+      if (granted.isNotEmpty) {
+        debugPrint('[API][books.paidIds] entitlements count=${granted.length}');
+      }
+      return granted;
+    }
+
     final books = await fetchBooks();
     final paidBooks = books.where((b) => b.isPaid).toList(growable: false);
     if (paidBooks.isEmpty) {
-      _paidIdsCache = const {};
-      _paidIdsCacheUserId = userId;
-      _paidIdsCacheAt = DateTime.now();
-      return const <String>{};
+      await _commitPaidIdsCache(userId, granted);
+      return granted;
     }
 
-    final granted = <String>{};
-    if (!_entitlementsEndpointUnsupported) {
-      granted.addAll(await _fetchEntitlementBookIds(userId: userId));
-    }
-
-    // `/access` — entitlements 405 bo'lsa ham qulf ochiladi (bir marta tekshiriladi).
-    for (final book in paidBooks) {
-      if (granted.contains(book.id)) continue;
-      if (await hasPaidBookAccess(userId: userId, bookId: book.id)) {
-        granted.add(book.id);
+    // Eski backend: `/entitlements` 405 — faqat qolgan pullik kitoblar uchun qisqa `/access`.
+    final pending = paidBooks.where((b) => !granted.contains(b.id)).toList(growable: false);
+    const chunkSize = 2;
+    for (var i = 0; i < pending.length; i += chunkSize) {
+      final chunk = pending.skip(i).take(chunkSize);
+      final checks = await Future.wait(
+        chunk.map((book) async {
+          final ok = await hasPaidBookAccess(userId: userId, bookId: book.id);
+          return ok ? book.id : null;
+        }),
+      );
+      for (final id in checks) {
+        if (id != null) granted.add(id);
       }
     }
 
-    _paidIdsCache = Set<String>.from(granted);
-    _paidIdsCacheUserId = userId;
-    _paidIdsCacheAt = DateTime.now();
+    await _commitPaidIdsCache(userId, granted);
     if (granted.isNotEmpty) {
       debugPrint('[API][books.paidIds] resolved count=${granted.length}');
     }
     return granted;
+  }
+
+  Future<void> _commitPaidIdsCache(String userId, Set<String> granted) async {
+    _paidIdsCache = Set<String>.from(granted);
+    _paidIdsCacheUserId = userId;
+    _paidIdsCacheAt = DateTime.now();
+    unawaited(_savePaidIdsToDisk(userId, granted));
   }
 
   @override
@@ -304,8 +366,9 @@ class HttpBooksRepository implements BooksRepository {
       final uri = Uri.parse('$baseUrl/api/v1/content/books/access').replace(
         queryParameters: {'user_id': userId, 'book_id': bookId},
       );
-      final response =
-          await _client.get(uri).timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
+      final response = await _client
+          .get(uri)
+          .timeout(bookAccessCheckTimeoutForBaseUrl(baseUrl));
       if (response.statusCode < 200 || response.statusCode >= 300) return false;
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return false;

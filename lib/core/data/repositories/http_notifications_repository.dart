@@ -247,7 +247,7 @@ class HttpNotificationsRepository implements NotificationsRepository {
   @override
   Stream<List<AppNotificationItem>> watchFeed({
     required String userId,
-    Duration pollInterval = const Duration(seconds: 30),
+    Duration pollInterval = const Duration(seconds: 90),
   }) {
     if (userId.isEmpty) return Stream.value(const []);
 
