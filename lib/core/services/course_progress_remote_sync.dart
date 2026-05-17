@@ -37,7 +37,11 @@ final class CourseProgressRemoteSync {
     try {
       final response = await http
           .get(Uri.parse('$baseUrl/api/v1/courses/progress?user_id=$userId'))
-          .timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
+          .timeout(
+            isLikelyLocalDevBaseUrl(baseUrl)
+                ? const Duration(seconds: 10)
+                : const Duration(seconds: 15),
+          );
       if (response.statusCode < 200 || response.statusCode >= 300) return;
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return;
@@ -60,8 +64,8 @@ final class CourseProgressRemoteSync {
       }
       progress.mergeWatchedFromServer(watchedByCourse);
       progress.mergeCompletedFromServer(completedByCourse);
-    } catch (e, st) {
-      debugPrint('[CourseProgressRemoteSync] $e\n$st');
+    } catch (e) {
+      debugPrint('[CourseProgressRemoteSync] $e');
     }
   }
 }

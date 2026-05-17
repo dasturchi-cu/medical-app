@@ -128,6 +128,7 @@ class HomePage extends ConsumerStatefulWidget {
 class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver {
   final _pageController = PageController(viewportFraction: 0.92);
   Timer? _timer;
+  Timer? _catalogRetryTimer;
   int _slideCount = 1;
 
   @override
@@ -149,12 +150,18 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         curve: Curves.easeOut,
       );
     });
+    _catalogRetryTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+      if (!mounted) return;
+      if (CatalogService.courses.isNotEmpty || CatalogService.isLoading) return;
+      unawaited(CatalogService.bootstrap(maxAttempts: 2));
+    });
   }
 
   @override
   void dispose() {
     WidgetsBinding.instance.removeObserver(this);
     _timer?.cancel();
+    _catalogRetryTimer?.cancel();
     _pageController.dispose();
     super.dispose();
   }
@@ -174,7 +181,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     if (HomeAggregateConfig.enabled) {
       final ok = await HomeAggregateService.tryFetchAndSeed(ref);
       if (ok) {
-        await _syncRemoteVideoProgress();
+        unawaited(_syncRemoteVideoProgress());
         if (!mounted) return;
         ref.invalidate(slidesFeedProvider);
         ref.invalidate(bannersFeedProvider);
@@ -184,10 +191,8 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         return;
       }
     }
-    await Future.wait<void>([
-      CatalogService.bootstrap(maxAttempts: 2, forceRefresh: false),
-      _syncRemoteVideoProgress(),
-    ]);
+    await CatalogService.bootstrap(maxAttempts: 2, forceRefresh: false);
+    unawaited(_syncRemoteVideoProgress());
     if (!mounted) return;
     ref.invalidate(slidesFeedProvider);
     ref.invalidate(bannersFeedProvider);
@@ -282,6 +287,9 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         : (bannersAsync!.valueOrNull ?? HomeFeedsDiskCache.banners);
     final courseStatsOverrides = ref.watch(courseCardStatsOverrideProvider);
     final contentStatsOverrides = ref.watch(contentCardStatsOverrideProvider);
+    final neurologyStatsMap =
+        ref.watch(neurologyHomeStatsProvider(CatalogService.catalogRevision.value)).valueOrNull ??
+        const <String, CourseCardStats>{};
     final newsItems = remoteBanners
         .map(
           (banner) {
@@ -712,7 +720,15 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                         separatorBuilder: (_, index) => const SizedBox(width: 12),
                         itemBuilder: (context, index) {
                           final news = newsItems[index];
-                          final newsStats = contentStatsOverrides[news.feedbackKey];
+                          final fetchedNewsStats = ref
+                              .watch(
+                                contentCardStatsProvider(
+                                  (key: news.feedbackKey, useFeedbackApi: news.useFeedbackApi),
+                                ),
+                              )
+                              .valueOrNull;
+                          final newsStats =
+                              contentStatsOverrides[news.feedbackKey] ?? fetchedNewsStats;
                           return _NewsCard(
                             item: news,
                             ratingValue: newsStats?.ratingAvg ?? news.rating,
@@ -792,7 +808,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                 itemCount: courses.length,
                 itemBuilder: (context, index) {
                 final c = courses[index];
-                final cardStats = courseStatsOverrides[c.id];
+                final cardStats = courseStatsOverrides[c.id] ?? neurologyStatsMap[c.id];
                 final p = progress.byCourseId[c.id];
                 final totalLessons = c.lessonCount > 0
                     ? c.lessonCount

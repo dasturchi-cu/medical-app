@@ -8,6 +8,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../http_request_timeouts.dart';
 import '../models/course_models.dart';
+import 'home_feeds_disk_cache.dart';
 
 String _fallbackInstructor() => 'Umidjon Mukarramov';
 
@@ -20,6 +21,8 @@ class CatalogService {
   static DateTime? _lastBootstrapAttemptAt;
   static const Duration _cacheTtl = Duration(minutes: 5);
   static bool _hydratedFromDisk = false;
+  static bool _homeBundleUnsupported = false;
+  static Future<void>? _detailsRefreshInFlight;
   /// Katalog yuklangach UI qayta chizilsin (`HomePage` va boshqalar tinglaydi).
   static final ValueNotifier<int> catalogRevision = ValueNotifier<int>(0);
 
@@ -73,6 +76,11 @@ class CatalogService {
       await _hydrateFromDisk();
     }
     final now = DateTime.now();
+    if (!forceRefresh &&
+        _lastBootstrapAttemptAt != null &&
+        now.difference(_lastBootstrapAttemptAt!) < const Duration(seconds: 20)) {
+      return;
+    }
     if (!forceRefresh &&
         _courses.isNotEmpty &&
         _lastBootstrapAttemptAt != null &&
@@ -155,6 +163,8 @@ class CatalogService {
     // Fast-path: yengil `/courses` endpointdan tez seed qilib UI ni ochamiz.
     final fastSeeded = await _tryBootstrapFromCoursesList(baseUrl);
     if (fastSeeded) {
+      // Tez ro'yxat ko'rsatamiz, keyin fon rejimida to'liq (darslar/reyting) catalog bilan boyitamiz.
+      unawaited(_refreshDetailedCatalogInBackground(baseUrl: baseUrl, maxAttempts: maxAttempts));
       return;
     }
 
@@ -165,11 +175,7 @@ class CatalogService {
         final uri = Uri.parse('$baseUrl/api/v1/mobile/courses');
         final response = await http
             .get(uri, headers: const {'Cache-Control': 'no-cache'})
-            .timeout(
-              isLikelyLocalDevBaseUrl(baseUrl)
-                  ? const Duration(seconds: 10)
-                  : const Duration(seconds: 12),
-            );
+            .timeout(catalogBootstrapHttpTimeoutForBaseUrl(baseUrl));
         debugPrint('[API][mobile.courses][response] status=${response.statusCode}');
         if (response.statusCode < 200 || response.statusCode >= 300) {
           lastLoadError = 'Katalog HTTP ${response.statusCode}';
@@ -213,6 +219,8 @@ class CatalogService {
         final seeded = await _tryBootstrapFromHomeBundle(baseUrl);
         if (seeded) return;
         if (i == attempts - 1) {
+          final slideSeeded = _seedFromSlidesFallback();
+          if (slideSeeded) return;
           if (_courses.isNotEmpty) {
             lastLoadOk = true;
             lastLoadError = null;
@@ -226,12 +234,14 @@ class CatalogService {
         );
       }
     }
+    _seedFromSlidesFallback();
     } finally {
       _bumpCatalogRevision();
     }
   }
 
   static Future<bool> _tryBootstrapFromHomeBundle(String baseUrl) async {
+    if (_homeBundleUnsupported) return false;
     try {
       final uri = Uri.parse('$baseUrl/api/v1/home');
       debugPrint('[API][home.bundle][request] $uri');
@@ -243,6 +253,10 @@ class CatalogService {
                 : const Duration(seconds: 10),
           );
       debugPrint('[API][home.bundle][response] status=${response.statusCode}');
+      if (response.statusCode == 404) {
+        _homeBundleUnsupported = true;
+        return false;
+      }
       if (response.statusCode < 200 || response.statusCode >= 300) {
         return false;
       }
@@ -276,11 +290,7 @@ class CatalogService {
       debugPrint('[API][courses.list][request] $uri');
       final response = await http
           .get(uri, headers: const {'Cache-Control': 'no-cache'})
-          .timeout(
-            isLikelyLocalDevBaseUrl(baseUrl)
-                ? const Duration(seconds: 6)
-                : const Duration(seconds: 8),
-          );
+          .timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
       debugPrint('[API][courses.list][response] status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) return false;
       final decoded = jsonDecode(response.body);
@@ -301,6 +311,114 @@ class CatalogService {
       debugPrint('[API][courses.list][error] $e');
       return false;
     }
+  }
+
+  static Future<void> _refreshDetailedCatalogInBackground({
+    required String baseUrl,
+    required int maxAttempts,
+  }) {
+    final existing = _detailsRefreshInFlight;
+    if (existing != null) return existing;
+    final run = () async {
+      final attempts = maxAttempts < 1 ? 1 : maxAttempts;
+      for (var i = 0; i < attempts; i++) {
+        try {
+          debugPrint('[API][mobile.courses][refresh.request] attempt=${i + 1} baseUrl=$baseUrl');
+          final uri = Uri.parse('$baseUrl/api/v1/mobile/courses');
+          final response = await http
+              .get(uri, headers: const {'Cache-Control': 'no-cache'})
+              .timeout(catalogBootstrapHttpTimeoutForBaseUrl(baseUrl));
+          debugPrint('[API][mobile.courses][refresh.response] status=${response.statusCode}');
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            final seeded = await _tryBootstrapFromHomeBundle(baseUrl);
+            if (seeded) {
+              _bumpCatalogRevision();
+              return;
+            }
+            if (i == attempts - 1) return;
+            await Future<void>.delayed(
+              isLikelyLocalDevBaseUrl(baseUrl)
+                  ? Duration(milliseconds: 350 * (i + 1))
+                  : Duration(seconds: 2 + i),
+            );
+            continue;
+          }
+          final body = jsonDecode(response.body);
+          if (body is! Map<String, dynamic>) return;
+          final raw = body['items'];
+          if (raw is! List) return;
+          final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
+          _courses = rawMaps.map(_toCourse).toList(growable: false);
+          lastLoadOk = true;
+          _lastNetworkLoadedAt = DateTime.now();
+          lastLoadError = _courses.isEmpty ? 'Serverdan faol kurslar ro\'yxati bo\'sh.' : null;
+          if (rawMaps.isNotEmpty) {
+            unawaited(_persistToDisk(rawMaps));
+          }
+          _bumpCatalogRevision();
+          debugPrint('[API][mobile.courses][refresh.parsed] courses=${_courses.length}');
+          return;
+        } catch (e) {
+          debugPrint('[API][mobile.courses][refresh.error] $e');
+          final seeded = await _tryBootstrapFromHomeBundle(baseUrl);
+          if (seeded) {
+            _bumpCatalogRevision();
+            return;
+          }
+          if (i == attempts - 1) return;
+          await Future<void>.delayed(
+            isLikelyLocalDevBaseUrl(baseUrl)
+                ? Duration(milliseconds: 350 * (i + 1))
+                : Duration(seconds: 2 + i),
+          );
+        }
+      }
+    }();
+    _detailsRefreshInFlight = run;
+    run.whenComplete(() {
+      if (identical(_detailsRefreshInFlight, run)) _detailsRefreshInFlight = null;
+    });
+    return run;
+  }
+
+  static bool _seedFromSlidesFallback() {
+    if (_courses.isNotEmpty) return false;
+    final slides = HomeFeedsDiskCache.slides;
+    if (slides.isEmpty) return false;
+    final seenIds = <String>{};
+    final generated = <Course>[];
+    for (final s in slides) {
+      final cid = (s.courseId ?? '').trim();
+      final title = s.title.trim();
+      if (cid.isEmpty || title.isEmpty || !seenIds.add(cid)) continue;
+      generated.add(
+        Course(
+          id: cid,
+          categoryId: 'cat_nevralogiya',
+          titleUz: title,
+          titleRu: title,
+          titleEn: title,
+          authorUz: _fallbackInstructor(),
+          imageUrl: s.imageUrl,
+          priceUz: '0 so\'m',
+          progress: 0,
+          rating: 0,
+          commentsCount: 0,
+          lessonCount: 0,
+          isPaid: true,
+          descriptionUz: '',
+          descriptionRu: '',
+          descriptionEn: '',
+          sections: const [],
+        ),
+      );
+    }
+    if (generated.isEmpty) return false;
+    _courses = generated;
+    lastLoadOk = true;
+    lastLoadError = null;
+    debugPrint('[CatalogService] seeded ${generated.length} courses from slides fallback');
+    return true;
   }
 
   static Course _toCourse(Map<String, dynamic> json) {
@@ -367,6 +485,10 @@ class CatalogService {
   static Course _toCourseFromCoursesListItem(Map<String, dynamic> json) {
     final instructorName = (json['instructor_name'] ?? json['author'] ?? '').toString().trim();
     final coverImage = (json['cover_image_url'] ?? json['image_url'] ?? '').toString().trim();
+    final priceUzs = int.tryParse((json['price_uzs'] ?? '0').toString()) ?? 0;
+    final rating = double.tryParse((json['rating_avg'] ?? json['rating'] ?? '0').toString()) ?? 0;
+    final commentsCount = int.tryParse((json['comments_count'] ?? '0').toString()) ?? 0;
+    final lessonCount = int.tryParse((json['lesson_count'] ?? json['lessons_count'] ?? '0').toString()) ?? 0;
     return Course(
       id: (json['id'] ?? '').toString(),
       categoryId: 'cat_nevralogiya',
@@ -375,12 +497,12 @@ class CatalogService {
       titleEn: (json['title_en'] ?? '').toString(),
       authorUz: instructorName.isEmpty ? _fallbackInstructor() : instructorName,
       imageUrl: coverImage,
-      priceUz: '${(json['price_uzs'] ?? 0).toString()} so\'m',
+      priceUz: '$priceUzs so\'m',
       progress: 0,
-      rating: 0,
-      commentsCount: 0,
-      lessonCount: 0,
-      isPaid: true,
+      rating: rating,
+      commentsCount: commentsCount,
+      lessonCount: lessonCount,
+      isPaid: priceUzs > 0,
       descriptionUz: (json['description_uz'] ?? '').toString(),
       descriptionRu: (json['description_ru'] ?? '').toString(),
       descriptionEn: (json['description_en'] ?? '').toString(),

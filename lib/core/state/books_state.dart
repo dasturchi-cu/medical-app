@@ -61,7 +61,7 @@ final paidBookIdsProvider = StreamProvider<Set<String>>((ref) {
     });
   }
 
-  Timer(const Duration(seconds: 2), () => unawaited(push(force: false)));
+  Timer(const Duration(seconds: 2), () => unawaited(push(force: true)));
   timer = Timer.periodic(const Duration(minutes: 2), (_) => schedulePush());
 
   ref.onDispose(() async {

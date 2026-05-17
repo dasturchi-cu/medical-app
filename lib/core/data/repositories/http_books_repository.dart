@@ -33,6 +33,7 @@ class HttpBooksRepository implements BooksRepository {
   Set<String>? _paidIdsCache;
   String? _paidIdsCacheUserId;
   DateTime? _paidIdsCacheAt;
+  bool _paidIdsCacheFromDiskOnly = false;
   Future<Set<String>>? _paidIdsInFlight;
 
   @override
@@ -221,8 +222,8 @@ class HttpBooksRepository implements BooksRepository {
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return const <String>{};
       return _parseEntitlementBookIds(body);
-    } catch (e, st) {
-      debugPrint('[API][books.entitlements][error] $e\n$st');
+    } catch (e) {
+      debugPrint('[API][books.entitlements][error] $e');
       return null;
     }
   }
@@ -232,6 +233,7 @@ class HttpBooksRepository implements BooksRepository {
     _paidIdsCache = null;
     _paidIdsCacheUserId = null;
     _paidIdsCacheAt = null;
+    _paidIdsCacheFromDiskOnly = false;
     _paidIdsInFlight = null;
   }
 
@@ -279,6 +281,7 @@ class HttpBooksRepository implements BooksRepository {
         _paidIdsCache = disk;
         _paidIdsCacheUserId = userId;
         _paidIdsCacheAt = DateTime.now();
+        _paidIdsCacheFromDiskOnly = true;
       }
     }
 
@@ -291,13 +294,14 @@ class HttpBooksRepository implements BooksRepository {
     _paidIdsInFlight = future;
     try {
       return await future;
-    } catch (e, st) {
-      debugPrint('[API][books.paidIds][error] $e\n$st');
-      if (_paidIdsCache != null && _paidIdsCacheUserId == userId) {
+    } catch (e) {
+      debugPrint('[API][books.paidIds][error] $e');
+      if (_paidIdsCache != null &&
+          _paidIdsCacheUserId == userId &&
+          !_paidIdsCacheFromDiskOnly) {
         return Set<String>.from(_paidIdsCache!);
       }
-      final disk = await _loadPaidIdsFromDisk(userId);
-      if (disk != null) return disk;
+      // Security-first: network tasdiqlamasa diskdagi eski grant bilan ochmaymiz.
       return const <String>{};
     } finally {
       if (identical(_paidIdsInFlight, future)) {
@@ -353,6 +357,7 @@ class HttpBooksRepository implements BooksRepository {
     _paidIdsCache = Set<String>.from(granted);
     _paidIdsCacheUserId = userId;
     _paidIdsCacheAt = DateTime.now();
+    _paidIdsCacheFromDiskOnly = false;
     unawaited(_savePaidIdsToDisk(userId, granted));
   }
 
