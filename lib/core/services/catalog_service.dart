@@ -28,6 +28,7 @@ class CatalogService {
 
   /// True after a successful fetch with a parseable `items` list (may be empty).
   static bool lastLoadOk = false;
+  static bool get isLoading => _bootstrapInFlight != null;
 
   static List<Course> get courses => _courses;
 

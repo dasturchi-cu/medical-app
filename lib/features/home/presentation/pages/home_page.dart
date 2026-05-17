@@ -331,7 +331,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           return c.localizedTitle(lang).toLowerCase().contains(query) ||
               c.authorUz.toLowerCase().contains(query);
         }).toList();
-        final isCatalogStillLoading = !CatalogService.lastLoadOk && allCourses.isEmpty;
+        final isCatalogStillLoading = CatalogService.isLoading && allCourses.isEmpty;
         String? catalogLoadError;
         try {
           catalogLoadError = CatalogService.lastLoadError;
@@ -641,19 +641,31 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
           SliverToBoxAdapter(
             child: Padding(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-              child: catalogLoadError != null && allCourses.isEmpty
+              child: (catalogLoadError != null || (!isCatalogStillLoading && allCourses.isEmpty))
                   ? Material(
                       color: const Color(0xFFFFF4E5),
                       borderRadius: BorderRadius.circular(12),
                       child: Padding(
                         padding: const EdgeInsets.all(12),
-                        child: Text(
-                          'Kurslar yuklanmadi: $catalogLoadError\n'
-                          'Internet va API_BASE_URL ni tekshiring. Pastga torting (yangilash).',
-                          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                                color: const Color(0xFF92400E),
-                                fontWeight: FontWeight.w600,
+                        child: Row(
+                          children: [
+                            Expanded(
+                              child: Text(
+                                catalogLoadError != null
+                                    ? 'Kurslar yuklanmadi: $catalogLoadError\nInternetni tekshiring va yangilang.'
+                                    : 'Kurslar hozircha yuklanmadi. Qayta urinish mumkin.',
+                                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                                      color: const Color(0xFF92400E),
+                                      fontWeight: FontWeight.w600,
+                                    ),
                               ),
+                            ),
+                            const SizedBox(width: 8),
+                            TextButton(
+                              onPressed: () => unawaited(_refreshCatalog()),
+                              child: const Text('Qayta urinish'),
+                            ),
+                          ],
                         ),
                       ),
                     )
