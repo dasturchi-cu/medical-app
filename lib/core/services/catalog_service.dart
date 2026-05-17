@@ -151,6 +151,13 @@ class CatalogService {
       lastLoadError = 'API_BASE_URL bo\'sh.';
       return;
     }
+
+    // Fast-path: yengil `/courses` endpointdan tez seed qilib UI ni ochamiz.
+    final fastSeeded = await _tryBootstrapFromCoursesList(baseUrl);
+    if (fastSeeded) {
+      return;
+    }
+
     final attempts = maxAttempts < 1 ? 1 : maxAttempts;
     for (var i = 0; i < attempts; i++) {
       try {
@@ -160,8 +167,8 @@ class CatalogService {
             .get(uri, headers: const {'Cache-Control': 'no-cache'})
             .timeout(
               isLikelyLocalDevBaseUrl(baseUrl)
-                  ? const Duration(seconds: 14)
-                  : const Duration(seconds: 20),
+                  ? const Duration(seconds: 10)
+                  : const Duration(seconds: 12),
             );
         debugPrint('[API][mobile.courses][response] status=${response.statusCode}');
         if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -232,8 +239,8 @@ class CatalogService {
           .get(uri, headers: const {'Cache-Control': 'no-cache'})
           .timeout(
             isLikelyLocalDevBaseUrl(baseUrl)
-                ? const Duration(seconds: 8)
-                : const Duration(seconds: 15),
+                ? const Duration(seconds: 6)
+                : const Duration(seconds: 10),
           );
       debugPrint('[API][home.bundle][response] status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) {
@@ -259,6 +266,39 @@ class CatalogService {
       return true;
     } catch (e) {
       debugPrint('[API][home.bundle][error] $e');
+      return false;
+    }
+  }
+
+  static Future<bool> _tryBootstrapFromCoursesList(String baseUrl) async {
+    try {
+      final uri = Uri.parse('$baseUrl/api/v1/courses?active_only=true');
+      debugPrint('[API][courses.list][request] $uri');
+      final response = await http
+          .get(uri, headers: const {'Cache-Control': 'no-cache'})
+          .timeout(
+            isLikelyLocalDevBaseUrl(baseUrl)
+                ? const Duration(seconds: 6)
+                : const Duration(seconds: 8),
+          );
+      debugPrint('[API][courses.list][response] status=${response.statusCode}');
+      if (response.statusCode < 200 || response.statusCode >= 300) return false;
+      final decoded = jsonDecode(response.body);
+      if (decoded is! Map<String, dynamic>) return false;
+      final raw = decoded['items'];
+      if (raw is! List) return false;
+      final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
+      if (rawMaps.isEmpty) return false;
+
+      _courses = rawMaps.map(_toCourseFromCoursesListItem).toList(growable: false);
+      lastLoadOk = true;
+      _lastNetworkLoadedAt = DateTime.now();
+      lastLoadError = null;
+      unawaited(_persistToDisk(rawMaps));
+      debugPrint('[API][courses.list][parsed] courses=${_courses.length}');
+      return true;
+    } catch (e) {
+      debugPrint('[API][courses.list][error] $e');
       return false;
     }
   }
@@ -321,6 +361,30 @@ class CatalogService {
       transcriptUz: '',
       slides: const [],
       videoUrl: (json['video_url'] ?? '').toString(),
+    );
+  }
+
+  static Course _toCourseFromCoursesListItem(Map<String, dynamic> json) {
+    final instructorName = (json['instructor_name'] ?? json['author'] ?? '').toString().trim();
+    final coverImage = (json['cover_image_url'] ?? json['image_url'] ?? '').toString().trim();
+    return Course(
+      id: (json['id'] ?? '').toString(),
+      categoryId: 'cat_nevralogiya',
+      titleUz: (json['title_uz'] ?? '').toString(),
+      titleRu: (json['title_ru'] ?? '').toString(),
+      titleEn: (json['title_en'] ?? '').toString(),
+      authorUz: instructorName.isEmpty ? _fallbackInstructor() : instructorName,
+      imageUrl: coverImage,
+      priceUz: '${(json['price_uzs'] ?? 0).toString()} so\'m',
+      progress: 0,
+      rating: 0,
+      commentsCount: 0,
+      lessonCount: 0,
+      isPaid: true,
+      descriptionUz: (json['description_uz'] ?? '').toString(),
+      descriptionRu: (json['description_ru'] ?? '').toString(),
+      descriptionEn: (json['description_en'] ?? '').toString(),
+      sections: const [],
     );
   }
 }
