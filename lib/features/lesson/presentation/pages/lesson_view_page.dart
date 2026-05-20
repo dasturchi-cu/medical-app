@@ -511,10 +511,22 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
               ),
         body: LayoutBuilder(
           builder: (context, constraints) {
-            final viewportH = constraints.maxHeight;
-            final videoTop = videoImmersive
-                ? ((viewportH - mediaHeight) / 2).clamp(0.0, viewportH)
-                : 0.0;
+            final videoLayer = ColoredBox(
+              color: Colors.black,
+              child: Builder(
+                builder: (context) {
+                  if (courseId != null && !_progressLoadScheduled) {
+                    _progressLoadScheduled = true;
+                    WidgetsBinding.instance.addPostFrameCallback((_) {
+                      if (mounted) {
+                        _ensureInitialWatchProgressLoaded(courseId);
+                      }
+                    });
+                  }
+                  return buildVideoSlot(mediaHeight);
+                },
+              ),
+            );
 
             return Stack(
               fit: StackFit.expand,
@@ -523,7 +535,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                   const Positioned.fill(
                     child: ColoredBox(color: Colors.black),
                   ),
-                if (!videoImmersive)
+                if (!videoImmersive) ...[
                   Positioned(
                     top: mediaHeight,
                     left: 0,
@@ -534,28 +546,16 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
                       children: lessonScrollChildren,
                     ),
                   ),
-                Positioned(
-                  left: 0,
-                  right: 0,
-                  top: videoTop,
-                  height: mediaHeight,
-                  child: ColoredBox(
-                    color: Colors.black,
-                    child: Builder(
-                      builder: (context) {
-                        if (courseId != null && !_progressLoadScheduled) {
-                          _progressLoadScheduled = true;
-                          WidgetsBinding.instance.addPostFrameCallback((_) {
-                            if (mounted) {
-                              _ensureInitialWatchProgressLoaded(courseId);
-                            }
-                          });
-                        }
-                        return buildVideoSlot(mediaHeight);
-                      },
-                    ),
+                  Positioned(
+                    left: 0,
+                    right: 0,
+                    top: 0,
+                    height: mediaHeight,
+                    child: videoLayer,
                   ),
-                ),
+                ],
+                if (videoImmersive)
+                  Positioned.fill(child: videoLayer),
               ],
             );
           },

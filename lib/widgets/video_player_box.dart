@@ -193,6 +193,9 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   bool _wasBuffering = false;
   bool _fullscreenLocked = false;
   DateTime? _lastFullscreenTapAt;
+  int? _resumePositionAfterFullscreen;
+  bool _resumePlayAfterFullscreen = false;
+  final GlobalKey _youtubeViewKey = GlobalKey(debugLabel: 'lesson-youtube-view');
   bool _showFreezeRecovery = false;
   int _healthLastPosSec = 0;
   int _healthStallTicks = 0;
@@ -217,7 +220,8 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   int _playRecoveryAttempts = 0;
   DateTime? _playerReadyAt;
 
-  static const _loadTimeout = Duration(seconds: 10);
+  static const _youtubeLoadTimeout = Duration(seconds: 45);
+  static const _nativeLoadTimeout = Duration(seconds: 20);
 
   bool get _isYoutube => _youtubeId != null && _ytController != null;
   bool get _isPlayingNow {
@@ -248,7 +252,13 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     _VideoLog.mounted(videoId: _youtubeId ?? widget.url);
     _VideoLog.loadStart(videoId: _youtubeId, url: widget.url);
     _startLoadTimeout();
-    unawaited(_bootstrapPlayer());
+    if (_youtubeId != null) {
+      _createYoutubeController();
+      if (mounted) setState(() {});
+      unawaited(_loadPlaybackPrefs());
+    } else {
+      unawaited(_bootstrapNativePlayer());
+    }
     _progressFlushTimer = Timer.periodic(
       const Duration(seconds: 3),
       (_) => _emitProgressFromCurrent(force: false),
@@ -270,27 +280,37 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     );
   }
 
-  Future<void> _bootstrapPlayer() async {
+  void _createYoutubeController() {
+    final id = _youtubeId;
+    if (id == null) return;
+    _ytController?.removeListener(_handleYoutubeProgress);
+    _ytController?.dispose();
+    _ytController = YoutubePlayerController(
+      initialVideoId: id,
+      flags: const YoutubePlayerFlags(
+        autoPlay: false,
+        mute: false,
+        forceHD: false,
+        enableCaption: false,
+        hideControls: true,
+        controlsVisibleAtStart: false,
+        hideThumbnail: true,
+        disableDragSeek: false,
+      ),
+    )..addListener(_handleYoutubeProgress);
+  }
+
+  Future<void> _loadPlaybackPrefs() async {
+    final loaded = await VideoPlaybackPrefs.loadSpeed();
+    if (!mounted) return;
+    _speed = loaded;
+    _applyYoutubeSettingsWhenReady();
+    if (mounted) setState(() {});
+  }
+
+  Future<void> _bootstrapNativePlayer() async {
     _speed = await VideoPlaybackPrefs.loadSpeed();
     if (!mounted) return;
-
-    if (_youtubeId != null) {
-      _ytController = YoutubePlayerController(
-        initialVideoId: _youtubeId!,
-        flags: const YoutubePlayerFlags(
-          autoPlay: false,
-          mute: false,
-          forceHD: false,
-          enableCaption: true,
-          hideControls: true,
-          controlsVisibleAtStart: false,
-          hideThumbnail: false,
-          disableDragSeek: false,
-        ),
-      )..addListener(_handleYoutubeProgress);
-      if (mounted) setState(() {});
-      return;
-    }
 
     _controller = VideoPlayerController.networkUrl(
       Uri.parse(widget.url),
@@ -335,7 +355,13 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       _playRecoveryAttempts = 0;
       _youtubeId = _extractYouTubeId(widget.url);
       _startLoadTimeout();
-      unawaited(_bootstrapPlayer());
+      if (_youtubeId != null) {
+        _createYoutubeController();
+        if (mounted) setState(() {});
+        unawaited(_loadPlaybackPrefs());
+      } else {
+        unawaited(_bootstrapNativePlayer());
+      }
       return;
     }
     final newSec = widget.initialWatchedSec;
@@ -383,13 +409,47 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
 
   @override
   void didChangeMetrics() {
-    if (!mounted || _immersiveFullscreen) return;
+    if (!mounted) return;
     _snapshotPlayback();
+    final resume = _resumePositionAfterFullscreen;
+    if (resume != null) {
+      final play = _resumePlayAfterFullscreen;
+      _resumePositionAfterFullscreen = null;
+      _resumePlayAfterFullscreen = false;
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_restorePositionAfterFullscreen(resume, play: play));
+      });
+      return;
+    }
     WidgetsBinding.instance.addPostFrameCallback((_) {
       if (!mounted || _immersiveFullscreen) return;
       if (_isYoutube) return;
       unawaited(_syncPlaybackAfterLayout(reason: 'metrics'));
     });
+  }
+
+  Future<void> _restorePositionAfterFullscreen(int sec, {bool play = false}) async {
+    if (sec > 0) {
+      _lastKnownPositionSec = sec;
+      if (sec > _lastReportedSec) _lastReportedSec = sec;
+    }
+    await _applyResumePosition(sec);
+    if (!mounted) return;
+    if (_isYoutube) {
+      _runYoutubeWhenReady((c) {
+        final dur = c.metadata.duration.inSeconds;
+        if (dur > 0) {
+          final safe = sec.clamp(0, dur - 1);
+          if ((c.value.position.inSeconds - safe).abs() > 2) {
+            c.seekTo(Duration(seconds: safe), allowSeekAhead: true);
+          }
+        }
+        if (play) c.play();
+      });
+    } else if (play) {
+      await _startPlayback();
+    }
   }
 
   @override
@@ -455,14 +515,56 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
 
   void _startLoadTimeout() {
     _loadTimeoutTimer?.cancel();
-    _loadTimeoutTimer = Timer(_loadTimeout, () {
+    final timeout =
+        _youtubeId != null ? _youtubeLoadTimeout : _nativeLoadTimeout;
+    _loadTimeoutTimer = Timer(timeout, () {
       if (!mounted || _playerReady) return;
+      final yc = _ytController;
+      if (_youtubeId != null && (yc?.value.isReady ?? false)) {
+        final dur = yc!.metadata.duration.inSeconds;
+        _markPlayerReady(durationSec: dur > 0 ? dur : 1);
+        return;
+      }
       _VideoLog.loadingTimeout();
       setState(() {
         _loadTimedOut = true;
         _isInitialLoading = false;
       });
     });
+  }
+
+  void _onYoutubeIframeReady() {
+    _loadTimeoutTimer?.cancel();
+    if (_playerReady) return;
+    final yc = _ytController;
+    if (yc == null || !yc.value.isReady) return;
+    final dur = yc.metadata.duration.inSeconds;
+    _markPlayerReady(durationSec: dur > 0 ? dur : 1);
+    _applyYoutubeSettingsWhenReady();
+    final seekSec = _pendingInitialSeekSec;
+    if (seekSec != null && seekSec > 0) {
+      unawaited(_applyResumePosition(seekSec));
+      _pendingInitialSeekSec = null;
+    }
+  }
+
+  Future<void> _retryYoutubeLoad() async {
+    setState(() {
+      _loadTimedOut = false;
+      _isInitialLoading = true;
+      _playerReady = false;
+      _playerReadyAt = null;
+      _showFreezeRecovery = false;
+    });
+    _disposeControllers();
+    _youtubeId = _extractYouTubeId(widget.url);
+    _pendingInitialSeekSec = _lastKnownPositionSec > 0
+        ? _lastKnownPositionSec
+        : widget.initialWatchedSec;
+    _createYoutubeController();
+    _startLoadTimeout();
+    if (mounted) setState(() {});
+    await _loadPlaybackPrefs();
   }
 
   void _markPlayerReady({required int durationSec}) {
@@ -498,6 +600,14 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     _immersiveNotifier.dispose();
     _disposeControllers();
     super.dispose();
+  }
+
+  Future<void> _enterLandscapeFullscreen() async {
+    await SystemChrome.setPreferredOrientations([
+      DeviceOrientation.landscapeLeft,
+      DeviceOrientation.landscapeRight,
+    ]);
+    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
   }
 
   Future<void> _restoreAppSystemUi() async {
@@ -710,8 +820,15 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       _emitProgressFromCurrent(force: false);
     }
     final durationSec = c.metadata.duration.inSeconds;
+    final playing = v.playerState == PlayerState.playing;
+    final buffering = v.playerState == PlayerState.buffering;
 
-    if (v.isReady && !_playerReady) {
+    if (_loadTimedOut && (v.isReady || durationSec > 0 || watchedSec > 0)) {
+      _loadTimedOut = false;
+      if (mounted) setState(() {});
+    }
+
+    if (!_playerReady && v.isReady) {
       _markPlayerReady(durationSec: durationSec > 0 ? durationSec : 1);
       _applyYoutubeSettingsWhenReady();
     }
@@ -721,9 +838,6 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       unawaited(_applyResumePosition(seekSec));
       _pendingInitialSeekSec = null;
     }
-
-    final playing = v.playerState == PlayerState.playing;
-    final buffering = v.playerState == PlayerState.buffering;
     final nextBufferingUi = buffering && (playing || _pendingPlay);
     final bufferingUiChanged = nextBufferingUi != _isBufferingUi;
     if (bufferingUiChanged) {
@@ -916,21 +1030,32 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       wasPlaying: wasPlaying,
     );
 
-    await SystemChrome.setEnabledSystemUIMode(SystemUiMode.immersiveSticky);
+    _resumePositionAfterFullscreen = positionBefore;
+    _resumePlayAfterFullscreen = wasPlaying;
 
     if (!mounted) {
       _fullscreenLocked = false;
       return;
     }
-
     _immersiveNotifier.value = true;
+    widget.onImmersiveModeChanged?.call(true);
+
+    await _enterLandscapeFullscreen();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    if (!mounted) {
+      await _restoreAppSystemUi();
+      _immersiveNotifier.value = false;
+      widget.onImmersiveModeChanged?.call(false);
+      _fullscreenLocked = false;
+      return;
+    }
+
+    await _restorePositionAfterFullscreen(positionBefore, play: wasPlaying);
+
     _VideoLog.fullscreenEnterDone(currentTime: positionBefore);
     _fullscreenLocked = false;
-    debugPrint('[VIDEO_FULLSCREEN] cinema mode (no WebView rebuild)');
-    WidgetsBinding.instance.addPostFrameCallback((_) {
-      widget.onImmersiveModeChanged?.call(true);
-      if (wasPlaying && mounted) unawaited(_startPlayback());
-    });
+    debugPrint('[VIDEO_FULLSCREEN] cinema mode position=$positionBefore');
   }
 
   Future<void> _closeImmersiveFullscreen() async {
@@ -942,25 +1067,25 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     final position = _currentPositionSec();
     debugPrint('[VIDEO_FULLSCREEN] immersive close position=$position');
 
-    _immersiveNotifier.value = false;
-    await _restoreAppSystemUi();
-    widget.onImmersiveModeChanged?.call(false);
-    if (_isYoutube) {
-      _runYoutubeWhenReady((c) {
-        final dur = c.metadata.duration.inSeconds;
-        if (dur > 0) {
-          final safe = position.clamp(0, dur - 1);
-          if ((c.value.position.inSeconds - safe).abs() > 2) {
-            c.seekTo(Duration(seconds: safe), allowSeekAhead: true);
-          }
-        }
-      });
-    }
+    _resumePositionAfterFullscreen = position;
+    _resumePlayAfterFullscreen = _isPlayingNow;
 
     if (!mounted) {
       _fullscreenLocked = false;
       return;
     }
+    _immersiveNotifier.value = false;
+    widget.onImmersiveModeChanged?.call(false);
+
+    await _restoreAppSystemUi();
+    await Future<void>.delayed(const Duration(milliseconds: 400));
+
+    if (!mounted) {
+      _fullscreenLocked = false;
+      return;
+    }
+
+    await _restorePositionAfterFullscreen(position, play: _resumePlayAfterFullscreen);
 
     _fullscreenLocked = false;
     _VideoLog.fullscreenExitDone(currentTime: position);
@@ -978,7 +1103,6 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
         isYoutube: _isYoutube,
         nativeController: _controller,
         ytController: _ytController,
-        fillScreen: false,
         isFullscreenMode: immersive,
         catalogDurationLabel: widget.catalogDurationLabel,
         speed: _speed,
@@ -988,12 +1112,6 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
         onFullscreen: immersive
             ? () => unawaited(_closeImmersiveFullscreen())
             : () => unawaited(_openFullscreen()),
-        onYoutubeReady: _playerReady
-            ? null
-            : () {
-                final dur = _ytController?.metadata.duration.inSeconds ?? 0;
-                if (dur > 0) _markPlayerReady(durationSec: dur);
-              },
         onSeekDragStart: () => _userSeeking = true,
         onSeekDragEnd: () {
           _userSeeking = false;
@@ -1001,10 +1119,13 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
           _emitProgressFromCurrent(force: true);
         },
         onTogglePlay: _handlePlayPause,
-        showInitialLoading: _isInitialLoading && !_playerReady,
+        showInitialLoading: !_playerReady &&
+            (_isYoutube ? !_youtubeReady : _isInitialLoading),
         showBuffering: _isBufferingUi && _isPlayingNow,
-        showLoadError: _loadTimedOut || _nativeInitFailed,
-        onRetryLoad: _isYoutube ? null : _retryNativeLoad,
+        showLoadError:
+            (!_isYoutube && (_loadTimedOut || _nativeInitFailed)) ||
+            (_isYoutube && _loadTimedOut && !_playerReady),
+        onRetryLoad: _isYoutube ? () => unawaited(_retryYoutubeLoad()) : _retryNativeLoad,
       ),
     );
   }
@@ -1055,24 +1176,26 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
           child: chrome!,
         );
       },
-      child: ClipRRect(
-        borderRadius: BorderRadius.circular(16),
-        child: SizedBox(
-          width: double.infinity,
-          height: widget.height,
-          child: Stack(
-            fit: StackFit.expand,
-            children: [
-              _buildMediaLayer(),
-              ListenableBuilder(
-                listenable: _immersiveNotifier,
-                builder: (context, _) =>
-                    _buildShell(immersive: _immersiveNotifier.value),
+      child: ListenableBuilder(
+        listenable: _immersiveNotifier,
+        builder: (context, _) {
+          final immersive = _immersiveNotifier.value;
+          return ClipRRect(
+            borderRadius: immersive ? BorderRadius.zero : BorderRadius.circular(16),
+            child: SizedBox(
+              width: double.infinity,
+              height: immersive ? double.infinity : widget.height,
+              child: Stack(
+                fit: StackFit.expand,
+                children: [
+                  _buildMediaLayer(),
+                  _buildShell(immersive: immersive),
+                  _freezeRecoveryBanner(),
+                ],
               ),
-              _freezeRecoveryBanner(),
-            ],
-          ),
-        ),
+            ),
+          );
+        },
       ),
     );
   }
@@ -1090,14 +1213,9 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
         );
       } else {
         mediaLayer = _PersistentYoutubeView(
-          key: ValueKey<String>('yt-${_youtubeId ?? widget.url}'),
+          key: _youtubeViewKey,
           controller: yc,
-          onReady: _playerReady
-              ? null
-              : () {
-                  final dur = yc.metadata.duration.inSeconds;
-                  if (dur > 0) _markPlayerReady(durationSec: dur);
-                },
+          onReady: _playerReady ? null : _onYoutubeIframeReady,
         );
       }
     } else if (c != null && c.value.isInitialized) {
@@ -1118,21 +1236,8 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       fit: StackFit.expand,
       children: [
         mediaLayer,
-        if (_isYoutube && _loadTimedOut)
-          _VideoErrorPanel(
-            onRetry: () {
-              setState(() {
-                _loadTimedOut = false;
-                _isInitialLoading = true;
-                _playerReady = false;
-                _playerReadyAt = null;
-              });
-              _disposeControllers();
-              _youtubeId = _extractYouTubeId(widget.url);
-              _startLoadTimeout();
-              unawaited(_bootstrapPlayer());
-            },
-          ),
+        if (_isYoutube && _loadTimedOut && !_playerReady)
+          _VideoErrorPanel(onRetry: () => unawaited(_retryYoutubeLoad())),
       ],
     );
   }
@@ -1176,14 +1281,11 @@ class _VideoShell extends StatefulWidget {
     this.showBuffering = false,
     this.showLoadError = false,
     this.onRetryLoad,
-    this.onYoutubeReady,
     this.onSeekDragStart,
     this.onSeekDragEnd,
-    this.fillScreen = false,
     this.isFullscreenMode = false,
   });
 
-  final bool fillScreen;
   final bool isFullscreenMode;
   final bool isYoutube;
   final VideoPlayerController? nativeController;
@@ -1199,7 +1301,6 @@ class _VideoShell extends StatefulWidget {
   final bool showBuffering;
   final bool showLoadError;
   final VoidCallback? onRetryLoad;
-  final VoidCallback? onYoutubeReady;
   final VoidCallback? onSeekDragStart;
   final VoidCallback? onSeekDragEnd;
 
@@ -1326,23 +1427,11 @@ class _VideoShellState extends State<_VideoShell>
 
   @override
   Widget build(BuildContext context) {
-    return Container(
-      color: Colors.black,
-      child: Stack(
-        fit: StackFit.expand,
-        children: [
-          // ── video content ──
-          if (widget.isYoutube)
-            _YoutubeCore(
-              controller: widget.ytController!,
-              onReady: widget.onYoutubeReady,
-            )
-          else if (widget.nativeController != null)
-            _NativeCore(controller: widget.nativeController!)
-          else
-            const ColoredBox(color: Colors.black),
-
-          if (widget.showInitialLoading)
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        // Video media qatlamda — fon shaffof, aks holda qora ekran bo‘ladi.
+        if (widget.showInitialLoading)
             const _LoadingIndicator(isBuffering: false),
           if (widget.showBuffering)
             const _LoadingIndicator(isBuffering: true),
@@ -1415,8 +1504,7 @@ class _VideoShellState extends State<_VideoShell>
               ),
             ),
           ),
-        ],
-      ),
+      ],
     );
   }
 }
@@ -1426,18 +1514,35 @@ class _VideoShellState extends State<_VideoShell>
 // ─────────────────────────────────────────────
 
 class _NativeCore extends StatelessWidget {
-  const _NativeCore({super.key, required this.controller});
+  const _NativeCore({
+    super.key,
+    required this.controller,
+    this.fillScreen = false,
+  });
   final VideoPlayerController controller;
+  final bool fillScreen;
 
   @override
   Widget build(BuildContext context) {
     final ar = controller.value.aspectRatio > 0
         ? controller.value.aspectRatio
         : 16 / 9;
+    final video = VideoPlayer(controller);
+    if (fillScreen) {
+      final size = controller.value.size;
+      final w = size.width > 0 ? size.width : ar * 100;
+      final h = size.height > 0 ? size.height : 100.0;
+      return SizedBox.expand(
+        child: FittedBox(
+          fit: BoxFit.contain,
+          child: SizedBox(width: w, height: h, child: video),
+        ),
+      );
+    }
     return Center(
       child: AspectRatio(
         aspectRatio: ar,
-        child: VideoPlayer(controller),
+        child: video,
       ),
     );
   }
@@ -1453,17 +1558,19 @@ class _YoutubeCore extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    return Center(
-      child: AspectRatio(
-        aspectRatio: 16 / 9,
-        child: YoutubePlayer(
-          key: const ValueKey<String>('youtube-iframe'),
-          controller: controller,
-          showVideoProgressIndicator: false,
-          progressIndicatorColor: const Color(0xFF1E6BB8),
-          topActions: const [],
-          bottomActions: const [],
-          onReady: onReady,
+    return SizedBox.expand(
+      child: Center(
+        child: AspectRatio(
+          aspectRatio: 16 / 9,
+          child: YoutubePlayer(
+            key: ValueKey<String>('youtube-${controller.initialVideoId}'),
+            controller: controller,
+            showVideoProgressIndicator: false,
+            progressIndicatorColor: const Color(0xFF1E6BB8),
+            topActions: const [],
+            bottomActions: const [],
+            onReady: onReady,
+          ),
         ),
       ),
     );
