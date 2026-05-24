@@ -1,5 +1,6 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
@@ -12,6 +13,7 @@ import 'package:url_launcher/url_launcher.dart';
 import '../../../../core/config/api_config.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/services/course_progress_remote_sync.dart';
+import '../../../../core/services/lesson_slides_bytes_cache.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/auth_controller.dart';
@@ -1597,33 +1599,12 @@ class _InlinePdfPreviewState extends State<_InlinePdfPreview> {
     );
   }
 
-  Future<Uint8List> _loadBytes(String raw) async {
-    final value = raw.trim();
-    if (value.startsWith('data:application/pdf')) {
-      final comma = value.indexOf(',');
-      if (comma <= 0) throw Exception("PDF formati noto'g'ri.");
-      try {
-        return base64Decode(
-          value.substring(comma + 1).replaceAll(RegExp(r'\s'), ''),
-        );
-      } catch (_) {
-        throw Exception("PDF ni o'qib bo'lmadi.");
-      }
-    }
-    final uri = Uri.tryParse(value);
-    if (uri == null) throw Exception("PDF URL noto'g'ri.");
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      final body = response.body.toLowerCase();
-      if (body.contains('bucket not found')) {
-        throw Exception(
-          "Supabase Storage: content-assets bucket/policy yo‘q. SQL Editor’da "
-          "migrations/012_storage_content_assets_bucket.sql ni ishga tushiring; bucket public qiling.",
-        );
-      }
-      throw Exception("PDF yuklanmadi (status: ${response.statusCode}).");
-    }
-    return response.bodyBytes;
+  Future<Uint8List> _loadBytes(String raw) {
+    return LessonSlidesBytesCache.loadBytes(
+      raw,
+      apiBaseUrl: getApiBaseUrl(),
+      fetcher: LessonSlidesBytesCache.fetchPdfBytes,
+    );
   }
 
   Widget _error(String message) {
@@ -1640,7 +1621,7 @@ class _InlinePdfPreviewState extends State<_InlinePdfPreview> {
   }
 }
 
-class _SlideImage extends StatelessWidget {
+class _SlideImage extends StatefulWidget {
   const _SlideImage({
     required this.imageUrl,
     required this.fit,
@@ -1656,65 +1637,86 @@ class _SlideImage extends StatelessWidget {
   final double placeholderHeight;
 
   @override
-  Widget build(BuildContext context) {
-    final raw = imageUrl.trim();
-    if (raw.isEmpty) return _placeholder();
+  State<_SlideImage> createState() => _SlideImageState();
+}
 
-    if (raw.startsWith('data:image')) {
-      final commaIndex = raw.indexOf(',');
-      if (commaIndex > 0) {
-        final payload = raw
-            .substring(commaIndex + 1)
-            .replaceAll(RegExp(r'\s'), '');
-        try {
-          final bytes = base64Decode(payload);
-          return Image.memory(
-            bytes,
-            fit: fit,
-            width: width,
-            height: height,
-            errorBuilder: (_, _, _) => _placeholder(),
-          );
-        } catch (_) {
+class _SlideImageState extends State<_SlideImage> {
+  late Future<Uint8List?> _bytesFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _bytesFuture = _loadImageBytes();
+  }
+
+  @override
+  void didUpdateWidget(covariant _SlideImage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.imageUrl != widget.imageUrl) {
+      setState(() => _bytesFuture = _loadImageBytes());
+    }
+  }
+
+  Future<Uint8List?> _loadImageBytes() async {
+    final raw = widget.imageUrl.trim();
+    if (raw.isEmpty) return null;
+    try {
+      return await LessonSlidesBytesCache.loadBytes(
+        raw,
+        apiBaseUrl: getApiBaseUrl(),
+        fetcher: LessonSlidesBytesCache.fetchHttpBytes,
+      );
+    } catch (_) {
+      return null;
+    }
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FutureBuilder<Uint8List?>(
+      future: _bytesFuture,
+      builder: (context, snapshot) {
+        if (snapshot.connectionState != ConnectionState.done) {
+          return _placeholder(showSpinner: true);
+        }
+        final bytes = snapshot.data;
+        if (bytes == null || bytes.isEmpty) {
           return _placeholder();
         }
-      }
-      return _placeholder();
-    }
-
-    final normalized = _normalizeImageUrl(raw);
-    return Image.network(
-      normalized,
-      fit: fit,
-      width: width,
-      height: height,
-      errorBuilder: (_, _, _) => _placeholder(),
+        return Image.memory(
+          bytes,
+          fit: widget.fit,
+          width: widget.width,
+          height: widget.height,
+          errorBuilder: (_, _, _) => _placeholder(),
+        );
+      },
     );
   }
 
-  String _normalizeImageUrl(String value) {
-    if (value.startsWith('http://') || value.startsWith('https://')) {
-      return value;
-    }
-    final base = getApiBaseUrl().replaceAll(RegExp(r'/+$'), '');
-    final path = value.startsWith('/') ? value : '/$value';
-    return '$base$path';
-  }
-
-  Widget _placeholder() {
+  Widget _placeholder({bool showSpinner = false}) {
     final bg = ColoredBox(
       color: Colors.white.withValues(alpha: 0.16),
-      child: const Center(
-        child: Text(
-          'Rasmni yuklab bo\'lmadi',
-          style: TextStyle(color: Colors.white),
-        ),
+      child: Center(
+        child: showSpinner
+            ? const SizedBox(
+                width: 28,
+                height: 28,
+                child: CircularProgressIndicator(
+                  strokeWidth: 2.5,
+                  color: Colors.white,
+                ),
+              )
+            : const Text(
+                'Rasmni yuklab bo\'lmadi',
+                style: TextStyle(color: Colors.white),
+              ),
       ),
     );
-    if (height != null && height!.isFinite) {
+    if (widget.height != null && widget.height!.isFinite) {
       return SizedBox(
-        width: width ?? double.infinity,
-        height: height,
+        width: widget.width ?? double.infinity,
+        height: widget.height,
         child: bg,
       );
     }

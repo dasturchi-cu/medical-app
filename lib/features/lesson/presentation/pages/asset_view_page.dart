@@ -4,10 +4,10 @@ import 'dart:typed_data';
 
 import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
-import 'package:http/http.dart' as http;
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/services/lesson_slides_bytes_cache.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/state/auth_controller.dart';
 import '../../../../core/state/lesson_assets_state.dart';
@@ -128,19 +128,23 @@ class _AssetViewPageState extends ConsumerState<AssetViewPage> {
     );
   }
 
-  Future<Uint8List> _downloadPdfBytes(String url) async {
-    final normalized = url.trim();
-    final uri = Uri.tryParse(normalized);
-    if (uri == null) throw Exception("PDF URL noto'g'ri.");
-    final response = await http.get(uri);
-    if (response.statusCode != 200) {
-      final body = response.body.toLowerCase();
-      if (body.contains('bucket not found')) {
-        throw Exception("Storage bucket topilmadi. Admin panelda `content-assets` bucketni yarating.");
-      }
-      throw Exception("PDF yuklanmadi (status: ${response.statusCode}).");
-    }
-    return response.bodyBytes;
+  Future<Uint8List> _downloadPdfBytes(String url) {
+    return LessonSlidesBytesCache.loadBytes(
+      url,
+      fetcher: (normalized) async {
+        try {
+          return await LessonSlidesBytesCache.fetchPdfBytes(normalized);
+        } on Exception catch (e) {
+          final msg = e.toString();
+          if (msg.contains('bucket not found')) {
+            throw Exception(
+              "Storage bucket topilmadi. Admin panelda `content-assets` bucketni yarating.",
+            );
+          }
+          rethrow;
+        }
+      },
+    );
   }
 
   Future<void> _saveProgress() async {

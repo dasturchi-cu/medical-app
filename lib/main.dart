@@ -12,6 +12,7 @@ import 'core/services/auth_service.dart';
 import 'core/state/auth_controller.dart';
 import 'core/services/catalog_service.dart';
 import 'core/services/home_feeds_disk_cache.dart';
+import 'core/services/lesson_slides_bytes_cache.dart';
 import 'core/services/push_messaging.dart';
 import 'core/di/providers.dart';
 import 'core/state/books_state.dart';
@@ -38,6 +39,7 @@ Future<void> main() async {
   await AuthService.bootstrap();
   await CatalogService.preloadFromDisk();
   await HomeFeedsDiskCache.preloadFromDisk();
+  await LessonSlidesBytesCache.ensureReady();
   final initialThemePref = await loadThemePreferenceEarly();
   runApp(
     ProviderScope(
