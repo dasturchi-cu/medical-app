@@ -26,6 +26,11 @@ class CatalogService {
   /// Katalog yuklangach UI qayta chizilsin (`HomePage` va boshqalar tinglaydi).
   static final ValueNotifier<int> catalogRevision = ValueNotifier<int>(0);
 
+  static bool get isRefreshingDetails => _detailsRefreshInFlight != null;
+
+  /// True faqat kurslarda section.lessons bo‘lib, video-meta (duration) ham bor holat.
+  static bool get hasLessonDetails => _catalogHasLessonDetails(_courses);
+
   /// Last bootstrap error message (non-null if the last fetch failed or returned no courses).
   static String? lastLoadError;
 
@@ -40,6 +45,89 @@ class CatalogService {
 
   static List<Course> get courses => _courses;
 
+  /// Bosh sahifa statistikasi faqat kurs ro'yxati o'zgarganda qayta yuklansin.
+  static String get courseListIdentityKey =>
+      _courses.map((c) => c.id.trim()).where((id) => id.isNotEmpty).join('|');
+
+  static bool _catalogHasLessonDetails(List<Course> courses) {
+    for (final course in courses) {
+      for (final section in course.sections) {
+        if (section.lessons.isNotEmpty) return true;
+      }
+    }
+    return false;
+  }
+
+  static Course _mergePreferringExistingLessons(Course incoming, Course existing) {
+    final existingLessons = existing.sections.fold<int>(
+      0,
+      (sum, s) => sum + s.lessons.length,
+    );
+    final incomingLessons = incoming.sections.fold<int>(
+      0,
+      (sum, s) => sum + s.lessons.length,
+    );
+    if (existingLessons > incomingLessons) {
+      return Course(
+        id: existing.id,
+        categoryId: existing.categoryId,
+        titleUz: incoming.titleUz.isNotEmpty ? incoming.titleUz : existing.titleUz,
+        titleRu: incoming.titleRu.isNotEmpty ? incoming.titleRu : existing.titleRu,
+        titleEn: incoming.titleEn.isNotEmpty ? incoming.titleEn : existing.titleEn,
+        authorUz: incoming.authorUz.isNotEmpty ? incoming.authorUz : existing.authorUz,
+        imageUrl: incoming.imageUrl.isNotEmpty ? incoming.imageUrl : existing.imageUrl,
+        priceUz: incoming.priceUz.isNotEmpty ? incoming.priceUz : existing.priceUz,
+        progress: existing.progress,
+        rating: incoming.rating > 0 ? incoming.rating : existing.rating,
+        commentsCount:
+            incoming.commentsCount > 0 ? incoming.commentsCount : existing.commentsCount,
+        lessonCount: existing.lessonCount > 0
+            ? existing.lessonCount
+            : (incoming.lessonCount > 0 ? incoming.lessonCount : existingLessons),
+        isPaid: incoming.isPaid,
+        descriptionUz:
+            incoming.descriptionUz.isNotEmpty ? incoming.descriptionUz : existing.descriptionUz,
+        descriptionRu:
+            incoming.descriptionRu.isNotEmpty ? incoming.descriptionRu : existing.descriptionRu,
+        descriptionEn:
+            incoming.descriptionEn.isNotEmpty ? incoming.descriptionEn : existing.descriptionEn,
+        sections: existing.sections,
+      );
+    }
+    return incoming;
+  }
+
+  static List<Course> _mergeCourseLists(List<Course> incoming, List<Course> existing) {
+    if (existing.isEmpty) return incoming;
+    final existingById = {for (final c in existing) c.id: c};
+    return incoming
+        .map((c) => _mergePreferringExistingLessons(c, existingById[c.id] ?? c))
+        .toList(growable: false);
+  }
+
+  /// To'liq katalogni fon rejimida yangilash — UI ni darslarsiz "tez" javob bilan nolga tushirmaydi.
+  static Future<void> refreshDetailedCatalog({
+    int maxAttempts = 2,
+    bool force = false,
+  }) async {
+    if (!_hydratedFromDisk && _courses.isEmpty) {
+      await _hydrateFromDisk();
+    }
+    final now = DateTime.now();
+    if (!force &&
+        _catalogHasLessonDetails(_courses) &&
+        _lastNetworkLoadedAt != null &&
+        now.difference(_lastNetworkLoadedAt!) <= _cacheTtl) {
+      return;
+    }
+    final baseUrl = getApiBaseUrl();
+    if (baseUrl.isEmpty) return;
+    await _refreshDetailedCatalogInBackground(
+      baseUrl: baseUrl,
+      maxAttempts: maxAttempts,
+    );
+  }
+
   /// Populate catalog from `GET /api/v1/home` → `courses` object (`items` list).
   /// Used when benchmarking single-request home bundle vs `/mobile/courses`.
   static void applyCoursesFromHomePayload(Map<String, dynamic>? coursesWrapper) {
@@ -48,7 +136,8 @@ class CatalogService {
     if (raw is! List) return;
     try {
       final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
-      _courses = rawMaps.map(_toCourse).toList(growable: false);
+      final incoming = rawMaps.map(_toCourse).toList(growable: false);
+      _courses = _mergeCourseLists(incoming, _courses);
       lastLoadOk = true;
       _lastNetworkLoadedAt = DateTime.now();
       lastLoadError = _courses.isEmpty ? 'Serverdan faol kurslar ro\'yxati bo\'sh.' : null;
@@ -160,12 +249,9 @@ class CatalogService {
       return;
     }
 
-    // Fast-path: yengil `/courses` endpointdan tez seed qilib UI ni ochamiz.
-    final fastSeeded = await _tryBootstrapFromCoursesList(baseUrl);
-    if (fastSeeded) {
-      // Tez ro'yxat ko'rsatamiz, keyin fon rejimida to'liq (darslar/reyting) catalog bilan boyitamiz.
-      unawaited(_refreshDetailedCatalogInBackground(baseUrl: baseUrl, maxAttempts: maxAttempts));
-      return;
+    // Darslari bor kesh mavjud bo'lsa, darslarsiz tez ro'yxat UI ni 0 ga tushirmasligi uchun o'tkazib yuboramiz.
+    if (!_catalogHasLessonDetails(_courses)) {
+      await _tryBootstrapFromCoursesList(baseUrl);
     }
 
     final attempts = maxAttempts < 1 ? 1 : maxAttempts;
@@ -200,7 +286,8 @@ class CatalogService {
           return;
         }
         final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
-        _courses = rawMaps.map(_toCourse).toList(growable: false);
+        final incoming = rawMaps.map(_toCourse).toList(growable: false);
+        _courses = _mergeCourseLists(incoming, _courses);
         debugPrint('[API][mobile.courses][parsed] courses=${_courses.length}');
         lastLoadOk = true;
         _lastNetworkLoadedAt = DateTime.now();
@@ -267,7 +354,8 @@ class CatalogService {
       final raw = coursesWrapper['items'];
       if (raw is! List) return false;
       final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
-      _courses = rawMaps.map(_toCourse).toList(growable: false);
+      final incoming = rawMaps.map(_toCourse).toList(growable: false);
+      _courses = _mergeCourseLists(incoming, _courses);
       lastLoadOk = true;
       _lastNetworkLoadedAt = DateTime.now();
       if (_courses.isEmpty) {
@@ -300,12 +388,18 @@ class CatalogService {
       final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
       if (rawMaps.isEmpty) return false;
 
-      _courses = rawMaps.map(_toCourseFromCoursesListItem).toList(growable: false);
+      final incoming = rawMaps.map(_toCourseFromCoursesListItem).toList(growable: false);
+      if (_catalogHasLessonDetails(_courses)) {
+        debugPrint('[API][courses.list][skip] detailed catalog already loaded');
+        return false;
+      }
+      _courses = incoming;
       lastLoadOk = true;
       _lastNetworkLoadedAt = DateTime.now();
       lastLoadError = null;
-      unawaited(_persistToDisk(rawMaps));
-      debugPrint('[API][courses.list][parsed] courses=${_courses.length}');
+      // Darslarsiz katalogni diskka yozmaymiz — aks holda ilovada video darslar yo'qoladi.
+      _bumpCatalogRevision();
+      debugPrint('[API][courses.list][parsed] courses=${_courses.length} (lessons pending full catalog)');
       return true;
     } catch (e) {
       debugPrint('[API][courses.list][error] $e');
@@ -348,7 +442,8 @@ class CatalogService {
           final raw = body['items'];
           if (raw is! List) return;
           final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
-          _courses = rawMaps.map(_toCourse).toList(growable: false);
+          final incoming = rawMaps.map(_toCourse).toList(growable: false);
+          _courses = _mergeCourseLists(incoming, _courses);
           lastLoadOk = true;
           _lastNetworkLoadedAt = DateTime.now();
           lastLoadError = _courses.isEmpty ? 'Serverdan faol kurslar ro\'yxati bo\'sh.' : null;
@@ -465,11 +560,20 @@ class CatalogService {
     );
   }
 
+  static String _formatLessonDuration(int durationSec) {
+    if (durationSec <= 0) return '';
+    final hours = durationSec ~/ 3600;
+    final minutes = (durationSec % 3600) ~/ 60;
+    final seconds = durationSec % 60;
+    if (hours > 0) {
+      return '$hours:${minutes.toString().padLeft(2, '0')}:${seconds.toString().padLeft(2, '0')}';
+    }
+    return '$minutes:${seconds.toString().padLeft(2, '0')}';
+  }
+
   static Lesson _toLesson(Map<String, dynamic> json) {
     final durationSec = int.tryParse((json['duration_sec'] ?? '0').toString()) ?? 0;
-    final minutes = (durationSec ~/ 60).toString().padLeft(2, '0');
-    final seconds = (durationSec % 60).toString().padLeft(2, '0');
-    final durationLabel = durationSec > 0 ? '$minutes:$seconds' : '';
+    final durationLabel = _formatLessonDuration(durationSec);
     return Lesson(
       id: (json['id'] ?? '').toString(),
       titleUz: (json['title'] ?? '').toString(),

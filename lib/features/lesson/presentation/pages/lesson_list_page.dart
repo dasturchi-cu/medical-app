@@ -7,6 +7,7 @@ import 'package:go_router/go_router.dart';
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
+import '../../../../core/services/catalog_service.dart';
 import '../../../../core/services/course_progress_remote_sync.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/purchase_controller.dart';
@@ -33,12 +34,20 @@ class _LessonListPageState extends ConsumerState<LessonListPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(CatalogService.refreshDetailedCatalog());
       unawaited(CourseProgressRemoteSync.refresh(ref));
     });
   }
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: CatalogService.catalogRevision,
+      builder: (context, _) => _buildBody(context),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     final repo = ref.watch(courseRepositoryProvider);
     final section = repo.getSectionById(widget.courseId, widget.sectionId);
     final isDoctorCourse = widget.courseId == 'course_private_neuro';
@@ -55,7 +64,21 @@ class _LessonListPageState extends ConsumerState<LessonListPage> {
             onPressed: () => context.pop(),
           ),
         ),
-        body: Center(child: Text(context.tr('section_not_found'))),
+        body: const Center(child: CircularProgressIndicator()),
+      );
+    }
+
+    // Katalog dars-meta (duration, video meta) yuklanmaguncha 0/00:00 ko‘rsatmaslik.
+    if (section.lessons.isEmpty && !CatalogService.hasLessonDetails) {
+      return Scaffold(
+        appBar: AppBar(
+          title: Text(context.tr('lessons')),
+          leading: IconButton(
+            icon: const Icon(Icons.arrow_back),
+            onPressed: () => context.pop(),
+          ),
+        ),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 

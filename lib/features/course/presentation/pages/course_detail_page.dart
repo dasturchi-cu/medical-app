@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 
 import '../../../../core/config/api_config.dart';
 import '../../../../core/di/providers.dart';
+import '../../../../core/services/catalog_service.dart';
 import '../../../../core/services/course_progress_remote_sync.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
@@ -36,6 +37,7 @@ class _CourseDetailPageState extends ConsumerState<CourseDetailPage> {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addPostFrameCallback((_) {
+      unawaited(CatalogService.refreshDetailedCatalog());
       _recordCatalogOpen();
       unawaited(CourseProgressRemoteSync.refresh(ref));
     });
@@ -68,6 +70,13 @@ class _CourseDetailPageState extends ConsumerState<CourseDetailPage> {
 
   @override
   Widget build(BuildContext context) {
+    return ListenableBuilder(
+      listenable: CatalogService.catalogRevision,
+      builder: (context, _) => _buildBody(context),
+    );
+  }
+
+  Widget _buildBody(BuildContext context) {
     final repo = ref.watch(courseRepositoryProvider);
     final authState = ref.watch(authControllerProvider);
     final lang =
@@ -87,6 +96,16 @@ class _CourseDetailPageState extends ConsumerState<CourseDetailPage> {
       return Scaffold(
         appBar: AppBar(title: const Text('Kurs')),
         body: const Center(child: Text('Kurs topilmadi')),
+      );
+    }
+
+    // Refresh vaqtida katalog vaqtincha dars-meta (duration, video meta) bo‘lmagan
+    // holatga tushib qolishi mumkin. Shunda noto‘g‘ri 0/00:00 ko‘rsatmaslik uchun
+    // loading holatini ushlab turamiz.
+    if (lessons.isEmpty && !CatalogService.hasLessonDetails) {
+      return Scaffold(
+        appBar: AppBar(title: Text(cleanCourseTitle(course.localizedTitle(lang)))),
+        body: const Center(child: CircularProgressIndicator()),
       );
     }
 

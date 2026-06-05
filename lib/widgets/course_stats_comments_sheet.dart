@@ -80,7 +80,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
           widget.courseId: stats,
         });
     ref.invalidate(courseCardStatsProvider(widget.courseId));
-    ref.invalidate(neurologyHomeStatsProvider(CatalogService.catalogRevision.value));
+    ref.invalidate(neurologyHomeStatsProvider(CatalogService.courseListIdentityKey));
   }
 
   @override

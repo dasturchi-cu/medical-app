@@ -61,7 +61,7 @@ Future<CourseCardStats> _loadCourseCardStats({
 
 /// Bosh sahifa «Nevrologiya» kartalari — barcha kurslar statistikasi parallel yuklanadi.
 final neurologyHomeStatsProvider =
-    FutureProvider.family<Map<String, CourseCardStats>, int>((ref, _) async {
+    FutureProvider.family<Map<String, CourseCardStats>, String>((ref, _) async {
   ref.watch(authControllerProvider);
   final baseUrl = getApiBaseUrl();
   final courseIds = CatalogService.courses
