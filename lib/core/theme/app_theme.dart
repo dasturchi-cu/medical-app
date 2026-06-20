@@ -163,10 +163,28 @@ class AppTheme {
           ),
           backgroundColor: p.primary,
           foregroundColor: p.primaryText,
+          minimumSize: const Size(AppTapTarget.min, AppTapTarget.min),
+          tapTargetSize: MaterialTapTargetSize.padded,
+        ),
+      ),
+      iconButtonTheme: IconButtonThemeData(
+        style: IconButton.styleFrom(
+          minimumSize: const Size(AppTapTarget.min, AppTapTarget.min),
+          tapTargetSize: MaterialTapTargetSize.padded,
+          visualDensity: VisualDensity.standard,
+          padding: AppTapTarget.iconPadding,
         ),
       ),
       textButtonTheme: TextButtonThemeData(
-        style: TextButton.styleFrom(foregroundColor: p.primary),
+        style: TextButton.styleFrom(
+          foregroundColor: p.primary,
+          minimumSize: const Size(AppTapTarget.min, AppTapTarget.min),
+          tapTargetSize: MaterialTapTargetSize.padded,
+          padding: const EdgeInsets.symmetric(
+            horizontal: AppSpacing.s12,
+            vertical: AppSpacing.s8,
+          ),
+        ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
         style: OutlinedButton.styleFrom(

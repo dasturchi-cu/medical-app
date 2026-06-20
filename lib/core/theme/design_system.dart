@@ -19,6 +19,15 @@ class AppSpacing {
   static const double s24 = 24;
 }
 
+/// Material tavsiyasi: kamida 48x48 px bosish maydoni.
+class AppTapTarget {
+  AppTapTarget._();
+
+  static const double min = 48;
+  static const double icon = 44;
+  static const EdgeInsets iconPadding = EdgeInsets.all(10);
+}
+
 class AppRadius {
   static const double card = 16;
   static const double button = 12;
