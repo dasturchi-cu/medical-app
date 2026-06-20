@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 import 'package:supabase/supabase.dart';
 
 import '../../http_request_timeouts.dart';
+import '../../services/memory_ttl_cache.dart';
 import '../models/lesson_slide_models.dart';
 import 'lesson_slides_repository.dart';
 
@@ -22,14 +23,20 @@ class HttpLessonSlidesRepository implements LessonSlidesRepository {
 
   http.Client get _client => client ?? http.Client();
 
-  @override
-  Future<List<LessonSlideItem>> fetchLessonSlides({required String lessonId}) async {
+  static final MemoryTtlCache<List<LessonSlideItem>> _cache =
+      MemoryTtlCache<List<LessonSlideItem>>(ttl: const Duration(minutes: 5));
+
+  Future<List<LessonSlideItem>> _fetchLessonSlidesNetwork({required String lessonId}) async {
     if (baseUrl.isEmpty || lessonId.isEmpty) return const [];
     final uri = Uri.parse('$baseUrl/api/v1/lesson-slides?lesson_id=$lessonId&active_only=true');
     try {
       final response =
           await _client.get(uri).timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
-      if (response.statusCode < 200 || response.statusCode >= 300) return const [];
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final cached = _cache.peek(lessonId);
+        if (cached != null && cached.isNotEmpty) return cached;
+        return const [];
+      }
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return const [];
       final raw = body['items'];
@@ -40,14 +47,22 @@ class HttpLessonSlidesRepository implements LessonSlidesRepository {
           .toList(growable: false);
     } catch (e, st) {
       debugPrint('[API][lesson_slides.fetch][error] $e\n$st');
+      final cached = _cache.peek(lessonId);
+      if (cached != null && cached.isNotEmpty) return cached;
       return const [];
     }
   }
 
   @override
+  Future<List<LessonSlideItem>> fetchLessonSlides({required String lessonId}) async {
+    if (lessonId.isEmpty) return const [];
+    return _cache.getOrFetch(lessonId, () => _fetchLessonSlidesNetwork(lessonId: lessonId));
+  }
+
+  @override
   Stream<List<LessonSlideItem>> watchLessonSlides({
     required String lessonId,
-    Duration pollInterval = const Duration(seconds: 8),
+    Duration pollInterval = const Duration(seconds: 90),
   }) {
     if (lessonId.isEmpty) return Stream.value(const []);
     final controller = StreamController<List<LessonSlideItem>>();
@@ -57,6 +72,7 @@ class HttpLessonSlidesRepository implements LessonSlidesRepository {
 
     Future<void> push() async {
       if (disposed) return;
+      _cache.invalidate(lessonId);
       controller.add(await fetchLessonSlides(lessonId: lessonId));
     }
 
@@ -79,7 +95,11 @@ class HttpLessonSlidesRepository implements LessonSlidesRepository {
             )
             .subscribe();
       }
-      poller = Timer.periodic(pollInterval, (_) => unawaited(push()));
+      final pollMs = client != null ? pollInterval.inMilliseconds * 3 : pollInterval.inMilliseconds;
+      poller = Timer.periodic(
+        Duration(milliseconds: pollMs.clamp(90000, 300000)),
+        (_) => unawaited(push()),
+      );
     }
 
     unawaited(boot());

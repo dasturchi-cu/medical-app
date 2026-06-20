@@ -75,6 +75,13 @@ class HttpBannersRepository implements BannersRepository {
       debugPrint('[API][banners.fetch][response] status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint('[API][banners.fetch][warn] ${_errorMessage('HTTP', response.body)}');
+        if (_cached.isNotEmpty) return _cached;
+        final disk = HomeFeedsDiskCache.banners;
+        if (disk.isNotEmpty) {
+          _cached = disk;
+          _cachedAt = now;
+          return disk;
+        }
         return const [];
       }
       final body = jsonDecode(response.body);

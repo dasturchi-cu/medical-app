@@ -3,6 +3,8 @@ import 'dart:math';
 
 import 'package:flutter/material.dart';
 
+import 'cached_remote_image.dart';
+
 class CourseVisual extends StatefulWidget {
   const CourseVisual({super.key, required this.kind, this.imageUrl = ''});
 
@@ -34,6 +36,27 @@ class _CourseVisualState extends State<CourseVisual>
     super.dispose();
   }
 
+  Widget _networkCover(String url) {
+    return Container(
+      width: _size,
+      height: _size,
+      decoration: BoxDecoration(
+        color: const Color(0xFFE9F0FF),
+        borderRadius: BorderRadius.circular(12),
+      ),
+      clipBehavior: Clip.antiAlias,
+      child: CachedRemoteImage(
+        url: url,
+        fit: BoxFit.cover,
+        filterQuality: FilterQuality.low,
+        cacheWidth: (MediaQuery.devicePixelRatioOf(context) * 104).round(),
+        cacheHeight: (MediaQuery.devicePixelRatioOf(context) * 104).round(),
+        errorBuilder: (_, _) =>
+            const Icon(Icons.image_outlined, color: Color(0xFF1E6BB8)),
+      ),
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     final rawImage = widget.imageUrl.trim();
@@ -61,26 +84,7 @@ class _CourseVisualState extends State<CourseVisual>
           } catch (_) {}
         }
       }
-      if (rawImage.startsWith('http://') || rawImage.startsWith('https://')) {
-        return Container(
-          width: _size,
-          height: _size,
-          decoration: BoxDecoration(
-            color: const Color(0xFFE9F0FF),
-            borderRadius: BorderRadius.circular(12),
-          ),
-          clipBehavior: Clip.antiAlias,
-          child: Image.network(
-            rawImage,
-            fit: BoxFit.cover,
-            gaplessPlayback: true,
-            filterQuality: FilterQuality.low,
-            cacheWidth: (MediaQuery.devicePixelRatioOf(context) * 104).round(),
-            cacheHeight: (MediaQuery.devicePixelRatioOf(context) * 104).round(),
-            errorBuilder: (_, _, _) => const Icon(Icons.image_outlined, color: Color(0xFF1E6BB8)),
-          ),
-        );
-      }
+      return _networkCover(rawImage);
     }
 
     if (widget.kind == 'umumiy_bachelor') {

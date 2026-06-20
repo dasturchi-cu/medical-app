@@ -1,3 +1,5 @@
+import '../../services/media_url_resolver.dart';
+
 int _readNonNegativeMoney(dynamic value) {
   if (value == null) return 0;
   if (value is int) return value < 0 ? 0 : value;
@@ -62,8 +64,12 @@ class BookItemModel {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       description: (json['description'] ?? '').toString(),
-      coverImageUrl: (json['cover_image_url'] ?? json['coverImageUrl'] ?? '').toString(),
-      fileUrl: (json['file_url'] ?? json['fileUrl'] ?? '').toString(),
+      coverImageUrl: MediaUrlResolver.resolveStoredMediaUrl(
+        (json['cover_image_url'] ?? json['coverImageUrl'] ?? '').toString(),
+      ),
+      fileUrl: MediaUrlResolver.resolveStoredMediaUrl(
+        (json['file_url'] ?? json['fileUrl'] ?? '').toString(),
+      ),
       fileMime: (json['file_mime'] ?? json['fileMime'] ?? '').toString(),
       author: (json['author'] ?? '').toString(),
       categoryName: (json['category_name'] ?? json['categoryName'] ?? '').toString(),
@@ -121,9 +127,11 @@ class LessonAssetModel {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       description: (json['description'] ?? '').toString(),
-      fileUrl: (json['file_url'] ?? '').toString(),
+      fileUrl: MediaUrlResolver.resolveStoredMediaUrl((json['file_url'] ?? '').toString()),
       fileType: (json['file_type'] ?? 'pdf').toString(),
-      previewImageUrl: (json['preview_image_url'] ?? '').toString(),
+      previewImageUrl: MediaUrlResolver.resolveStoredMediaUrl(
+        (json['preview_image_url'] ?? '').toString(),
+      ),
       lessonId: (json['lesson_id'] ?? '').toString(),
       orderNo: int.tryParse((json['order_no'] ?? '1').toString()) ?? 1,
     );

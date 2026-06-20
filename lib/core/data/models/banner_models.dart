@@ -1,3 +1,5 @@
+import '../../services/media_url_resolver.dart';
+
 class CourseBannerItem {
   const CourseBannerItem({
     required this.id,
@@ -26,7 +28,7 @@ class CourseBannerItem {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       message: (json['message'] ?? '').toString(),
-      imageUrl: (json['image_url'] ?? '').toString(),
+      imageUrl: MediaUrlResolver.resolveStoredMediaUrl((json['image_url'] ?? '').toString()),
       priceLabel: (json['price_label'] ?? '').toString(),
       courseId: json['course_id']?.toString(),
       telegram: (json['telegram'] ?? 'Neuroscienceadmin').toString(),

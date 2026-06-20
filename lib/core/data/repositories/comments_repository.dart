@@ -4,6 +4,7 @@ abstract class CommentsRepository {
   Future<List<AppCommentItem>> fetchComments({
     required String courseKey,
     required String userId,
+    bool forceRefresh = false,
   });
 
   Future<void> addComment({
@@ -23,6 +24,9 @@ abstract class CommentsRepository {
   Future<void> toggleLike({
     required String commentId,
     required String userId,
+    String courseKey = '',
+    bool likedByMe = false,
+    int likesCount = 0,
   });
 
   Stream<List<AppCommentItem>> watchComments({

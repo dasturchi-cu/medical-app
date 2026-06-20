@@ -41,4 +41,25 @@ class AppCommentItem {
       createdAt: DateTime.tryParse(rawCreated)?.toLocal() ?? DateTime.now(),
     );
   }
+
+  AppCommentItem copyWith({
+    int? likesCount,
+    bool? likedByMe,
+    int? repliesCount,
+    String? text,
+  }) {
+    return AppCommentItem(
+      id: id,
+      courseKey: courseKey,
+      userId: userId,
+      authorName: authorName,
+      text: text ?? this.text,
+      parentId: parentId,
+      repliesCount: repliesCount ?? this.repliesCount,
+      likesCount: likesCount ?? this.likesCount,
+      likedByMe: likedByMe ?? this.likedByMe,
+      likedByAdmin: likedByAdmin,
+      createdAt: createdAt,
+    );
+  }
 }

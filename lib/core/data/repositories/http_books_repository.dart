@@ -8,6 +8,8 @@ import 'package:supabase/supabase.dart';
 
 import '../../http_request_timeouts.dart';
 import '../../services/home_feeds_disk_cache.dart';
+import '../../services/memory_ttl_cache.dart';
+import '../../services/mobile_api_auth.dart';
 import '../models/content_asset_models.dart';
 import 'books_repository.dart';
 
@@ -28,6 +30,8 @@ class HttpBooksRepository implements BooksRepository {
   Future<List<BookItemModel>>? _inFlight;
   static const Duration _cacheTtl = Duration(minutes: 5);
   static const Duration _paidIdsCacheTtl = Duration(minutes: 5);
+  static final MemoryTtlCache<List<BookProgressModel>> _progressCache =
+      MemoryTtlCache<List<BookProgressModel>>(ttl: const Duration(minutes: 2));
   static const String _paidIdsDiskKeyPrefix = 'books_paid_ids_v1_';
   bool _entitlementsEndpointUnsupported = false;
   Set<String>? _paidIdsCache;
@@ -80,9 +84,15 @@ class HttpBooksRepository implements BooksRepository {
             },
           )
           .timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
-      if (response.statusCode < 200 || response.statusCode >= 300) return const [];
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        if (_cached.isNotEmpty) return _cached;
+        return const [];
+      }
       final body = jsonDecode(response.body);
-      if (body is! Map<String, dynamic>) return const [];
+      if (body is! Map<String, dynamic>) {
+        if (_cached.isNotEmpty) return _cached;
+        return const [];
+      }
       final raw = body['items'];
       if (raw is! List) return const [];
       final rawMaps = raw.whereType<Map<String, dynamic>>().toList(growable: false);
@@ -120,7 +130,7 @@ class HttpBooksRepository implements BooksRepository {
 
     Future<void> push() async {
       if (disposed) return;
-      final items = await fetchBooks();
+      final items = await fetchBooks(forceRefresh: true);
       if (disposed || controller.isClosed) return;
       controller.add(items);
     }
@@ -153,15 +163,30 @@ class HttpBooksRepository implements BooksRepository {
   }
 
   @override
-  Future<List<BookProgressModel>> fetchProgress({required String userId}) async {
-    if (baseUrl.isEmpty || userId.isEmpty) return const [];
-    final response = await _client.get(Uri.parse('$baseUrl/api/v1/content/books/progress?user_id=$userId'));
-    if (response.statusCode < 200 || response.statusCode >= 300) return const [];
-    final body = jsonDecode(response.body);
-    if (body is! Map<String, dynamic>) return const [];
-    final raw = body['items'];
-    if (raw is! List) return const [];
-    return raw.whereType<Map<String, dynamic>>().map(BookProgressModel.fromJson).toList(growable: false);
+  Future<List<BookProgressModel>> fetchProgress({
+    required String userId,
+    bool forceRefresh = false,
+  }) async {
+    if (userId.isEmpty) return const [];
+    return _progressCache.getOrFetch(
+      'progress|$userId',
+      () async {
+        if (baseUrl.isEmpty) return const [];
+        final response = await _client.get(
+          Uri.parse(
+            '$baseUrl/api/v1/content/books/progress?user_id=$userId${MobileApiAuth.sessionQuery(userId: userId)}',
+          ),
+          headers: MobileApiAuth.headers(),
+        );
+        if (response.statusCode < 200 || response.statusCode >= 300) return const [];
+        final body = jsonDecode(response.body);
+        if (body is! Map<String, dynamic>) return const [];
+        final raw = body['items'];
+        if (raw is! List) return const [];
+        return raw.whereType<Map<String, dynamic>>().map(BookProgressModel.fromJson).toList(growable: false);
+      },
+      forceRefresh: forceRefresh,
+    );
   }
 
   Set<String> _parseEntitlementBookIds(Map<String, dynamic> body) {
@@ -204,11 +229,15 @@ class HttpBooksRepository implements BooksRepository {
     if (baseUrl.isEmpty || userId.isEmpty) return const <String>{};
     if (_entitlementsEndpointUnsupported) return null;
     try {
+      final token = MobileApiAuth.storedUser?.sessionToken.trim() ?? '';
       final uri = Uri.parse('$baseUrl/api/v1/content/books/entitlements').replace(
-        queryParameters: {'user_id': userId},
+        queryParameters: {
+          'user_id': userId,
+          if (token.isNotEmpty) 'session_token': token,
+        },
       );
       final response = await _client
-          .get(uri)
+          .get(uri, headers: MobileApiAuth.headers())
           .timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
       if (response.statusCode == 405) {
         _entitlementsEndpointUnsupported = true;
@@ -369,10 +398,15 @@ class HttpBooksRepository implements BooksRepository {
     if (baseUrl.isEmpty || userId.isEmpty || bookId.isEmpty) return false;
     try {
       final uri = Uri.parse('$baseUrl/api/v1/content/books/access').replace(
-        queryParameters: {'user_id': userId, 'book_id': bookId},
+        queryParameters: {
+          'user_id': userId,
+          'book_id': bookId,
+          if ((MobileApiAuth.storedUser?.sessionToken ?? '').isNotEmpty)
+            'session_token': MobileApiAuth.storedUser!.sessionToken,
+        },
       );
       final response = await _client
-          .get(uri)
+          .get(uri, headers: MobileApiAuth.headers())
           .timeout(bookAccessCheckTimeoutForBaseUrl(baseUrl));
       if (response.statusCode < 200 || response.statusCode >= 300) return false;
       final body = jsonDecode(response.body);
@@ -394,12 +428,13 @@ class HttpBooksRepository implements BooksRepository {
     if (baseUrl.isEmpty || userId.isEmpty || bookId.isEmpty) return;
     await _client.post(
       Uri.parse('$baseUrl/api/v1/content/books/$bookId/progress'),
-      headers: const {'Content-Type': 'application/json'},
-      body: jsonEncode({
+      headers: MobileApiAuth.headers(extra: const {'Content-Type': 'application/json'}),
+      body: jsonEncode(MobileApiAuth.withSession({
         'user_id': userId,
         'page_no': pageNo,
         'progress_percent': progressPercent,
-      }),
+      })),
     );
+    _progressCache.invalidate('progress|$userId');
   }
 }

@@ -1,3 +1,5 @@
+import '../../services/media_url_resolver.dart';
+
 class LessonSlideItem {
   const LessonSlideItem({
     required this.id,
@@ -21,7 +23,7 @@ class LessonSlideItem {
       lessonId: (json['lesson_id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       body: (json['body'] ?? '').toString(),
-      imageUrl: (json['image_url'] ?? '').toString(),
+      imageUrl: MediaUrlResolver.resolveStoredMediaUrl((json['image_url'] ?? '').toString()),
       orderNo: int.tryParse((json['order_no'] ?? '1').toString()) ?? 1,
     );
   }

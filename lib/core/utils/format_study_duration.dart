@@ -13,3 +13,17 @@ String formatStudyDurationUz(int totalSeconds) {
   final m = (sec % 3600) ~/ 60;
   return '$h soat $m minut';
 }
+
+/// Pomodoro fokus vaqti — daqiqalar aniq ko‘rinsin.
+String formatPomodoroFocusUz(int totalSeconds) {
+  final sec = totalSeconds < 0 ? 0 : totalSeconds;
+  if (sec < 60) {
+    return '$sec sekund';
+  }
+  final m = sec ~/ 60;
+  final s = sec % 60;
+  if (s == 0) {
+    return '$m minut';
+  }
+  return '$m minut $s sekund';
+}

@@ -11,6 +11,7 @@ final booksFeedProvider = StreamProvider<List<BookItemModel>>((ref) {
 });
 
 final bookProgressProvider = FutureProvider<List<BookProgressModel>>((ref) async {
+  ref.keepAlive();
   final userId = ref.watch(authControllerProvider.select((s) => s.userId)) ?? '';
   if (userId.isEmpty) return const [];
   return ref.read(booksRepositoryProvider).fetchProgress(userId: userId);

@@ -6,6 +6,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../config/api_config.dart';
 import '../utils/device_id.dart';
 import 'push_messaging.dart';
+import 'secure_credential_store.dart';
 
 class AuthServiceError implements Exception {
   AuthServiceError(this.message);
@@ -73,7 +74,20 @@ class AuthService {
 
   LocalAuthUser? get currentUser => _currentUser;
 
+  static LocalAuthUser? get storedUser => _currentUser;
+
   static Future<void> bootstrap() async {
+    final secure = await SecureCredentialStore.readAuthJson();
+    if (secure != null) {
+      final restored = LocalAuthUser.fromJson(secure);
+      final tok = restored.sessionToken.trim();
+      final uid = restored.id.trim();
+      if (uid.isNotEmpty && tok.length >= 8) {
+        _currentUser = restored;
+        return;
+      }
+      await SecureCredentialStore.clearAuth();
+    }
     final prefs = await SharedPreferences.getInstance();
     final raw = prefs.getString(_prefsKey);
     if (raw == null || raw.isEmpty) {
@@ -148,8 +162,7 @@ class AuthService {
       name: (body['full_name'] ?? '').toString(),
       sessionToken: (body['session_token'] ?? '').toString(),
     );
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(_currentUser!.toJson()));
+    await SecureCredentialStore.writeAuthJson(_currentUser!.toJson());
     return _currentUser;
   }
 
@@ -195,8 +208,7 @@ class AuthService {
 
     final updated = current.copyWith(name: nextName, email: nextEmail);
     _currentUser = updated;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(updated.toJson()));
+    await SecureCredentialStore.writeAuthJson(updated.toJson());
     return updated;
   }
 
@@ -235,15 +247,13 @@ class AuthService {
       sessionToken: (body['session_token'] ?? current.sessionToken).toString(),
     );
     _currentUser = updated;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.setString(_prefsKey, jsonEncode(updated.toJson()));
+    await SecureCredentialStore.writeAuthJson(updated.toJson());
     return updated;
   }
 
   Future<void> signOut() async {
     _currentUser = null;
-    final prefs = await SharedPreferences.getInstance();
-    await prefs.remove(_prefsKey);
+    await SecureCredentialStore.clearAuth();
   }
 
   String _normalizePhone(String value) {

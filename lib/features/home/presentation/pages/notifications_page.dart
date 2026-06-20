@@ -9,6 +9,7 @@ import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/auth_controller.dart';
 import '../../../../core/state/books_state.dart';
 import '../../../../core/state/notifications_state.dart';
+import '../../../../widgets/cached_remote_image.dart';
 
 class NotificationsPage extends ConsumerWidget {
   const NotificationsPage({super.key});
@@ -138,12 +139,12 @@ class _NotificationImage extends StatelessWidget {
       }
     }
 
-    return Image.network(
-      trimmed,
+    return CachedRemoteImage(
+      url: trimmed,
       width: double.infinity,
       height: 180,
       fit: BoxFit.cover,
-      errorBuilder: (_, _, _) => _placeholder(),
+      errorBuilder: (_, _) => _placeholder(),
     );
   }
 

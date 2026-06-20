@@ -18,6 +18,7 @@ import '../../../../core/state/progress_controller.dart';
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/utils/course_title.dart';
 import '../../../../widgets/base_card.dart';
+import '../../../../widgets/cached_remote_image.dart';
 import '../../../../widgets/lesson_item.dart';
 import '../widgets/purchase_modal.dart';
 
@@ -373,11 +374,11 @@ class _CourseHero extends StatelessWidget {
                       ),
                     ),
                   )
-                : Image.network(
-                raw,
+                : CachedRemoteImage(
+                url: raw,
                 fit: BoxFit.cover,
-                loadingBuilder: (context, child, loadingProgress) {
-                  if (loadingProgress == null) return child;
+                loadingBuilder: (context, child, _) {
+                  if (child is Image) return child;
                   return Container(
                     color: const Color(0xFFEAF1FF),
                     alignment: Alignment.center,
@@ -388,7 +389,7 @@ class _CourseHero extends StatelessWidget {
                     ),
                   );
                 },
-                errorBuilder: (context, error, stackTrace) => const DecoratedBox(
+                errorBuilder: (context, _) => const DecoratedBox(
                   decoration: BoxDecoration(
                     gradient: LinearGradient(
                       colors: [Color(0xFF1E6BB8), Color(0xFF0E4E8B)],

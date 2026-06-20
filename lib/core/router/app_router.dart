@@ -22,11 +22,26 @@ import '../router/app_routes.dart';
 import '../state/app_state_providers.dart';
 import '../state/auth_controller.dart';
 
+/// Auth o‘zgarganda redirect yangilanadi, lekin router qayta yaratilmaydi —
+/// aks holda fon rejimidan qaytganda dars sahifasi yo‘qolardi.
+class _AuthRouterRefresh extends ChangeNotifier {
+  void refresh() => notifyListeners();
+}
+
+final _authRouterRefreshProvider = Provider<_AuthRouterRefresh>((ref) {
+  final notifier = _AuthRouterRefresh();
+  ref.listen(authControllerProvider, (_, __) => notifier.refresh());
+  ref.onDispose(notifier.dispose);
+  return notifier;
+});
+
 final appRouterProvider = Provider<GoRouter>((ref) {
-  final auth = ref.watch(authControllerProvider);
-  return GoRouter(
+  final refresh = ref.watch(_authRouterRefreshProvider);
+  final router = GoRouter(
+    refreshListenable: refresh,
     initialLocation: AppRoutes.home,
     redirect: (context, state) {
+      final auth = ref.read(authControllerProvider);
       if (auth.isBlocked && state.uri.path != AppRoutes.login) {
         return AppRoutes.login;
       }
@@ -151,6 +166,8 @@ final appRouterProvider = Provider<GoRouter>((ref) {
       ),
     ],
   );
+  ref.onDispose(router.dispose);
+  return router;
 });
 
 class ShellScaffold extends ConsumerWidget {

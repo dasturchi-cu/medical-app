@@ -54,6 +54,7 @@ dependencies:
   syncfusion_flutter_pdfviewer: ^31.1.21
   flutter_windowmanager:
     path: packages/flutter_windowmanager
+  flutter_secure_storage: ^9.2.4
   path_provider: ^2.1.5
   firebase_core: ^4.7.0
   firebase_messaging: ^16.2.0

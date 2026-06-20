@@ -1,3 +1,5 @@
+import '../../services/media_url_resolver.dart';
+
 class HomeSlideItem {
   static String normalizeButtonLabel(String raw) {
     final t = raw.trim();
@@ -33,7 +35,7 @@ class HomeSlideItem {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       subtitle: (json['subtitle'] ?? '').toString(),
-      imageUrl: (json['image_url'] ?? '').toString(),
+      imageUrl: MediaUrlResolver.resolveStoredMediaUrl((json['image_url'] ?? '').toString()),
       buttonText: normalizeButtonLabel((json['button_text'] ?? 'Boshlash').toString()),
       courseId: courseStr.isEmpty ? null : courseStr,
       orderNo: int.tryParse((json['order_no'] ?? '1').toString()) ?? 1,

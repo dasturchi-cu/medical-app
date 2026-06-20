@@ -5,6 +5,8 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 
 import '../../http_request_timeouts.dart';
+import '../../services/memory_ttl_cache.dart';
+import '../../utils/tashkent_time.dart';
 import '../models/ranking_models.dart';
 import 'ranking_repository.dart';
 
@@ -15,6 +17,51 @@ class HttpRankingRepository implements RankingRepository {
   final http.Client? client;
 
   http.Client get _client => client ?? http.Client();
+
+  static final MemoryTtlCache<List<LeaderboardRowModel>> _cache =
+      MemoryTtlCache<List<LeaderboardRowModel>>(ttl: const Duration(minutes: 2));
+
+  static String? _cachedDailyDateKey;
+
+  String _videoCacheKey({
+    required RankingScope scope,
+    required String uid,
+    required int limit,
+  }) {
+    if (scope == RankingScope.daily) {
+      return 'video|daily|${TashkentTime.dateKey()}|$uid|$limit';
+    }
+    return 'video|overall|$uid|$limit';
+  }
+
+  @override
+  void invalidateVideoRankingCache({RankingScope? scope}) {
+    if (scope == null) {
+      _cache.invalidatePrefix('video|');
+      _cache.invalidatePrefix('pomodoro|');
+      _cachedDailyDateKey = null;
+      return;
+    }
+    if (scope == RankingScope.daily) {
+      _cache.invalidatePrefix('video|daily|');
+      _cachedDailyDateKey = null;
+      return;
+    }
+    _cache.invalidatePrefix('video|overall|');
+  }
+
+  void _ensureDailyCacheDate() {
+    final today = TashkentTime.dateKey();
+    if (_cachedDailyDateKey != null && _cachedDailyDateKey != today) {
+      _cache.invalidatePrefix('video|daily|');
+    }
+    _cachedDailyDateKey = today;
+  }
+
+  @override
+  void invalidatePomodoroRankingCache() {
+    _cache.invalidatePrefix('pomodoro|');
+  }
 
   Duration get _timeout => homeAggregateHttpTimeoutForBaseUrl(baseUrl);
   Duration get _pomodoroTimeout => pomodoroRankingTimeoutForBaseUrl(baseUrl);
@@ -58,7 +105,12 @@ class HttpRankingRepository implements RankingRepository {
       return body
           .whereType<Map<String, dynamic>>()
           .map(_rowFromJson)
-          .where((r) => r.totalSeconds > 0 || r.completedCount > 0)
+          .where(
+            (r) =>
+                r.isCurrentUserRow ||
+                r.totalSeconds > 0 ||
+                r.completedCount > 0,
+          )
           .toList(growable: false);
     }
     if (body is! Map<String, dynamic>) {
@@ -96,8 +148,7 @@ class HttpRankingRepository implements RankingRepository {
     );
   }
 
-  @override
-  Future<List<LeaderboardRowModel>> fetchVideoLeaderboard({
+  Future<List<LeaderboardRowModel>> _fetchVideoLeaderboardNetwork({
     required RankingScope scope,
     String? currentUserId,
     int limit = 10,
@@ -133,7 +184,29 @@ class HttpRankingRepository implements RankingRepository {
   }
 
   @override
-  Future<List<LeaderboardRowModel>> fetchPomodoroLeaderboard({
+  Future<List<LeaderboardRowModel>> fetchVideoLeaderboard({
+    required RankingScope scope,
+    String? currentUserId,
+    int limit = 10,
+    bool forceRefresh = false,
+  }) async {
+    if (scope == RankingScope.daily) {
+      _ensureDailyCacheDate();
+    }
+    final uid = (currentUserId ?? '').trim();
+    final key = _videoCacheKey(scope: scope, uid: uid, limit: limit);
+    return _cache.getOrFetch(
+      key,
+      () => _fetchVideoLeaderboardNetwork(
+        scope: scope,
+        currentUserId: currentUserId,
+        limit: limit,
+      ),
+      forceRefresh: forceRefresh,
+    );
+  }
+
+  Future<List<LeaderboardRowModel>> _fetchPomodoroLeaderboardNetwork({
     String? currentUserId,
     int limit = 10,
   }) async {
@@ -146,10 +219,9 @@ class HttpRankingRepository implements RankingRepository {
       query['user_id'] = uid;
     }
 
-    // Productionda ko‘pincha faqat /pomodoro/daily mavjud; /pomodoro keyinroq deploy qilinadi.
+    // Kunlik reyting — faqat bugungi pomodoro.
     final endpoints = [
       Uri.parse('$baseUrl/api/v1/ranking/pomodoro/daily').replace(queryParameters: query),
-      Uri.parse('$baseUrl/api/v1/ranking/pomodoro').replace(queryParameters: query),
       Uri.parse('$baseUrl/api/v1/leaderboard/pomodoro/daily').replace(queryParameters: query),
     ];
 
@@ -178,5 +250,20 @@ class HttpRankingRepository implements RankingRepository {
       }
     }
     return const [];
+  }
+
+  @override
+  Future<List<LeaderboardRowModel>> fetchPomodoroLeaderboard({
+    String? currentUserId,
+    int limit = 10,
+    bool forceRefresh = false,
+  }) async {
+    final uid = (currentUserId ?? '').trim();
+    final key = 'pomodoro|${TashkentTime.dateKey()}|$uid|$limit';
+    return _cache.getOrFetch(
+      key,
+      () => _fetchPomodoroLeaderboardNetwork(currentUserId: currentUserId, limit: limit),
+      forceRefresh: forceRefresh,
+    );
   }
 }

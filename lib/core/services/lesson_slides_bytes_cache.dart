@@ -8,11 +8,13 @@ import 'package:flutter/foundation.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 
+import 'media_url_resolver.dart';
+
 /// Dars slaydlari (PDF/rasm) — qayta ochganda tarmoqsiz tez ko‘rinishi uchun kesh.
 class LessonSlidesBytesCache {
   LessonSlidesBytesCache._();
 
-  static const _dirName = 'lesson_slides_v1';
+  static const _dirName = 'remote_media_v1';
 
   static final Map<String, Uint8List> _memory = {};
   static Directory? _cacheDir;
@@ -33,15 +35,7 @@ class LessonSlidesBytesCache {
   }
 
   static String normalizeUrl(String raw, {required String apiBaseUrl}) {
-    final value = raw.trim();
-    if (value.startsWith('http://') ||
-        value.startsWith('https://') ||
-        value.startsWith('data:')) {
-      return value;
-    }
-    final base = apiBaseUrl.replaceAll(RegExp(r'/+$'), '');
-    final path = value.startsWith('/') ? value : '/$value';
-    return '$base$path';
+    return MediaUrlResolver.resolveFetchUrl(raw, apiBaseUrl: apiBaseUrl);
   }
 
   static String _cacheKey(String normalizedUrl) {

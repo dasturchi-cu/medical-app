@@ -16,6 +16,7 @@ import '../../../../widgets/ranking_item.dart';
 import '../../../../core/data/models/ranking_models.dart';
 import '../../../../core/data/repositories/ranking_repository.dart';
 import '../../../../core/services/supabase_realtime_client.dart';
+import '../../../../core/utils/tashkent_time.dart';
 
 class _TabLeaderboard {
   const _TabLeaderboard({
@@ -29,17 +30,30 @@ class _TabLeaderboard {
   static _TabLeaderboard fromRows(List<LeaderboardRowModel> rows) {
     final top = <LeaderboardRowModel>[];
     LeaderboardRowModel? me;
+    LeaderboardRowModel? meInTop;
     for (final row in rows) {
       if (row.isCurrentUserRow) {
         me = row;
       } else if (row.isTopRow) {
+        if (row.isCurrentUser) {
+          meInTop = row;
+        }
         top.add(row);
       }
     }
-    return _TabLeaderboard(top: top, currentUser: me);
+    final current = me ?? meInTop;
+    final hasRealCurrent = current != null &&
+        (current.totalSeconds > 0 || current.completedCount > 0);
+    return _TabLeaderboard(
+      top: top,
+      currentUser: hasRealCurrent ? current : null,
+    );
   }
 
-  bool get hasAnyActivity => top.isNotEmpty || currentUser != null;
+  bool get hasAnyActivity =>
+      top.isNotEmpty ||
+      (currentUser != null &&
+          (currentUser!.totalSeconds > 0 || currentUser!.completedCount > 0));
 }
 
 class RankingPage extends ConsumerStatefulWidget {
@@ -66,9 +80,11 @@ class _RankingPageState extends ConsumerState<RankingPage>
   String? _dailyRankingError;
   String? _overallRankingError;
   String? _lastDailyLocalDate;
+  String? _lastPomodoroLocalDate;
 
   RealtimeChannel? _realtimeChannel;
   Timer? _realtimeDebounce;
+  Timer? _midnightRefreshTimer;
   bool _realtimeDisposed = false;
   bool _loadInFlight = false;
 
@@ -84,10 +100,12 @@ class _RankingPageState extends ConsumerState<RankingPage>
       _dailyOverallTitles = _titlesFromLocalization(loc0);
     }
     _authSub = ref.listenManual(authControllerProvider, (prev, next) {
-      if (!mounted) return;
-      final loggedIn = next?.isLoggedIn == true;
-      if (_isLoggedIn == loggedIn) return;
+      if (!mounted || next == null) return;
+      final loggedIn = next.isLoggedIn;
+      final userChanged = prev?.userId != next.userId;
+      if (_isLoggedIn == loggedIn && !userChanged) return;
       setState(() => _isLoggedIn = loggedIn);
+      unawaited(_loadVisibleTab(force: true));
     });
     _locSub = ref.listenManual<AsyncValue<LocalizationState>>(
       localizationProvider,
@@ -105,7 +123,38 @@ class _RankingPageState extends ConsumerState<RankingPage>
     Future.microtask(() async {
       await _load();
       _subscribeRealtime();
+      _scheduleMidnightRefresh();
     });
+  }
+
+  void _scheduleMidnightRefresh() {
+    _midnightRefreshTimer?.cancel();
+    if (!mounted) return;
+    final wait = TashkentTime.untilNextMidnight();
+    _midnightRefreshTimer = Timer(wait, () {
+      if (!mounted || _realtimeDisposed) return;
+      ref.read(rankingRepositoryProvider).invalidateVideoRankingCache();
+      ref.read(rankingRepositoryProvider).invalidatePomodoroRankingCache();
+      _lastDailyLocalDate = null;
+      _lastPomodoroLocalDate = null;
+      if (mounted) {
+        setState(() {
+          _daily = const _TabLeaderboard(top: []);
+          _pomodoro = const _TabLeaderboard(top: []);
+        });
+      }
+      unawaited(_loadDaily(force: true));
+      if (_tabs.index == 2) {
+        unawaited(_loadPomodoroOnly());
+      }
+      _scheduleMidnightRefresh();
+    });
+  }
+
+  void _onRankingDataChanged() {
+    ref.read(rankingRepositoryProvider).invalidateVideoRankingCache();
+    ref.read(rankingRepositoryProvider).invalidatePomodoroRankingCache();
+    _scheduleRealtimeRefetch();
   }
 
   List<String> _titlesFromLocalization(LocalizationState st) {
@@ -129,6 +178,13 @@ class _RankingPageState extends ConsumerState<RankingPage>
   }
 
   Future<void> _loadPomodoroOnly() async {
+    final today = _todayLocalDateKey();
+    if (_lastPomodoroLocalDate != null && _lastPomodoroLocalDate != today) {
+      ref.read(rankingRepositoryProvider).invalidatePomodoroRankingCache();
+      if (mounted) {
+        setState(() => _pomodoro = const _TabLeaderboard(top: []));
+      }
+    }
     if (!mounted) return;
     setState(() {
       _pomodoroLoading = true;
@@ -140,13 +196,15 @@ class _RankingPageState extends ConsumerState<RankingPage>
       final items = await repo.fetchPomodoroLeaderboard(
         currentUserId: currentUserId,
         limit: 10,
+        forceRefresh: true,
       );
       if (!mounted) return;
       setState(() {
         _pomodoro = _TabLeaderboard.fromRows(items);
         _pomodoroError = items.isEmpty
-            ? 'Hali Pomodoro reyting faolligi yo‘q.'
+            ? 'Bugun hali Pomodoro faolligi yo‘q.'
             : null;
+        _lastPomodoroLocalDate = today;
       });
     } catch (e, st) {
       debugPrint('[RANKING] fetch pomodoro tab failed: $e\n$st');
@@ -163,7 +221,14 @@ class _RankingPageState extends ConsumerState<RankingPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      final today = TashkentTime.dateKey();
+      if (_lastDailyLocalDate != null && _lastDailyLocalDate != today) {
+        ref.read(rankingRepositoryProvider).invalidateVideoRankingCache(scope: RankingScope.daily);
+        ref.read(rankingRepositoryProvider).invalidatePomodoroRankingCache();
+        _lastDailyLocalDate = null;
+      }
       unawaited(_loadVisibleTab(force: true));
+      _scheduleMidnightRefresh();
     }
   }
 
@@ -184,31 +249,35 @@ class _RankingPageState extends ConsumerState<RankingPage>
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'video_progress',
-          callback: (_) => _scheduleRealtimeRefetch(),
+          callback: (_) => _onRankingDataChanged(),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'rank_daily_lesson_watch',
-          callback: (_) => _scheduleRealtimeRefetch(),
+          callback: (_) => _onRankingDataChanged(),
+        )
+        .onPostgresChanges(
+          event: PostgresChangeEvent.all,
+          schema: 'public',
+          table: 'rank_daily_watch',
+          callback: (_) => _onRankingDataChanged(),
         )
         .onPostgresChanges(
           event: PostgresChangeEvent.all,
           schema: 'public',
           table: 'pomodoro_sessions',
-          callback: (_) => _scheduleRealtimeRefetch(),
+          callback: (_) => _onRankingDataChanged(),
         )
         .subscribe();
   }
 
-  String _todayLocalDateKey() {
-    final now = DateTime.now();
-    return '${now.year}-${now.month.toString().padLeft(2, '0')}-${now.day.toString().padLeft(2, '0')}';
-  }
+  String _todayLocalDateKey() => TashkentTime.dateKey();
 
   Future<void> _loadDaily({bool force = false}) async {
     final today = _todayLocalDateKey();
     if (_lastDailyLocalDate != null && _lastDailyLocalDate != today) {
+      ref.read(rankingRepositoryProvider).invalidateVideoRankingCache(scope: RankingScope.daily);
       if (mounted) {
         setState(() => _daily = const _TabLeaderboard(top: []));
       }
@@ -223,6 +292,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
         scope: RankingScope.daily,
         currentUserId: currentUserId,
         limit: 10,
+        forceRefresh: force,
       );
       if (!mounted) return;
       setState(() {
@@ -252,6 +322,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
         scope: RankingScope.overall,
         currentUserId: currentUserId,
         limit: 10,
+        forceRefresh: true,
       );
       if (!mounted) return;
       setState(() {
@@ -311,6 +382,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
   void dispose() {
     _realtimeDisposed = true;
     _realtimeDebounce?.cancel();
+    _midnightRefreshTimer?.cancel();
     _authSub?.close();
     _locSub?.close();
     final ch = _realtimeChannel;
@@ -398,7 +470,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
             loading: _pomodoroLoading,
             pomodoroError: _pomodoroError,
             emptyRankingMessage: context.tr('pomodoro_leaderboard_empty'),
-            noActivityMessage: 'Sizda hali Pomodoro faolligi yo‘q',
+            noActivityMessage: 'Bugun hali Pomodoro faolligi yo‘q',
             isPomodoro: true,
             isLoggedIn: _isLoggedIn,
             onRefresh: _loadPomodoroOnly,
@@ -440,9 +512,15 @@ class _RankingListState extends State<_RankingList>
     with AutomaticKeepAliveClientMixin<_RankingList> {
   String _countSubtitle(LeaderboardRowModel row) {
     if (widget.isPomodoro) {
+      final parts = <String>[];
+      if (row.totalSeconds > 0) {
+        parts.add(formatPomodoroFocusUz(row.totalSeconds));
+      }
       final n = row.completedCount;
-      if (n <= 0) return '';
-      return '$n sessiya';
+      if (n > 0) {
+        parts.add('$n sessiya');
+      }
+      return parts.join(' · ');
     }
     final n = row.completedCount;
     if (n <= 0) return '';
@@ -475,7 +553,9 @@ class _RankingListState extends State<_RankingList>
       child: RankingItem(
         rank: row.rank,
         name: row.fullName,
-        timeLabel: formatStudyDurationUz(row.totalSeconds),
+        timeLabel: widget.isPomodoro
+            ? formatPomodoroFocusUz(row.totalSeconds)
+            : formatStudyDurationUz(row.totalSeconds),
         subtitle: _countSubtitle(row),
         isCurrentUser: row.isCurrentUser,
         prefixLabel: prefixLabel,

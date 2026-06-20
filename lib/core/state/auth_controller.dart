@@ -108,7 +108,7 @@ class AuthController extends Notifier<AuthState> {
 
   void _startAccessTimer(String userId) {
     _accessTimer?.cancel();
-    _accessTimer = Timer.periodic(const Duration(seconds: 30), (_) async {
+    _accessTimer = Timer.periodic(const Duration(minutes: 2), (_) async {
       await _verifyUserAccess(userId);
     });
     ref.onDispose(() {

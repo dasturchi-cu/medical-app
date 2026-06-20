@@ -6,6 +6,8 @@ import 'package:http/http.dart' as http;
 import 'package:supabase/supabase.dart';
 
 import '../../http_request_timeouts.dart';
+import '../../services/memory_ttl_cache.dart';
+import '../../services/mobile_api_auth.dart';
 import '../models/content_asset_models.dart';
 import 'lesson_assets_repository.dart';
 
@@ -22,14 +24,20 @@ class HttpLessonAssetsRepository implements LessonAssetsRepository {
 
   http.Client get _client => client ?? http.Client();
 
-  @override
-  Future<List<LessonAssetModel>> fetchAssets({required String lessonId}) async {
+  static final MemoryTtlCache<List<LessonAssetModel>> _cache =
+      MemoryTtlCache<List<LessonAssetModel>>(ttl: const Duration(minutes: 5));
+
+  Future<List<LessonAssetModel>> _fetchAssetsNetwork({required String lessonId}) async {
     if (baseUrl.isEmpty || lessonId.isEmpty) return const [];
     try {
       final response = await _client
           .get(Uri.parse('$baseUrl/api/v1/content/assets?lesson_id=$lessonId'))
           .timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
-      if (response.statusCode < 200 || response.statusCode >= 300) return const [];
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        final cached = _cache.peek(lessonId);
+        if (cached != null && cached.isNotEmpty) return cached;
+        return const [];
+      }
       final body = jsonDecode(response.body);
       if (body is! Map<String, dynamic>) return const [];
       final raw = body['items'];
@@ -39,14 +47,22 @@ class HttpLessonAssetsRepository implements LessonAssetsRepository {
       return result;
     } catch (e, st) {
       debugPrint('[API][lesson_assets.fetch][error] $e\n$st');
+      final cached = _cache.peek(lessonId);
+      if (cached != null && cached.isNotEmpty) return cached;
       return const [];
     }
   }
 
   @override
+  Future<List<LessonAssetModel>> fetchAssets({required String lessonId}) async {
+    if (lessonId.isEmpty) return const [];
+    return _cache.getOrFetch(lessonId, () => _fetchAssetsNetwork(lessonId: lessonId));
+  }
+
+  @override
   Stream<List<LessonAssetModel>> watchAssets({
     required String lessonId,
-    Duration pollInterval = const Duration(seconds: 10),
+    Duration pollInterval = const Duration(seconds: 90),
   }) {
     if (lessonId.isEmpty) return Stream.value(const []);
     final controller = StreamController<List<LessonAssetModel>>();
@@ -56,6 +72,7 @@ class HttpLessonAssetsRepository implements LessonAssetsRepository {
 
     Future<void> push() async {
       if (disposed) return;
+      _cache.invalidate(lessonId);
       controller.add(await fetchAssets(lessonId: lessonId));
     }
 
@@ -102,12 +119,12 @@ class HttpLessonAssetsRepository implements LessonAssetsRepository {
     try {
       final response = await _client.post(
         Uri.parse('$baseUrl/api/v1/content/assets/$assetId/progress'),
-        headers: const {'Content-Type': 'application/json'},
-        body: jsonEncode({
+        headers: MobileApiAuth.headers(extra: const {'Content-Type': 'application/json'}),
+        body: jsonEncode(MobileApiAuth.withSession({
           'user_id': userId,
           'page_no': pageNo,
           'progress_percent': progressPercent,
-        }),
+        })),
       ).timeout(apiListFetchTimeoutForBaseUrl(baseUrl));
       if (response.statusCode < 200 || response.statusCode >= 300) {
         debugPrint(

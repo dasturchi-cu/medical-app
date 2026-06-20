@@ -1,3 +1,5 @@
+import '../../services/media_url_resolver.dart';
+
 class AppNotificationItem {
   const AppNotificationItem({
     required this.id,
@@ -27,7 +29,7 @@ class AppNotificationItem {
       id: (json['id'] ?? '').toString(),
       title: (json['title'] ?? '').toString(),
       message: (json['message'] ?? '').toString(),
-      imageUrl: (json['image_url'] ?? '').toString(),
+      imageUrl: MediaUrlResolver.resolveStoredMediaUrl((json['image_url'] ?? '').toString()),
       type: (json['type'] ?? 'generic').toString(),
       route: (json['route'] ?? '/notifications').toString(),
       data: _parseDataMap(json['data']),

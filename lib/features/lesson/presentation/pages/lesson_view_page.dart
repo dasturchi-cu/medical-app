@@ -14,6 +14,9 @@ import '../../../../core/config/api_config.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/services/course_progress_remote_sync.dart';
 import '../../../../core/services/lesson_slides_bytes_cache.dart';
+import '../../../../core/services/media_url_resolver.dart';
+import '../../../../core/services/screen_protection.dart';
+import '../../../../core/services/video_lesson_position_store.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/auth_controller.dart';
@@ -107,6 +110,12 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     _videoImmersiveCtrl?.state = immersive;
   }
 
+  String? _positionStorageKey() {
+    final userId = (_cachedUserId ?? '').trim();
+    if (userId.isEmpty) return null;
+    return '$userId|${widget.lessonId}';
+  }
+
   Widget _pinnedVideoPlayer({
     required double height,
     required String videoUrl,
@@ -116,7 +125,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     required void Function(int watchedSec, bool completed, int playbackDeltaSec)?
         onWatchProgress,
   }) {
-    final pinKey = '${widget.lessonId}|$videoUrl|$height';
+    final pinKey = '${widget.lessonId}|$videoUrl';
     if (_pinnedLessonVideoKey != pinKey) {
       _pinnedLessonVideoKey = pinKey;
       _pinnedLessonVideo = VideoPlayerBox(
@@ -125,6 +134,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
         height: height,
         catalogDurationLabel: catalogDurationLabel,
         initialWatchedSec: bootstrapSec,
+        positionStorageKey: _positionStorageKey(),
         onImmersiveModeChanged: _onVideoImmersiveChanged,
         onWatchProgress: onWatchProgress,
       );
@@ -143,15 +153,32 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
   @override
   void initState() {
     super.initState();
+    unawaited(ScreenProtection.enable());
     _videoImmersiveCtrl = ref.read(videoImmersiveProvider.notifier);
     WidgetsBinding.instance.addObserver(this);
     _tabController = TabController(length: 2, vsync: this);
     _slidesController = PageController();
-    WidgetsBinding.instance.addPostFrameCallback((_) => _cacheWatchDependencies());
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _cacheWatchDependencies();
+      unawaited(_loadLocalResumePosition());
+    });
+  }
+
+  Future<void> _loadLocalResumePosition() async {
+    final key = _positionStorageKey();
+    if (key == null) return;
+    final local = await VideoLessonPositionStore.load(key);
+    if (!mounted || local <= 0) return;
+    setState(() {
+      if (local > _initialWatchedSec) _initialWatchedSec = local;
+      if (local > _liveWatchSec) _liveWatchSec = local;
+    });
+    await _lessonVideoKey.currentState?.restorePlaybackPosition(local);
   }
 
   @override
   void dispose() {
+    unawaited(ScreenProtection.disable());
     _lessonDisposed = true;
     _videoImmersiveCtrl?.state = false;
     WidgetsBinding.instance.removeObserver(this);
@@ -168,8 +195,10 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     required int playbackDeltaSec,
   }) {
     if (_lessonDisposed) return;
-    if (watchedSec > _liveWatchSec) {
-      _liveWatchSec = watchedSec;
+    _liveWatchSec = watchedSec;
+    final storageKey = _positionStorageKey();
+    if (storageKey != null && watchedSec > 0) {
+      unawaited(VideoLessonPositionStore.save(storageKey, watchedSec));
     }
     _cachedCourseIdForFlush = courseId;
     if (watchedSec > 0 || completed) {
@@ -250,6 +279,8 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     if (oldWidget.lessonId != widget.lessonId) {
       _slidesController.dispose();
       _slidesController = PageController();
+      _pinnedLessonVideo = null;
+      _pinnedLessonVideoKey = null;
       _liveWatchSec = 0;
       _initialWatchedSec = 0;
       _lastSyncedWatchSec = 0;
@@ -710,15 +741,23 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
       final row = items.first;
       if (row is! Map<String, dynamic>) return;
       final watched = int.tryParse((row['watched_sec'] ?? '0').toString()) ?? 0;
+      final localKey = _positionStorageKey();
+      final local = localKey != null
+          ? await VideoLessonPositionStore.load(localKey)
+          : 0;
+      final best = watched > local ? watched : local;
       if (!mounted) return;
-      setState(() {
-        _initialWatchedSec = watched > 0 ? watched : 0;
-        if (_liveWatchSec < _initialWatchedSec) {
-          _liveWatchSec = _initialWatchedSec;
-        }
-        _lastSyncedWatchSec = _initialWatchedSec;
-        _loadedProgressKey = key;
-      });
+      if (best > _liveWatchSec) {
+        _liveWatchSec = best;
+      }
+      if (best > _initialWatchedSec) {
+        _initialWatchedSec = best;
+      }
+      _lastSyncedWatchSec = best;
+      _loadedProgressKey = key;
+      if (mounted && best > 0) {
+        await _lessonVideoKey.currentState?.restorePlaybackPosition(best);
+      }
     } catch (_) {
       // Silent fail: player still starts from 0 if restore failed.
     } finally {
@@ -1028,7 +1067,11 @@ class _SlideViewerState extends State<_SlideViewer> {
                             ),
                           ),
                           onPressed: () async {
-                            final uri = Uri.tryParse(slide.assetFileUrl!);
+                            final resolved = MediaUrlResolver.resolveFetchUrl(
+                              slide.assetFileUrl!,
+                              apiBaseUrl: getApiBaseUrl(),
+                            );
+                            final uri = Uri.tryParse(resolved);
                             if (uri == null) return;
                             await launchUrl(
                               uri,
@@ -1316,7 +1359,11 @@ class _FullscreenSlidePageState extends State<_FullscreenSlidePage> {
                       backgroundColor: Colors.white.withValues(alpha: 0.2),
                     ),
                     onPressed: () async {
-                      final uri = Uri.tryParse(slide.assetFileUrl!);
+                      final resolved = MediaUrlResolver.resolveFetchUrl(
+                        slide.assetFileUrl!,
+                        apiBaseUrl: getApiBaseUrl(),
+                      );
+                      final uri = Uri.tryParse(resolved);
                       if (uri == null) return;
                       await launchUrl(uri, mode: LaunchMode.externalApplication);
                     },

@@ -7,7 +7,9 @@ import 'package:http/http.dart' as http;
 import 'package:shared_preferences/shared_preferences.dart';
 
 import '../../../../core/config/api_config.dart';
+import '../../../../core/services/mobile_api_auth.dart';
 import '../../../../core/state/auth_controller.dart';
+import '../../../../core/utils/tashkent_time.dart';
 
 enum PomodoroSessionType { focus, breakTime }
 
@@ -22,6 +24,7 @@ class PomodoroState {
     required this.isRunning,
     required this.pomodoroCount,
     required this.completedSessions,
+    required this.todayFocusSeconds,
   });
 
   factory PomodoroState.initial() {
@@ -35,6 +38,7 @@ class PomodoroState {
       isRunning: false,
       pomodoroCount: 1,
       completedSessions: 0,
+      todayFocusSeconds: 0,
     );
   }
 
@@ -47,6 +51,7 @@ class PomodoroState {
   final bool isRunning;
   final int pomodoroCount;
   final int completedSessions;
+  final int todayFocusSeconds;
 
   PomodoroState copyWith({
     PomodoroSessionType? sessionType,
@@ -58,6 +63,7 @@ class PomodoroState {
     bool? isRunning,
     int? pomodoroCount,
     int? completedSessions,
+    int? todayFocusSeconds,
   }) {
     return PomodoroState(
       sessionType: sessionType ?? this.sessionType,
@@ -69,6 +75,7 @@ class PomodoroState {
       isRunning: isRunning ?? this.isRunning,
       pomodoroCount: pomodoroCount ?? this.pomodoroCount,
       completedSessions: completedSessions ?? this.completedSessions,
+      todayFocusSeconds: todayFocusSeconds ?? this.todayFocusSeconds,
     );
   }
 
@@ -94,7 +101,28 @@ class PomodoroController extends Notifier<PomodoroState> {
   int _lastPersistMs = 0;
   bool _hydrated = false;
   bool _pomodoroSyncEndpointMissing = false;
+  String? _storedTodayDate;
   static const int _minRankingFocusSeconds = 30;
+
+  void _ensureTodayBucket() {
+    final today = TashkentTime.dateKey();
+    if (_storedTodayDate == today) return;
+    _storedTodayDate = today;
+    if (_isDisposed) return;
+    state = state.copyWith(
+      todayFocusSeconds: 0,
+      completedSessions: 0,
+    );
+  }
+
+  void _addTodayFocusSeconds(int delta) {
+    if (delta <= 0) return;
+    _ensureTodayBucket();
+    if (_isDisposed) return;
+    state = state.copyWith(
+      todayFocusSeconds: state.todayFocusSeconds + delta,
+    );
+  }
 
   @override
   PomodoroState build() {
@@ -224,6 +252,7 @@ class PomodoroController extends Notifier<PomodoroState> {
       if (finishedFocus) {
         final elapsed = state.totalSeconds.clamp(1, 24 * 3600);
         _persistedFocusSeconds = 0;
+        _addTodayFocusSeconds(elapsed);
         unawaited(
           _sendPomodoroSession(
             focusSeconds: elapsed,
@@ -264,6 +293,7 @@ class PomodoroController extends Notifier<PomodoroState> {
 
   Future<void> onAppLifecycleChanged(AppLifecycleState stateValue) async {
     if (stateValue == AppLifecycleState.resumed) {
+      _ensureTodayBucket();
       if (state.isRunning) {
         _syncWallClockDrift();
         if (_timer == null) {
@@ -315,6 +345,8 @@ class PomodoroController extends Notifier<PomodoroState> {
           'isRunning': state.isRunning,
           'pomodoroCount': state.pomodoroCount,
           'completedSessions': state.completedSessions,
+          'todayFocusSeconds': state.todayFocusSeconds,
+          'storedTodayDate': _storedTodayDate ?? TashkentTime.dateKey(),
           'persistedFocusSeconds': _persistedFocusSeconds,
           'sessionId': _sessionId,
           'lastSyncedAtMs': DateTime.now().millisecondsSinceEpoch,
@@ -334,6 +366,14 @@ class PomodoroController extends Notifier<PomodoroState> {
       final restoredType = typeRaw == PomodoroSessionType.breakTime.name
           ? PomodoroSessionType.breakTime
           : PomodoroSessionType.focus;
+      _storedTodayDate = (decoded['storedTodayDate'] ?? TashkentTime.dateKey()).toString();
+      final today = TashkentTime.dateKey();
+      final storedTodayFocus =
+          int.tryParse((decoded['todayFocusSeconds'] ?? '0').toString()) ?? 0;
+      final storedSessions =
+          int.tryParse((decoded['completedSessions'] ?? '0').toString()) ?? 0;
+      final todayFocusSeconds = _storedTodayDate == today ? storedTodayFocus : 0;
+      final todaySessions = _storedTodayDate == today ? storedSessions : 0;
       _persistedFocusSeconds =
           int.tryParse((decoded['persistedFocusSeconds'] ?? '0').toString()) ?? 0;
       _sessionId = (decoded['sessionId'] ?? '').toString().trim().isEmpty
@@ -351,8 +391,8 @@ class PomodoroController extends Notifier<PomodoroState> {
             int.tryParse((decoded['remainingSeconds'] ?? '1500').toString()) ?? 1500,
         isRunning: decoded['isRunning'] == true,
         pomodoroCount: int.tryParse((decoded['pomodoroCount'] ?? '1').toString()) ?? 1,
-        completedSessions:
-            int.tryParse((decoded['completedSessions'] ?? '0').toString()) ?? 0,
+        completedSessions: todaySessions,
+        todayFocusSeconds: todayFocusSeconds,
       );
       if (_isDisposed) return;
       state = restored;
@@ -375,16 +415,16 @@ class PomodoroController extends Notifier<PomodoroState> {
     final userId = auth.userId ?? '';
     final baseUrl = getApiBaseUrl();
     if (userId.isEmpty || baseUrl.isEmpty) return;
-    final headers = const {'Content-Type': 'application/json'};
+    final headers = MobileApiAuth.headers(extra: const {'Content-Type': 'application/json'});
     try {
       if (action == 'start') {
         final res = await http.post(
           Uri.parse('$baseUrl/api/v1/pomodoro/session/start'),
           headers: headers,
-          body: jsonEncode({
+          body: jsonEncode(MobileApiAuth.withSession({
             'user_id': userId,
             'focus_seconds': focusSeconds ?? state.totalSeconds,
-          }),
+          })),
         );
         if (res.statusCode >= 200 && res.statusCode < 300) {
           final body = jsonDecode(res.body);
@@ -401,7 +441,10 @@ class PomodoroController extends Notifier<PomodoroState> {
         await http.post(
           Uri.parse('$baseUrl/api/v1/pomodoro/session/$action'),
           headers: headers,
-          body: jsonEncode({'user_id': userId, 'session_id': sid}),
+          body: jsonEncode(MobileApiAuth.withSession({
+            'user_id': userId,
+            'session_id': sid,
+          })),
         );
         return;
       }
@@ -409,12 +452,12 @@ class PomodoroController extends Notifier<PomodoroState> {
         await http.post(
           Uri.parse('$baseUrl/api/v1/pomodoro/session/finish'),
           headers: headers,
-          body: jsonEncode({
+          body: jsonEncode(MobileApiAuth.withSession({
             'user_id': userId,
             'session_id': sid,
             'duration_sec': durationSec ?? (state.totalSeconds - state.remainingSeconds),
             'status': status,
-          }),
+          })),
         );
       }
     } catch (e) {
@@ -442,6 +485,7 @@ class PomodoroController extends Notifier<PomodoroState> {
     final delta = elapsed - _persistedFocusSeconds;
     if (delta < _minRankingFocusSeconds) return;
     _persistedFocusSeconds += delta;
+    _addTodayFocusSeconds(delta);
     await _sendPomodoroSession(
       focusSeconds: delta,
       completedCycles: 0,
@@ -471,15 +515,15 @@ class PomodoroController extends Notifier<PomodoroState> {
     try {
       final primary = Uri.parse('$baseUrl/api/v1/ranking/pomodoro/session');
       final fallback = Uri.parse('$baseUrl/api/v1/leaderboard/pomodoro/session');
-      final bodyStr = jsonEncode({
+      final bodyStr = jsonEncode(MobileApiAuth.withSession({
         'user_id': userId,
         'focus_seconds': focusSeconds,
         'break_seconds': breakSeconds,
         'completed_cycles': completedCycles,
         'focus_minutes': ((focusSeconds + 59) ~/ 60).clamp(1, 9999),
         'break_minutes': ((breakSeconds + 59) ~/ 60).clamp(0, 9999),
-      });
-      const headers = {'Content-Type': 'application/json'};
+      }));
+      final headers = MobileApiAuth.headers(extra: const {'Content-Type': 'application/json'});
       var res = await http
           .post(primary, headers: headers, body: bodyStr)
           .timeout(const Duration(seconds: 25));

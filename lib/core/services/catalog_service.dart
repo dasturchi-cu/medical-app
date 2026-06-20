@@ -9,6 +9,7 @@ import '../config/api_config.dart';
 import '../http_request_timeouts.dart';
 import '../models/course_models.dart';
 import 'home_feeds_disk_cache.dart';
+import 'media_url_resolver.dart';
 
 String _fallbackInstructor() => 'Umidjon Mukarramov';
 
@@ -533,7 +534,7 @@ class CatalogService {
       titleRu: (json['title_ru'] ?? '').toString(),
       titleEn: (json['title_en'] ?? '').toString(),
       authorUz: instructorName.isEmpty ? _fallbackInstructor() : instructorName,
-      imageUrl: coverImage,
+      imageUrl: MediaUrlResolver.resolveStoredMediaUrl(coverImage),
       priceUz: '${(json['price_uzs'] ?? 0).toString()} so\'m',
       progress: 0,
       rating: double.tryParse((json['rating_avg'] ?? '0').toString()) ?? 0,
@@ -582,7 +583,7 @@ class CatalogService {
       isCompleted: false,
       transcriptUz: '',
       slides: const [],
-      videoUrl: (json['video_url'] ?? '').toString(),
+      videoUrl: MediaUrlResolver.resolveStoredMediaUrl((json['video_url'] ?? '').toString()),
     );
   }
 
@@ -600,7 +601,7 @@ class CatalogService {
       titleRu: (json['title_ru'] ?? '').toString(),
       titleEn: (json['title_en'] ?? '').toString(),
       authorUz: instructorName.isEmpty ? _fallbackInstructor() : instructorName,
-      imageUrl: coverImage,
+      imageUrl: MediaUrlResolver.resolveStoredMediaUrl(coverImage),
       priceUz: '$priceUzs so\'m',
       progress: 0,
       rating: rating,

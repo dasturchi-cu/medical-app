@@ -16,7 +16,6 @@ import 'core/services/lesson_slides_bytes_cache.dart';
 import 'core/services/push_messaging.dart';
 import 'core/di/providers.dart';
 import 'core/state/books_state.dart';
-import 'core/state/notifications_state.dart';
 import 'core/theme/app_theme.dart';
 import 'core/theme/theme_mode_provider.dart';
 import 'core/widgets/startup_guard.dart';

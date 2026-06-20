@@ -32,6 +32,7 @@ import '../../../../widgets/course_card.dart';
 import '../../../../widgets/course_stats_comments_sheet.dart';
 import '../../../course/presentation/widgets/purchase_modal.dart'
     show PurchaseOfferKind, showPurchaseModal;
+import '../../../../widgets/cached_remote_image.dart';
 import '../providers/home_providers.dart';
 
 /// Yuqori ko'k slayd uchun `home_slides.course_id`; bo'sh bo'lsa sarlavha bo'yicha bitta mos kurs qidiriladi.
@@ -101,19 +102,17 @@ class _HomeSlideBackdrop extends StatelessWidget {
         }
       }
     }
-    return Image.network(
-      u,
+    return CachedRemoteImage(
+      url: u,
       fit: BoxFit.cover,
       width: double.infinity,
       height: double.infinity,
       filterQuality: FilterQuality.low,
       cacheWidth: (MediaQuery.devicePixelRatioOf(context) * 1080).round(),
-      errorBuilder: (context, error, stackTrace) =>
-          const ColoredBox(color: AppColors.primary),
-      loadingBuilder: (context, child, loadingProgress) {
-        if (loadingProgress == null) return child;
-        return const ColoredBox(color: AppColors.primary);
-      },
+      errorBuilder: (context, _) => const ColoredBox(color: AppColors.primary),
+      loadingBuilder: (context, child, _) => child is Image
+          ? child
+          : const ColoredBox(color: AppColors.primary),
     );
   }
 }
@@ -1024,10 +1023,10 @@ class _NewsCard extends StatelessWidget {
             SizedBox(
               height: 126,
               width: double.infinity,
-              child: Image.network(
-                item.imageUrl,
+              child: CachedRemoteImage(
+                url: item.imageUrl,
                 fit: BoxFit.cover,
-                errorBuilder: (context, error, stackTrace) {
+                errorBuilder: (context, _) {
                   final dataImage = _decodeDataImage(item.imageUrl);
                   if (dataImage != null) {
                     return Image.memory(dataImage, fit: BoxFit.cover);

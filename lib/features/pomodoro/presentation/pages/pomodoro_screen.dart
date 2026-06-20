@@ -7,6 +7,7 @@ import 'package:flutter/services.dart';
 
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/theme/design_system.dart';
+import '../../../../core/utils/format_study_duration.dart';
 import '../providers/pomodoro_provider.dart';
 import '../widgets/control_buttons.dart';
 import '../widgets/settings_section.dart';
@@ -111,8 +112,8 @@ class _PomodoroScreenState extends ConsumerState<PomodoroScreen>
             children: [
               Expanded(
                 child: StatsCard(
-                  title: 'Pomodoro soni',
-                  value: '${state.pomodoroCount}',
+                  title: 'Bugungi fokus',
+                  value: formatPomodoroFocusUz(state.todayFocusSeconds),
                 ),
               ),
               const SizedBox(width: AppSpacing.s8),
@@ -123,6 +124,11 @@ class _PomodoroScreenState extends ConsumerState<PomodoroScreen>
                 ),
               ),
             ],
+          ),
+          const SizedBox(height: AppSpacing.s8),
+          StatsCard(
+            title: 'Joriy pomodoro',
+            value: '${state.pomodoroCount}',
           ),
           const SizedBox(height: AppSpacing.s12),
           PomodoroControlButtons(

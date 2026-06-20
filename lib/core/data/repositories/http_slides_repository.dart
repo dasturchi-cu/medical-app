@@ -145,7 +145,7 @@ class HttpSlidesRepository implements SlidesRepository {
       if (disposed || pushInFlight) return;
       pushInFlight = true;
       try {
-        final items = await fetchSlides();
+        final items = await fetchSlides(forceRefresh: true);
         if (!disposed && !controller.isClosed) {
           controller.add(items);
         }

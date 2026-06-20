@@ -7,6 +7,9 @@ import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 import 'package:url_launcher/url_launcher.dart';
 
+import '../../../../core/services/screen_protection.dart';
+import '../../../../core/config/api_config.dart';
+import '../../../../core/services/media_url_resolver.dart';
 import '../../../../core/services/lesson_slides_bytes_cache.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/state/auth_controller.dart';
@@ -32,7 +35,14 @@ class _AssetViewPageState extends ConsumerState<AssetViewPage> {
   Timer? _debounce;
 
   @override
+  void initState() {
+    super.initState();
+    unawaited(ScreenProtection.enable());
+  }
+
+  @override
   void dispose() {
+    unawaited(ScreenProtection.disable());
     _debounce?.cancel();
     super.dispose();
   }
@@ -60,7 +70,12 @@ class _AssetViewPageState extends ConsumerState<AssetViewPage> {
                 )
               : FilledButton.icon(
                   onPressed: () async {
-                    final uri = Uri.parse(asset.fileUrl);
+                    final resolved = MediaUrlResolver.resolveFetchUrl(
+                      asset.fileUrl,
+                      apiBaseUrl: getApiBaseUrl(),
+                    );
+                    final uri = Uri.tryParse(resolved);
+                    if (uri == null) return;
                     if (!await launchUrl(uri, mode: LaunchMode.externalApplication)) return;
                     await _saveProgress();
                   },
@@ -131,6 +146,7 @@ class _AssetViewPageState extends ConsumerState<AssetViewPage> {
   Future<Uint8List> _downloadPdfBytes(String url) {
     return LessonSlidesBytesCache.loadBytes(
       url,
+      apiBaseUrl: getApiBaseUrl(),
       fetcher: (normalized) async {
         try {
           return await LessonSlidesBytesCache.fetchPdfBytes(normalized);

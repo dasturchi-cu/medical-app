@@ -7,10 +7,10 @@ import 'package:http/http.dart' as http;
 
 import '../core/config/api_config.dart';
 import '../core/data/models/comment_models.dart';
+import '../core/services/course_stats_cache.dart';
 import '../core/state/auth_controller.dart';
 import '../core/di/providers.dart';
 import '../core/state/comments_state.dart';
-import '../core/services/catalog_service.dart';
 import '../core/state/course_stats_state.dart';
 import '../core/state/progress_controller.dart';
 
@@ -70,8 +70,11 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             ...state,
             widget.courseId: stats,
           });
-      ref.invalidate(
-        contentCardStatsProvider((key: widget.courseId, useFeedbackApi: true)),
+      CourseStatsCache.putStats(
+        key: widget.courseId,
+        userId: ref.read(authControllerProvider).userId ?? '',
+        stats: stats,
+        useFeedbackApi: true,
       );
       return;
     }
@@ -79,8 +82,11 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
           ...state,
           widget.courseId: stats,
         });
-    ref.invalidate(courseCardStatsProvider(widget.courseId));
-    ref.invalidate(neurologyHomeStatsProvider(CatalogService.courseListIdentityKey));
+    CourseStatsCache.putStats(
+      key: widget.courseId,
+      userId: ref.read(authControllerProvider).userId ?? '',
+      stats: stats,
+    );
   }
 
   @override
@@ -110,6 +116,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       final latest = await ref.read(commentsRepositoryProvider).fetchComments(
             courseKey: widget.courseId,
             userId: userId,
+            forceRefresh: true,
           );
       if (!mounted) return;
       final root = latest.where((item) => item.parentId == null || item.parentId!.isEmpty);
@@ -136,59 +143,87 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       if (mounted) setState(() => _statsLoading = false);
       return;
     }
-    if (mounted) {
+
+    final cached = CourseStatsCache.peekStats(
+      key: widget.courseId,
+      userId: userId,
+      useFeedbackApi: widget.useFeedbackApi,
+    );
+    if (cached != null && mounted) {
+      setState(() {
+        _commentsCount = cached.commentsCount;
+        _commentersCount = cached.commentersCount;
+        _ratingAvg = cached.ratingAvg;
+        _ratingCount = cached.ratingCount;
+        _statsLoading = false;
+        _statsError = null;
+      });
+    } else if (mounted) {
       setState(() {
         _statsLoading = true;
         _statsError = null;
       });
     }
+
     try {
-      final statsUri = widget.useFeedbackApi
-          ? Uri.parse('$baseUrl/api/v1/feedback/${widget.courseId}/stats').replace(
-              queryParameters: userId.isEmpty ? null : {'user_id': userId},
-            )
-          : Uri.parse('$baseUrl/api/v1/courses/${widget.courseId}/stats').replace(
-              queryParameters: userId.isEmpty ? null : {'user_id': userId},
-            );
-      debugPrint('[API][courses.stats][request] uri=$statsUri');
-      final response = await http
-          .get(statsUri)
-          .timeout(const Duration(seconds: 12));
-      debugPrint('[API][courses.stats][response] status=${response.statusCode}');
-      if (widget.useFeedbackApi && response.statusCode == 404) {
-        if (!mounted) return;
-        setState(() {
-          _statsLoading = false;
-          _statsError = null;
-          _feedbackApiMissing = true;
-        });
-        return;
-      }
-      if (response.statusCode < 200 || response.statusCode >= 300) {
-        throw Exception('Kurs statistikasi yuklanmadi (${response.statusCode}).');
-      }
-      final body = jsonDecode(response.body);
-      if (body is! Map<String, dynamic>) {
-        throw Exception("Statistika JSON emas.");
-      }
-      final enrolled = int.tryParse((body['enrolled_count'] ?? '0').toString()) ?? 0;
-      final comments = int.tryParse((body['comments_count'] ?? '0').toString()) ?? 0;
-      final commenters = int.tryParse((body['commenters_count'] ?? '0').toString()) ?? 0;
-      final ratingAvg = double.tryParse((body['rating_avg'] ?? '0').toString()) ?? 0;
-      final ratingCount = int.tryParse((body['rating_count'] ?? '0').toString()) ?? 0;
-      final rawMy = body['my_rating'] ?? body['myRating'];
-      final myRating = rawMy == null ? 0 : (int.tryParse(rawMy.toString()) ?? 0);
+      int? fetchedMyRating;
+      int? fetchedEnrolled;
+      final stats = await CourseStatsCache.statsOrFetch(
+        key: widget.courseId,
+        userId: userId,
+        useFeedbackApi: widget.useFeedbackApi,
+        fetch: () async {
+          final statsUri = widget.useFeedbackApi
+              ? Uri.parse('$baseUrl/api/v1/feedback/${widget.courseId}/stats').replace(
+                  queryParameters: userId.isEmpty ? null : {'user_id': userId},
+                )
+              : Uri.parse('$baseUrl/api/v1/courses/${widget.courseId}/stats').replace(
+                  queryParameters: userId.isEmpty ? null : {'user_id': userId},
+                );
+          debugPrint('[API][courses.stats][request] uri=$statsUri');
+          final response = await http.get(statsUri).timeout(const Duration(seconds: 12));
+          debugPrint('[API][courses.stats][response] status=${response.statusCode}');
+          if (widget.useFeedbackApi && response.statusCode == 404) {
+            throw _FeedbackApiMissingException();
+          }
+          if (response.statusCode < 200 || response.statusCode >= 300) {
+            throw Exception('Kurs statistikasi yuklanmadi (${response.statusCode}).');
+          }
+          final body = jsonDecode(response.body);
+          if (body is! Map<String, dynamic>) {
+            throw Exception("Statistika JSON emas.");
+          }
+          final rawMy = body['my_rating'] ?? body['myRating'];
+          fetchedMyRating = rawMy == null ? 0 : (int.tryParse(rawMy.toString()) ?? 0);
+          if (!widget.useFeedbackApi) {
+            fetchedEnrolled = int.tryParse((body['enrolled_count'] ?? '0').toString()) ?? 0;
+          }
+          return CourseCardStats(
+            ratingAvg: double.tryParse((body['rating_avg'] ?? '0').toString()) ?? 0,
+            ratingCount: int.tryParse((body['rating_count'] ?? '0').toString()) ?? 0,
+            commentsCount: int.tryParse((body['comments_count'] ?? '0').toString()) ?? 0,
+            commentersCount: int.tryParse((body['commenters_count'] ?? '0').toString()) ?? 0,
+          );
+        },
+      );
       if (!mounted) return;
       setState(() {
-        _enrolledCount = widget.useFeedbackApi ? 0 : enrolled;
-        _commentsCount = comments;
-        _commentersCount = commenters;
-        _ratingAvg = ratingAvg;
-        _ratingCount = ratingCount;
-        _myRating = myRating;
+        _commentsCount = stats.commentsCount;
+        _commentersCount = stats.commentersCount;
+        _ratingAvg = stats.ratingAvg;
+        _ratingCount = stats.ratingCount;
+        if (fetchedMyRating != null) _myRating = fetchedMyRating!;
+        if (fetchedEnrolled != null) _enrolledCount = fetchedEnrolled!;
         _statsLoading = false;
         _statsError = null;
         _feedbackApiMissing = false;
+      });
+    } on _FeedbackApiMissingException {
+      if (!mounted) return;
+      setState(() {
+        _statsLoading = false;
+        _statsError = null;
+        _feedbackApiMissing = true;
       });
     } catch (error) {
       debugPrint('[API][courses.stats][error] $error');
@@ -509,10 +544,10 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                               await ref.read(commentsRepositoryProvider).toggleLike(
                                                     commentId: c.id,
                                                     userId: userId,
+                                                    courseKey: widget.courseId,
+                                                    likedByMe: nextLiked,
+                                                    likesCount: nextCount,
                                                   );
-                                              ref.invalidate(
-                                                courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
-                                              );
                                             } catch (e) {
                                               if (mounted) {
                                                 setState(() {
@@ -612,9 +647,6 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                               );
                                           _replyController.clear();
                                           setState(() => _replyToCommentId = null);
-                                          ref.invalidate(
-                                            courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
-                                          );
                                           await _refreshCommentsNow(userId);
                                           if (mounted) setState(() => _commentsCount += 1);
                                           _setCardStatsOverride(
@@ -729,11 +761,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                           commentsCount: _commentsCount,
                           commentersCount: _commentersCount,
                         );
-                        ref.invalidate(
-                          courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)),
-                        );
                         await _refreshCommentsNow(userId);
-                        unawaited(_loadCourseStats());
                       } catch (e) {
                         if (!mounted) return;
                         ScaffoldMessenger.of(context).showSnackBar(
@@ -789,3 +817,4 @@ class _StatChip extends StatelessWidget {
   }
 }
 
+class _FeedbackApiMissingException implements Exception {}

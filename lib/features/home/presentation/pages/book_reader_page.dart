@@ -7,11 +7,11 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:flutter_windowmanager/flutter_windowmanager.dart';
 import 'package:go_router/go_router.dart';
-import 'package:http/http.dart' as http;
-import 'package:path_provider/path_provider.dart';
 import 'package:syncfusion_flutter_pdfviewer/pdfviewer.dart';
 
+import '../../../../core/config/api_config.dart';
 import '../../../../core/data/models/content_asset_models.dart';
+import '../../../../core/services/lesson_slides_bytes_cache.dart';
 import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/services/telegram_service.dart';
@@ -39,7 +39,6 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
   int _totalPages = 0;
   Timer? _debounce;
   Future<Uint8List>? _pdfBytesFuture;
-  Future<File?>? _cachedPdfFuture;
   String? _loadedUrl;
   bool _isDataPdf = false;
   String _userId = '';
@@ -311,36 +310,35 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
 
   Widget _buildPdfViewer() {
     if (!_isDataPdf && (_loadedUrl ?? '').isNotEmpty) {
-      return FutureBuilder<File?>(
-        future: _cachedPdfFuture,
+      return FutureBuilder<Uint8List>(
+        future: _pdfBytesFuture,
         builder: (context, snapshot) {
-          final file = snapshot.data;
-          final viewer = file != null
-              ? SfPdfViewer.file(
-                  file,
-                  controller: _pdfController,
-                  canShowScrollHead: false,
-                  canShowScrollStatus: false,
-                  enableTextSelection: false,
-                  canShowPaginationDialog: false,
-                  onDocumentLoaded: (details) {
-                    _onDocumentLoaded(details.document.pages.count);
-                  },
-                  onPageChanged: _onPageChanged,
-                )
-              : SfPdfViewer.network(
-                  _loadedUrl!,
-                  controller: _pdfController,
-                  canShowScrollHead: false,
-                  canShowScrollStatus: false,
-                  enableTextSelection: false,
-                  canShowPaginationDialog: false,
-                  onDocumentLoaded: (details) {
-                    _onDocumentLoaded(details.document.pages.count);
-                  },
-                  onPageChanged: _onPageChanged,
-                );
-          return _buildPdfWidget(viewer);
+          if (snapshot.connectionState != ConnectionState.done) {
+            return const Center(child: CircularProgressIndicator());
+          }
+          if (snapshot.hasError || !snapshot.hasData) {
+            return Center(
+              child: Text(
+                snapshot.error is Exception
+                    ? (snapshot.error as Exception).toString().replaceFirst('Exception: ', '')
+                    : "PDF faylni ochib bo'lmadi.",
+              ),
+            );
+          }
+          return _buildPdfWidget(
+            SfPdfViewer.memory(
+              snapshot.data!,
+              controller: _pdfController,
+              canShowScrollHead: false,
+              canShowScrollStatus: false,
+              enableTextSelection: false,
+              canShowPaginationDialog: false,
+              onDocumentLoaded: (details) {
+                _onDocumentLoaded(details.document.pages.count);
+              },
+              onPageChanged: _onPageChanged,
+            ),
+          );
         },
       );
     }
@@ -410,41 +408,18 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
 
   void _ensurePdfFuture(String fileUrl) {
     final normalized = fileUrl.trim();
-    if (_loadedUrl == normalized && (_pdfBytesFuture != null || _cachedPdfFuture != null)) return;
+    if (_loadedUrl == normalized && _pdfBytesFuture != null) return;
     _loadedUrl = normalized;
     _isDataPdf = normalized.startsWith('data:application/pdf');
     if (_isDataPdf) {
       _pdfBytesFuture = _resolvePdfBytes(normalized, true);
-      _cachedPdfFuture = null;
       return;
     }
-    _pdfBytesFuture = null;
-    _cachedPdfFuture = _resolveCachedPdfFile(normalized);
-  }
-
-  Future<File?> _resolveCachedPdfFile(String url) async {
-    try {
-      final dir = await getTemporaryDirectory();
-      final key = base64Url.encode(utf8.encode(url));
-      final cacheFile = File('${dir.path}${Platform.pathSeparator}book_pdf_$key.pdf');
-      if (await cacheFile.exists()) {
-        return cacheFile;
-      }
-      // Warm cache in background for faster re-open.
-      unawaited(_downloadPdfToFile(url, cacheFile));
-    } catch (_) {}
-    return null;
-  }
-
-  Future<void> _downloadPdfToFile(String url, File outFile) async {
-    try {
-      final uri = Uri.tryParse(url);
-      if (uri == null) return;
-      final response = await http.get(uri).timeout(const Duration(seconds: 30));
-      if (response.statusCode != 200 || response.bodyBytes.isEmpty) return;
-      await outFile.parent.create(recursive: true);
-      await outFile.writeAsBytes(response.bodyBytes, flush: true);
-    } catch (_) {}
+    _pdfBytesFuture = LessonSlidesBytesCache.loadBytes(
+      normalized,
+      apiBaseUrl: getApiBaseUrl(),
+      fetcher: LessonSlidesBytesCache.fetchPdfBytes,
+    );
   }
 
   Future<void> _ensureProgressLoaded() async {
@@ -475,17 +450,11 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
         throw Exception("PDF faylni o'qib bo'lmadi.");
       }
     }
-    final uri = Uri.tryParse(value);
-    if (uri == null) throw Exception("PDF URL noto'g'ri.");
-    final response = await http.get(uri).timeout(const Duration(seconds: 30));
-    if (response.statusCode != 200) {
-      final body = response.body.toLowerCase();
-      if (body.contains('bucket not found')) {
-        throw Exception("Storage bucket topilmadi. Admin panelda `content-assets` bucketni yarating.");
-      }
-      throw Exception("PDF yuklanmadi (status: ${response.statusCode}).");
-    }
-    return response.bodyBytes;
+    return LessonSlidesBytesCache.loadBytes(
+      value,
+      apiBaseUrl: getApiBaseUrl(),
+      fetcher: LessonSlidesBytesCache.fetchPdfBytes,
+    );
   }
 
   void _onPageChanged(PdfPageChangedDetails details) {

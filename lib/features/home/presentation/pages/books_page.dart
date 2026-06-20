@@ -8,6 +8,7 @@ import '../../../../core/data/models/content_asset_models.dart';
 import '../../../../core/localization/language_provider.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/books_state.dart';
+import '../../../../widgets/cached_remote_image.dart';
 
 class BooksPage extends ConsumerWidget {
   const BooksPage({super.key});
@@ -113,6 +114,10 @@ class _BookCoverImage extends StatelessWidget {
         }
       }
     }
-    return Image.network(value, fit: BoxFit.cover, errorBuilder: (_, _, _) => const ColoredBox(color: Color(0xFFE9F0FF)));
+    return CachedRemoteImage(
+      url: value,
+      fit: BoxFit.cover,
+      errorBuilder: (_, _) => const ColoredBox(color: Color(0xFFE9F0FF)),
+    );
   }
 }

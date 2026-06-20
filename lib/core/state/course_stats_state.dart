@@ -6,6 +6,7 @@ import 'package:http/http.dart' as http;
 
 import '../config/api_config.dart';
 import '../services/catalog_service.dart';
+import '../services/course_stats_cache.dart';
 import 'auth_controller.dart';
 
 class CourseCardStats {
@@ -35,33 +36,40 @@ Future<CourseCardStats> _loadCourseCardStats({
   required String userId,
   required String baseUrl,
 }) async {
-  final hasUser = userId.trim().isNotEmpty;
-  final uri = Uri.parse(
-    hasUser
-        ? '$baseUrl/api/v1/courses/$courseId/stats?user_id=$userId'
-        : '$baseUrl/api/v1/courses/$courseId/stats',
-  );
-  debugPrint('[API][courses.card_stats][request] $uri');
-  final response = await http.get(uri).timeout(const Duration(seconds: 8));
-  debugPrint('[API][courses.card_stats][response] status=${response.statusCode}');
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw Exception('Card stats xatolik (${response.statusCode}).');
-  }
-  final body = jsonDecode(response.body);
-  if (body is! Map<String, dynamic>) {
-    throw Exception('Card stats JSON emas.');
-  }
-  return CourseCardStats(
-    ratingAvg: double.tryParse((body['rating_avg'] ?? '0').toString()) ?? 0,
-    ratingCount: int.tryParse((body['rating_count'] ?? '0').toString()) ?? 0,
-    commentsCount: int.tryParse((body['comments_count'] ?? '0').toString()) ?? 0,
-    commentersCount: int.tryParse((body['commenters_count'] ?? '0').toString()) ?? 0,
+  return CourseStatsCache.statsOrFetch(
+    key: courseId,
+    userId: userId,
+    useFeedbackApi: false,
+    fetch: () async {
+      final hasUser = userId.trim().isNotEmpty;
+      final uri = Uri.parse(
+        hasUser
+            ? '$baseUrl/api/v1/courses/$courseId/stats?user_id=$userId'
+            : '$baseUrl/api/v1/courses/$courseId/stats',
+      );
+      debugPrint('[API][courses.card_stats][request] $uri');
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      debugPrint('[API][courses.card_stats][response] status=${response.statusCode}');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Card stats xatolik (${response.statusCode}).');
+      }
+      final body = jsonDecode(response.body);
+      if (body is! Map<String, dynamic>) {
+        throw Exception('Card stats JSON emas.');
+      }
+      return CourseCardStats(
+        ratingAvg: double.tryParse((body['rating_avg'] ?? '0').toString()) ?? 0,
+        ratingCount: int.tryParse((body['rating_count'] ?? '0').toString()) ?? 0,
+        commentsCount: int.tryParse((body['comments_count'] ?? '0').toString()) ?? 0,
+        commentersCount: int.tryParse((body['commenters_count'] ?? '0').toString()) ?? 0,
+      );
+    },
   );
 }
 
-/// Bosh sahifa «Nevrologiya» kartalari — barcha kurslar statistikasi parallel yuklanadi.
+/// Bosh sahifa «Nevrologiya» kartalari — barcha kurslar statistikasi parallel yuklanadi (keshlangan).
 final neurologyHomeStatsProvider =
-    FutureProvider.family<Map<String, CourseCardStats>, String>((ref, _) async {
+    FutureProvider.family<Map<String, CourseCardStats>, String>((ref, catalogKey) async {
   ref.watch(authControllerProvider);
   final baseUrl = getApiBaseUrl();
   final courseIds = CatalogService.courses
@@ -70,34 +78,40 @@ final neurologyHomeStatsProvider =
       .toList(growable: false);
   if (baseUrl.isEmpty || courseIds.isEmpty) return const {};
   final userId = ref.read(authControllerProvider).userId ?? '';
-  final entries = await Future.wait(
-    courseIds.map((id) async {
-      try {
-        final stats = await _loadCourseCardStats(
-          courseId: id,
-          userId: userId,
-          baseUrl: baseUrl,
-        );
-        return MapEntry(id, stats);
-      } catch (_) {
-        return MapEntry(
-          id,
-          const CourseCardStats(
-            ratingAvg: 0,
-            ratingCount: 0,
-            commentsCount: 0,
-            commentersCount: 0,
-          ),
-        );
-      }
-    }),
+  return CourseStatsCache.homeBatchOrFetch(
+    catalogIdentity: catalogKey,
+    userId: userId,
+    fetch: () async {
+      final entries = await Future.wait(
+        courseIds.map((id) async {
+          try {
+            final stats = await _loadCourseCardStats(
+              courseId: id,
+              userId: userId,
+              baseUrl: baseUrl,
+            );
+            return MapEntry(id, stats);
+          } catch (_) {
+            return MapEntry(
+              id,
+              const CourseCardStats(
+                ratingAvg: 0,
+                ratingCount: 0,
+                commentsCount: 0,
+                commentersCount: 0,
+              ),
+            );
+          }
+        }),
+      );
+      return Map<String, CourseCardStats>.fromEntries(entries);
+    },
   );
-  return Map<String, CourseCardStats>.fromEntries(entries);
 });
 
-/// Karta statistikasi — bitta so‘rov, avtomatik qayta-poll yo‘q (ilova tezroq).
-final courseCardStatsProvider =
-    FutureProvider.autoDispose.family<CourseCardStats, String>((ref, courseId) async {
+/// Karta statistikasi — keshlangan, sahifa qayta ochilganda tez.
+final courseCardStatsProvider = FutureProvider.family<CourseCardStats, String>((ref, courseId) async {
+  ref.keepAlive();
   final auth = ref.watch(authControllerProvider);
   final userId = auth.userId ?? '';
   final baseUrl = getApiBaseUrl();
@@ -121,34 +135,41 @@ Future<CourseCardStats> _loadContentCardStats({
   required String userId,
   required String baseUrl,
 }) async {
-  final hasUser = userId.trim().isNotEmpty;
-  final path = useFeedbackApi
-      ? (hasUser ? '/api/v1/feedback/$key/stats?user_id=$userId' : '/api/v1/feedback/$key/stats')
-      : (hasUser ? '/api/v1/courses/$key/stats?user_id=$userId' : '/api/v1/courses/$key/stats');
-  final uri = Uri.parse('$baseUrl$path');
-  debugPrint('[API][content.card_stats][request] $uri');
-  final response = await http.get(uri).timeout(const Duration(seconds: 8));
-  debugPrint('[API][content.card_stats][response] status=${response.statusCode}');
-  if (response.statusCode < 200 || response.statusCode >= 300) {
-    throw Exception('Content card stats xatolik (${response.statusCode}).');
-  }
-  final body = jsonDecode(response.body);
-  if (body is! Map<String, dynamic>) {
-    throw Exception('Content card stats JSON emas.');
-  }
-  return CourseCardStats(
-    ratingAvg: double.tryParse((body['rating_avg'] ?? '0').toString()) ?? 0,
-    ratingCount: int.tryParse((body['rating_count'] ?? '0').toString()) ?? 0,
-    commentsCount: int.tryParse((body['comments_count'] ?? '0').toString()) ?? 0,
-    commentersCount: int.tryParse((body['commenters_count'] ?? '0').toString()) ?? 0,
+  return CourseStatsCache.statsOrFetch(
+    key: key,
+    userId: userId,
+    useFeedbackApi: useFeedbackApi,
+    fetch: () async {
+      final hasUser = userId.trim().isNotEmpty;
+      final path = useFeedbackApi
+          ? (hasUser ? '/api/v1/feedback/$key/stats?user_id=$userId' : '/api/v1/feedback/$key/stats')
+          : (hasUser ? '/api/v1/courses/$key/stats?user_id=$userId' : '/api/v1/courses/$key/stats');
+      final uri = Uri.parse('$baseUrl$path');
+      debugPrint('[API][content.card_stats][request] $uri');
+      final response = await http.get(uri).timeout(const Duration(seconds: 8));
+      debugPrint('[API][content.card_stats][response] status=${response.statusCode}');
+      if (response.statusCode < 200 || response.statusCode >= 300) {
+        throw Exception('Content card stats xatolik (${response.statusCode}).');
+      }
+      final body = jsonDecode(response.body);
+      if (body is! Map<String, dynamic>) {
+        throw Exception('Content card stats JSON emas.');
+      }
+      return CourseCardStats(
+        ratingAvg: double.tryParse((body['rating_avg'] ?? '0').toString()) ?? 0,
+        ratingCount: int.tryParse((body['rating_count'] ?? '0').toString()) ?? 0,
+        commentsCount: int.tryParse((body['comments_count'] ?? '0').toString()) ?? 0,
+        commentersCount: int.tryParse((body['commenters_count'] ?? '0').toString()) ?? 0,
+      );
+    },
   );
 }
 
-final contentCardStatsProvider =
-    FutureProvider.autoDispose.family<CourseCardStats, ({String key, bool useFeedbackApi})>((
+final contentCardStatsProvider = FutureProvider.family<CourseCardStats, ({String key, bool useFeedbackApi})>((
   ref,
   args,
 ) async {
+  ref.keepAlive();
   final auth = ref.watch(authControllerProvider);
   final userId = auth.userId ?? '';
   final baseUrl = getApiBaseUrl();

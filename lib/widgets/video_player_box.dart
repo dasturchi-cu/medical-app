@@ -6,6 +6,9 @@ import 'package:flutter/services.dart';
 import 'package:video_player/video_player.dart';
 import 'package:youtube_player_flutter/youtube_player_flutter.dart';
 
+import '../core/config/api_config.dart';
+import '../core/services/media_url_resolver.dart';
+import '../core/services/video_lesson_position_store.dart';
 import '../core/services/video_playback_prefs.dart';
   
 // ─────────────────────────────────────────────
@@ -150,6 +153,8 @@ class VideoPlayerBox extends StatefulWidget {
     this.initialWatchedSec = 0,
     this.onWatchProgress,
     this.onImmersiveModeChanged,
+    /// `userId|lessonId` — ekran qulflanganda pozitsiyani telefonda saqlash.
+    this.positionStorageKey,
     /// Katalogdan (masalan `duration_uz`); player metadata kelguncha 00:00 o‘rniga.
     this.catalogDurationLabel,
   });
@@ -157,6 +162,7 @@ class VideoPlayerBox extends StatefulWidget {
   final String url;
   final double height;
   final int initialWatchedSec;
+  final String? positionStorageKey;
   /// [playbackDeltaSec] — shu xabarda qo‘shilgan ko‘rish soniyasi (kunlik reyting uchun).
   final void Function(int watchedSec, bool completed, int playbackDeltaSec)?
       onWatchProgress;
@@ -189,6 +195,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   bool get _immersiveFullscreen => _immersiveNotifier.value;
   bool _userSeeking = false;
   bool _nativeInitFailed = false;
+  bool _retryViaBackendProxy = false;
   bool _wasPlayingBeforePause = false;
   bool _wasBuffering = false;
   bool _fullscreenLocked = false;
@@ -206,11 +213,42 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   void Function(int watchedSec, bool completed, int playbackDeltaSec)?
       _cachedWatchProgress;
   bool _disposing = false;
+  bool _initialResumeDone = false;
 
   bool _playerReady = false;
 
   /// Tashqaridan (masalan, orqaga tugmasi) immersive rejimdan chiqish.
   Future<void> exitImmersive() => _closeImmersiveFullscreen();
+
+  /// Server/local progress yuklanganda yoki ilova qayta ochilganda pozitsiyani tiklash.
+  Future<void> restorePlaybackPosition([int? sec]) async {
+    final target = sec ?? _lastKnownPositionSec;
+    if (target <= 0) return;
+    final current = _currentPositionSec();
+    if ((current - target).abs() <= 3) {
+      _commitPlaybackPosition(target);
+      return;
+    }
+    _pendingInitialSeekSec = target;
+    await _applyResumePosition(target);
+    await Future<void>.delayed(const Duration(milliseconds: 350));
+    if (!mounted) return;
+    final now = _currentPositionSec();
+    if ((now - target).abs() > 3) {
+      await _applyResumePosition(target);
+    }
+    _pendingInitialSeekSec = null;
+    _initialResumeDone = true;
+    _commitPlaybackPosition(target);
+  }
+
+  void _commitPlaybackPosition(int sec) {
+    if (sec <= 0) return;
+    _lastKnownPositionSec = sec;
+    _pendingInitialSeekSec = null;
+    _initialResumeDone = true;
+    _persistLocalPosition();
+  }
   bool _isInitialLoading = true;
   bool _isBufferingUi = false;
   bool _loadTimedOut = false;
@@ -224,6 +262,11 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   static const _nativeLoadTimeout = Duration(seconds: 20);
 
   bool get _isYoutube => _youtubeId != null && _ytController != null;
+  String get _playUrl => MediaUrlResolver.resolveVideoPlayUrl(
+        widget.url,
+        apiBaseUrl: getApiBaseUrl(),
+        useBackendProxy: _retryViaBackendProxy,
+      );
   bool get _isPlayingNow {
     final c = _controller;
     if (c != null && c.value.isInitialized) return c.value.isPlaying;
@@ -237,12 +280,20 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     super.initState();
     _cachedWatchProgress = widget.onWatchProgress;
     WidgetsBinding.instance.addObserver(this);
-    if (widget.initialWatchedSec > 0) {
-      _lastKnownPositionSec = widget.initialWatchedSec;
-      _lastReportedSec = widget.initialWatchedSec;
+    final bootSec = widget.initialWatchedSec;
+    if (bootSec > 0) {
+      _lastKnownPositionSec = bootSec;
+      _lastReportedSec = bootSec;
     }
-    _pendingInitialSeekSec =
-        widget.initialWatchedSec > 0 ? widget.initialWatchedSec : null;
+    _pendingInitialSeekSec = bootSec > 0 ? bootSec : null;
+    unawaited(_loadStoredResumePosition());
+    if (widget.url.trim().isEmpty) {
+      _nativeInitFailed = true;
+      _isInitialLoading = false;
+      _loadTimeoutTimer?.cancel();
+      if (mounted) setState(() {});
+      return;
+    }
     _youtubeId = _extractYouTubeId(widget.url);
     _VideoLog.init(
       videoId: _youtubeId,
@@ -296,6 +347,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
         controlsVisibleAtStart: false,
         hideThumbnail: true,
         disableDragSeek: false,
+        useHybridComposition: true,
       ),
     )..addListener(_handleYoutubeProgress);
   }
@@ -313,7 +365,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     if (!mounted) return;
 
     _controller = VideoPlayerController.networkUrl(
-      Uri.parse(widget.url),
+      Uri.parse(_playUrl),
       videoPlayerOptions: VideoPlayerOptions(mixWithOthers: true),
     )..addListener(_handleVideoProgress);
 
@@ -345,8 +397,10 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       _lastReportedSec = 0;
       _firstProgressReported = false;
       _lastKnownPositionSec = 0;
+      _initialResumeDone = false;
       _completedReported = false;
       _nativeInitFailed = false;
+      _retryViaBackendProxy = false;
       _playerReady = false;
       _isInitialLoading = true;
       _isBufferingUi = false;
@@ -365,15 +419,10 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       return;
     }
     final newSec = widget.initialWatchedSec;
-    if (newSec > _lastKnownPositionSec + 1) {
-      _lastKnownPositionSec = newSec;
-      if (newSec > _lastReportedSec) {
-        _lastReportedSec = newSec;
-      }
-      final current = _currentPositionSec();
-      if (current < newSec - 2) {
-        unawaited(_applyResumePosition(newSec));
-      }
+    if (!_initialResumeDone &&
+        newSec > _lastKnownPositionSec + 5 &&
+        _currentPositionSec() < newSec - 5) {
+      unawaited(restorePlaybackPosition(newSec));
     }
   }
 
@@ -452,13 +501,57 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     }
   }
 
+  Future<void> _loadStoredResumePosition() async {
+    final key = widget.positionStorageKey?.trim() ?? '';
+    if (key.isEmpty) return;
+    final stored = await VideoLessonPositionStore.load(key);
+    if (!mounted || stored <= 0) return;
+    final best = stored > widget.initialWatchedSec ? stored : widget.initialWatchedSec;
+    if (best <= 0) return;
+    if (_currentPositionSec() >= best - 3) {
+      _commitPlaybackPosition(best);
+      return;
+    }
+    await restorePlaybackPosition(best);
+  }
+
+  void _persistLocalPosition() {
+    final key = widget.positionStorageKey?.trim() ?? '';
+    if (key.isEmpty) return;
+    final sec = _lastKnownPositionSec;
+    if (sec <= 0) return;
+    unawaited(VideoLessonPositionStore.save(key, sec));
+  }
+
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.inactive) {
       _snapshotPlayback();
+      _persistLocalPosition();
       _emitProgressFromCurrent(force: true);
+    } else if (state == AppLifecycleState.resumed) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (!mounted) return;
+        unawaited(_restoreAfterAppResume());
+      });
     }
+  }
+
+  Future<void> _restoreAfterAppResume() async {
+    final key = widget.positionStorageKey?.trim() ?? '';
+    var saved = _lastKnownPositionSec;
+    if (key.isNotEmpty) {
+      final stored = await VideoLessonPositionStore.load(key);
+      if (stored > saved) saved = stored;
+    }
+    if (saved <= 0) return;
+    final current = _currentPositionSec();
+    if ((current - saved).abs() <= 5) {
+      _commitPlaybackPosition(saved);
+      return;
+    }
+    await restorePlaybackPosition(saved);
   }
 
   int _currentPositionSec() {
@@ -472,10 +565,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   }
 
   void _snapshotPlayback() {
-    final sec = _currentPositionSec();
-    if (sec > _lastKnownPositionSec) {
-      _lastKnownPositionSec = sec;
-    }
+    _commitPlaybackPosition(_currentPositionSec());
   }
 
   Future<void> _applyResumePosition(int sec) async {
@@ -490,7 +580,6 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       _VideoLog.seekStart(from: current, to: safe);
       await c.seekTo(Duration(seconds: safe));
       _VideoLog.seekComplete(currentTime: safe);
-      _lastKnownPositionSec = safe;
       if (safe > _lastReportedSec) _lastReportedSec = safe;
       return;
     }
@@ -508,7 +597,6 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       _VideoLog.seekStart(from: current, to: safe);
       yc.seekTo(Duration(seconds: safe), allowSeekAhead: true);
       _VideoLog.seekComplete(currentTime: safe);
-      _lastKnownPositionSec = safe;
       if (safe > _lastReportedSec) _lastReportedSec = safe;
     }
   }
@@ -543,8 +631,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     _applyYoutubeSettingsWhenReady();
     final seekSec = _pendingInitialSeekSec;
     if (seekSec != null && seekSec > 0) {
-      unawaited(_applyResumePosition(seekSec));
-      _pendingInitialSeekSec = null;
+      unawaited(restorePlaybackPosition(seekSec));
     }
   }
 
@@ -587,6 +674,14 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   @override
   void dispose() {
     _disposing = true;
+    _snapshotPlayback();
+    _persistLocalPosition();
+    final watchedSec = _lastKnownPositionSec;
+    final cb = _cachedWatchProgress;
+    if (cb != null && watchedSec > 0) {
+      final completed = _isVideoCompleted(watchedSec, _durationSec());
+      cb(watchedSec, completed, 1);
+    }
     _cachedWatchProgress = null;
     _VideoLog.unmounted(videoId: _youtubeId ?? widget.url);
     WidgetsBinding.instance.removeObserver(this);
@@ -595,7 +690,6 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     _uiProgressTimer?.cancel();
     _loadTimeoutTimer?.cancel();
     _playRecoveryTimer?.cancel();
-    _emitProgressDisposeSafe();
     unawaited(_restoreAppSystemUi());
     _immersiveNotifier.dispose();
     _disposeControllers();
@@ -613,13 +707,6 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   Future<void> _restoreAppSystemUi() async {
     await SystemChrome.setPreferredOrientations([DeviceOrientation.portraitUp]);
     await SystemChrome.setEnabledSystemUIMode(SystemUiMode.edgeToEdge);
-  }
-
-  /// dispose() da parent callback chaqirilmaydi (Riverpod/deactivated xato).
-  void _emitProgressDisposeSafe() {
-    final watchedSec = _lastKnownPositionSec;
-    if (watchedSec <= 0) return;
-    debugPrint('[VIDEO_PROGRESS] dispose-safe snapshot seconds=$watchedSec');
   }
 
   bool _syncingLayout = false;
@@ -751,6 +838,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     if (completed) _completedReported = true;
     final reportDelta = delta > 0 ? delta : (force || completed ? 1 : 0);
     if (reportDelta <= 0 && !completed) return;
+    _persistLocalPosition();
     final cb = _cachedWatchProgress;
     if (cb == null || _disposing) return;
     cb(watchedSec, completed, reportDelta);
@@ -781,7 +869,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       _markPlayerReady(durationSec: c.value.duration.inSeconds);
     }
     final watchedSec = c.value.position.inSeconds;
-    if (watchedSec > _lastKnownPositionSec) {
+    if (!_userSeeking && _pendingInitialSeekSec == null) {
       _lastKnownPositionSec = watchedSec;
     }
     if (watchedSec >= 1 && !_firstProgressReported) {
@@ -813,7 +901,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     if (c == null) return;
     final v = c.value;
     final watchedSec = v.position.inSeconds;
-    if (watchedSec > _lastKnownPositionSec) {
+    if (!_userSeeking && _pendingInitialSeekSec == null) {
       _lastKnownPositionSec = watchedSec;
     }
     if (watchedSec >= 1 && !_firstProgressReported) {
@@ -834,9 +922,14 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     }
 
     final seekSec = _pendingInitialSeekSec;
-    if (seekSec != null && durationSec > 0 && watchedSec < seekSec - 1) {
+    if (!_initialResumeDone &&
+        seekSec != null &&
+        durationSec > 0 &&
+        watchedSec < seekSec - 3) {
       unawaited(_applyResumePosition(seekSec));
+    } else if (seekSec != null && (watchedSec - seekSec).abs() <= 3) {
       _pendingInitialSeekSec = null;
+      _initialResumeDone = true;
     }
     final nextBufferingUi = buffering && (playing || _pendingPlay);
     final bufferingUiChanged = nextBufferingUi != _isBufferingUi;
@@ -937,7 +1030,10 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   }
 
   Future<void> _retryNativeLoad() async {
-    final url = widget.url;
+    if (!_retryViaBackendProxy && MediaUrlResolver.isStorageBacked(widget.url)) {
+      _retryViaBackendProxy = true;
+    }
+    final url = _playUrl;
     _disposeControllers();
     _nativeInitFailed = false;
     _loadTimedOut = false;
@@ -1096,6 +1192,15 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     await _openImmersiveFullscreen();
   }
 
+  void _onUserSeekCommitted(Duration position) {
+    final sec = position.inSeconds;
+    _commitPlaybackPosition(sec);
+    if (sec > _lastReportedSec) {
+      _lastReportedSec = sec;
+    }
+    _emitProgressFromCurrent(force: true);
+  }
+
   Widget _buildShell({required bool immersive}) {
     return RepaintBoundary(
       child: _VideoShell(
@@ -1118,6 +1223,7 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
           _snapshotPlayback();
           _emitProgressFromCurrent(force: true);
         },
+        onSeekCommitted: _onUserSeekCommitted,
         onTogglePlay: _handlePlayPause,
         showInitialLoading: !_playerReady &&
             (_isYoutube ? !_youtubeReady : _isInitialLoading),
@@ -1283,6 +1389,7 @@ class _VideoShell extends StatefulWidget {
     this.onRetryLoad,
     this.onSeekDragStart,
     this.onSeekDragEnd,
+    this.onSeekCommitted,
     this.isFullscreenMode = false,
   });
 
@@ -1303,6 +1410,7 @@ class _VideoShell extends StatefulWidget {
   final VoidCallback? onRetryLoad;
   final VoidCallback? onSeekDragStart;
   final VoidCallback? onSeekDragEnd;
+  final ValueChanged<Duration>? onSeekCommitted;
 
   @override
   State<_VideoShell> createState() => _VideoShellState();
@@ -1359,6 +1467,7 @@ class _VideoShellState extends State<_VideoShell>
   void _onDoubleTapRight() => _seekBy(10);
 
   void _seekBy(int seconds) {
+    Duration? committed;
     final c = widget.nativeController;
     if (c != null && c.value.isInitialized) {
       final dur = c.value.duration;
@@ -1366,12 +1475,17 @@ class _VideoShellState extends State<_VideoShell>
       if (target.isNegative) target = Duration.zero;
       if (dur > Duration.zero && target > dur) target = dur;
       unawaited(c.seekTo(target));
+      committed = target;
     }
     final yc = widget.ytController;
     if (yc != null) {
       var target = yc.value.position + Duration(seconds: seconds);
       if (target.isNegative) target = Duration.zero;
-      yc.seekTo(target);
+      yc.seekTo(target, allowSeekAhead: true);
+      committed = target;
+    }
+    if (committed != null) {
+      widget.onSeekCommitted?.call(committed);
     }
     setState(() {
       _seekForward = seconds > 0;
@@ -1498,7 +1612,8 @@ class _VideoShellState extends State<_VideoShell>
                   if (nc != null && nc.value.isInitialized) {
                     unawaited(nc.seekTo(pos));
                   }
-                  widget.ytController?.seekTo(pos);
+                  widget.ytController?.seekTo(pos, allowSeekAhead: true);
+                  widget.onSeekCommitted?.call(pos);
                   _keepAlive();
                 },
               ),
@@ -1636,17 +1751,7 @@ class _ControlsOverlay extends StatelessWidget {
       ),
       child: Stack(
         children: [
-          // ── center play/pause (controller listener — tez yangilanish) ──
-          Center(
-            child: _PlayPauseListener(
-              nativeController: nativeController,
-              ytController: ytController,
-              fallbackPlaying: isPlaying,
-              onTap: onTogglePlay,
-            ),
-          ),
-
-          // ── bottom bar ──
+          // ── bottom bar (play/pause shu yerda — markazda ikkinchi tugma yo‘q) ──
           Positioned(
             left: 0,
             right: 0,
@@ -1656,6 +1761,8 @@ class _ControlsOverlay extends StatelessWidget {
               nativeController: nativeController,
               ytController: ytController,
               catalogDurationLabel: catalogDurationLabel,
+              isPlaying: isPlaying,
+              onTogglePlay: onTogglePlay,
               speed: speed,
               volume: volume,
               onSpeed: onSpeed,
@@ -1675,21 +1782,22 @@ class _ControlsOverlay extends StatelessWidget {
 }
 
 // ─────────────────────────────────────────────
-//  PLAY / PAUSE BUTTONas
+//  PLAY / PAUSE BUTTON
 // ─────────────────────────────────────────────
-//  PLAY / PAUSE BUTTONas
 class _PlayPauseListener extends StatelessWidget {
   const _PlayPauseListener({
     this.nativeController,
     this.ytController,
     required this.fallbackPlaying,
     required this.onTap,
+    this.compact = false,
   });
 
   final VideoPlayerController? nativeController;
   final YoutubePlayerController? ytController;
   final bool fallbackPlaying;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
@@ -1700,6 +1808,7 @@ class _PlayPauseListener extends StatelessWidget {
         builder: (context, _) => _PlayPauseButton(
           isPlaying: nc.value.isInitialized && nc.value.isPlaying,
           onTap: onTap,
+          compact: compact,
         ),
       );
     }
@@ -1708,22 +1817,44 @@ class _PlayPauseListener extends StatelessWidget {
       return ListenableBuilder(
         listenable: yc,
         builder: (context, _) => _PlayPauseButton(
-          isPlaying: yc.value.isPlaying,
+          isPlaying: yc.value.playerState == PlayerState.playing,
           onTap: onTap,
+          compact: compact,
         ),
       );
     }
-    return _PlayPauseButton(isPlaying: fallbackPlaying, onTap: onTap);
+    return _PlayPauseButton(
+      isPlaying: fallbackPlaying,
+      onTap: onTap,
+      compact: compact,
+    );
   }
 }
 
 class _PlayPauseButton extends StatelessWidget {
-  const _PlayPauseButton({required this.isPlaying, required this.onTap});
+  const _PlayPauseButton({
+    required this.isPlaying,
+    required this.onTap,
+    this.compact = false,
+  });
   final bool isPlaying;
   final VoidCallback onTap;
+  final bool compact;
 
   @override
   Widget build(BuildContext context) {
+    if (compact) {
+      return IconButton(
+        onPressed: onTap,
+        padding: EdgeInsets.zero,
+        constraints: const BoxConstraints(minWidth: 36, minHeight: 36),
+        icon: Icon(
+          isPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded,
+          color: Colors.white,
+          size: 26,
+        ),
+      );
+    }
     return GestureDetector(
       onTap: onTap,
       child: AnimatedSwitcher(
@@ -1757,6 +1888,8 @@ class _BottomBar extends StatefulWidget {
     this.nativeController,
     this.ytController,
     this.catalogDurationLabel,
+    required this.isPlaying,
+    required this.onTogglePlay,
     required this.speed,
     required this.volume,
     required this.onSpeed,
@@ -1773,6 +1906,8 @@ class _BottomBar extends StatefulWidget {
   final VideoPlayerController? nativeController;
   final YoutubePlayerController? ytController;
   final String? catalogDurationLabel;
+  final bool isPlaying;
+  final VoidCallback onTogglePlay;
   final double speed;
   final double volume;
   final ValueChanged<double> onSpeed;
@@ -1814,18 +1949,57 @@ class _BottomBarState extends State<_BottomBar> {
     return '$m:$s';
   }
 
+  int? _parseCatalogDurationMs(String label) {
+    final parts = label.trim().split(':');
+    if (parts.isEmpty) return null;
+    try {
+      if (parts.length == 2) {
+        final minutes = int.parse(parts[0]);
+        final seconds = int.parse(parts[1]);
+        return (minutes * 60 + seconds) * 1000;
+      }
+      if (parts.length == 3) {
+        final hours = int.parse(parts[0]);
+        final minutes = int.parse(parts[1]);
+        final seconds = int.parse(parts[2]);
+        return (hours * 3600 + minutes * 60 + seconds) * 1000;
+      }
+    } catch (_) {
+      return null;
+    }
+    return null;
+  }
+
   @override
   Widget build(BuildContext context) {
+    final nc = widget.nativeController;
+    if (nc != null) {
+      return AnimatedBuilder(
+        animation: nc,
+        builder: (context, _) => _buildBar(),
+      );
+    }
+    final yc = widget.ytController;
+    if (yc != null) {
+      return ListenableBuilder(
+        listenable: yc,
+        builder: (context, _) => _buildBar(),
+      );
+    }
     return _buildBar();
   }
 
   Widget _buildBar() {
     final pos = _position;
     final dur = _duration;
-    final total = dur.inMilliseconds.toDouble();
+    final hint = widget.catalogDurationLabel?.trim() ?? '';
+    final catalogMs = _parseCatalogDurationMs(hint);
+    final totalMs = dur.inMilliseconds > 0
+        ? dur.inMilliseconds
+        : (catalogMs ?? 0);
+    final total = totalMs.toDouble();
     final current = _dragValue ?? pos.inMilliseconds.toDouble();
     final fraction = total > 0 ? (current / total).clamp(0.0, 1.0) : 0.0;
-    final hint = widget.catalogDurationLabel?.trim() ?? '';
     final showCatalogTotal = dur.inMilliseconds <= 0 && hint.isNotEmpty && hint != '00:00';
     final totalTimeText = showCatalogTotal ? hint : _fmt(dur);
 
@@ -1834,52 +2008,60 @@ class _BottomBarState extends State<_BottomBar> {
       child: Column(
         mainAxisSize: MainAxisSize.min,
         children: [
-          // ── seek bar (native only; YT has its own) ──
-          if (!widget.isYoutube)
-            _SeekBar(
-              fraction: fraction,
-              onChangeStart: (v) {
-                widget.onSeekDragStart?.call();
-                setState(() => _dragValue = v * total);
-              },
-              onChanged: (v) {
-                setState(() => _dragValue = v * total);
-              },
-              onChangeEnd: (v) {
-                final target =
-                    Duration(milliseconds: (v * total).round().clamp(0, total.round()));
-                widget.onSeek(target);
-                setState(() => _dragValue = null);
-                widget.onSeekDragEnd?.call();
-              },
-            ),
+          _SeekBar(
+            fraction: fraction,
+            onChangeStart: (v) {
+              if (total <= 0) return;
+              widget.onSeekDragStart?.call();
+              setState(() => _dragValue = v * total);
+            },
+            onChanged: (v) {
+              if (total <= 0) return;
+              setState(() => _dragValue = v * total);
+            },
+            onChangeEnd: (v) {
+              if (total <= 0) return;
+              final target = Duration(
+                milliseconds: (v * total).round().clamp(0, total.round()),
+              );
+              widget.onSeek(target);
+              setState(() => _dragValue = null);
+              widget.onSeekDragEnd?.call();
+            },
+          ),
 
           // ── time + buttons ──
           Row(
             children: [
-              if (!widget.isYoutube) ...[
-                Text(
-                  _fmt(Duration(milliseconds: current.round())),
-                  style: const TextStyle(
-                    color: Colors.white,
-                    fontSize: 12,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
+              _PlayPauseListener(
+                nativeController: widget.nativeController,
+                ytController: widget.ytController,
+                fallbackPlaying: widget.isPlaying,
+                onTap: widget.onTogglePlay,
+                compact: true,
+              ),
+              const SizedBox(width: 4),
+              Text(
+                _fmt(Duration(milliseconds: current.round())),
+                style: const TextStyle(
+                  color: Colors.white,
+                  fontSize: 12,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
-                const Text(
-                  ' / ',
-                  style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              const Text(
+                ' / ',
+                style: TextStyle(color: Colors.white54, fontSize: 12),
+              ),
+              Text(
+                totalTimeText,
+                style: const TextStyle(
+                  color: Colors.white70,
+                  fontSize: 12,
+                  fontFeatures: [FontFeature.tabularFigures()],
                 ),
-                Text(
-                  totalTimeText,
-                  style: const TextStyle(
-                    color: Colors.white70,
-                    fontSize: 12,
-                    fontFeatures: [FontFeature.tabularFigures()],
-                  ),
-                ),
-              ],
-              if (!widget.isYoutube && widget.onSkip != null) ...[
+              ),
+              if (widget.onSkip != null) ...[
                 _IconBtn(
                   icon: Icons.replay_10_rounded,
                   tooltip: '-10s',
