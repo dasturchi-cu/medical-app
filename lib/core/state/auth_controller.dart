@@ -49,6 +49,10 @@ class AuthController extends Notifier<AuthState> {
   Timer? _accessTimer;
   /// Bir xil foydalanuvchi uchun [build] qayta chaqirilsa, microtask/spam oldini olish.
   String? _hydratedUserId;
+  DateTime? _lastRehydrateAt;
+  DateTime? _lastProfileSyncAt;
+  static const _rehydrateMinInterval = Duration(seconds: 45);
+  static const _profileSyncMinInterval = Duration(minutes: 2);
   /// Ketma-ket muvaffaqiyatli javoblarda `session_active: false` — tarmoq xatosida nolga qaytaramiz.
   int _inactiveSessionStreak = 0;
 
@@ -89,7 +93,15 @@ class AuthController extends Notifier<AuthState> {
   }
 
   /// Diskdan sessiyani qayta o‘qish (ilova ochilishi / backgrounddan qaytish).
-  Future<void> rehydrateFromStorage() async {
+  Future<void> rehydrateFromStorage({bool force = false}) async {
+    final now = DateTime.now();
+    if (!force &&
+        _lastRehydrateAt != null &&
+        now.difference(_lastRehydrateAt!) < _rehydrateMinInterval) {
+      return;
+    }
+    _lastRehydrateAt = now;
+
     await AuthService.bootstrap();
     final user = ref.read(authServiceProvider).currentUser;
     if (user == null) {
@@ -100,7 +112,14 @@ class AuthController extends Notifier<AuthState> {
     }
     state = _fromUser(user);
     _ensureSessionMonitoring(user.id);
+
+    final shouldSyncProfile = force ||
+        _lastProfileSyncAt == null ||
+        now.difference(_lastProfileSyncAt!) >= _profileSyncMinInterval;
+    if (!shouldSyncProfile) return;
+
     final synced = await ref.read(authServiceProvider).refreshProfileFromServer();
+    _lastProfileSyncAt = DateTime.now();
     if (synced != null) {
       state = _fromUser(synced);
     }
@@ -132,7 +151,13 @@ class AuthController extends Notifier<AuthState> {
     }
     if (status.sessionActive) {
       _inactiveSessionStreak = 0;
+      final now = DateTime.now();
+      final shouldSyncProfile = _lastProfileSyncAt == null ||
+          now.difference(_lastProfileSyncAt!) >= _profileSyncMinInterval;
+      if (!shouldSyncProfile) return;
+
       final synced = await ref.read(authServiceProvider).refreshProfileFromServer();
+      _lastProfileSyncAt = DateTime.now();
       if (synced != null) {
         state = _fromUser(synced);
       }

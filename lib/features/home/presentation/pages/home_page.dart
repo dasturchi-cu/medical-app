@@ -129,6 +129,9 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   Timer? _timer;
   Timer? _catalogRetryTimer;
   int _slideCount = 1;
+  int _catalogRetryCount = 0;
+  DateTime? _lastResumeSyncAt;
+  static const _resumeSyncMinInterval = Duration(seconds: 45);
 
   @override
   void initState() {
@@ -149,10 +152,18 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         curve: Curves.easeOut,
       );
     });
-    _catalogRetryTimer = Timer.periodic(const Duration(seconds: 25), (_) {
+    _catalogRetryTimer = Timer.periodic(const Duration(seconds: 60), (_) {
       if (!mounted) return;
-      if (CatalogService.courses.isNotEmpty || CatalogService.isLoading) return;
-      unawaited(CatalogService.bootstrap(maxAttempts: 2));
+      if (CatalogService.courses.isNotEmpty || CatalogService.isLoading) {
+        _catalogRetryTimer?.cancel();
+        return;
+      }
+      if (_catalogRetryCount >= 5) {
+        _catalogRetryTimer?.cancel();
+        return;
+      }
+      _catalogRetryCount++;
+      unawaited(CatalogService.bootstrap(maxAttempts: 1));
     });
   }
 
@@ -168,6 +179,12 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      final now = DateTime.now();
+      final last = _lastResumeSyncAt;
+      if (last != null && now.difference(last) < _resumeSyncMinInterval) {
+        return;
+      }
+      _lastResumeSyncAt = now;
       unawaited(
         _syncRemoteVideoProgress().then((_) {
           if (mounted) setState(() {});
@@ -222,18 +239,17 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     if (!mounted) return;
     ref.read(homeFeedReadyProvider.notifier).state = true;
 
-    if (!seededFromHome && !CatalogService.lastLoadOk) {
-      // UI ni bloklamaymiz: bo'limlar fon rejimida yuklanadi.
+    if (!seededFromHome && !CatalogService.lastLoadOk && !CatalogService.isLoading) {
       unawaited(CatalogService.bootstrap(maxAttempts: 1));
     }
     if (!mounted) return;
-    unawaited(ref.read(slidesRepositoryProvider).fetchSlides());
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    if (!mounted) return;
-    unawaited(ref.read(bannersRepositoryProvider).fetchBanners());
-    await Future<void>.delayed(const Duration(milliseconds: 350));
-    if (!mounted) return;
-    unawaited(ref.read(booksRepositoryProvider).fetchBooks());
+    unawaited(
+      Future.wait<void>([
+        ref.read(slidesRepositoryProvider).fetchSlides(),
+        ref.read(bannersRepositoryProvider).fetchBanners(),
+        ref.read(booksRepositoryProvider).fetchBooks(),
+      ]),
+    );
   }
 
   void _selectCategory(String cat) {
@@ -258,9 +274,8 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
     final deferHomeFeeds = HomeAggregateConfig.enabled && !feedReady;
     final slidesAsync = deferHomeFeeds ? null : ref.watch(slidesFeedProvider);
     final bannersAsync = deferHomeFeeds ? null : ref.watch(bannersFeedProvider);
-    ref.watch(booksFeedProvider);
-    final books =
-        ref.watch(booksFeedProvider).valueOrNull ?? HomeFeedsDiskCache.books;
+    final booksAsync = ref.watch(booksFeedProvider);
+    final books = booksAsync.valueOrNull ?? HomeFeedsDiskCache.books;
     final paidBookIds = ref.watch(paidBookIdsProvider).valueOrNull ?? const <String>{};
     final remoteSlides = deferHomeFeeds
         ? const <HomeSlideItem>[]

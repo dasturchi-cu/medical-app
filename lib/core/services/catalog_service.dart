@@ -26,6 +26,23 @@ class CatalogService {
   static Future<void>? _detailsRefreshInFlight;
   /// Katalog yuklangach UI qayta chizilsin (`HomePage` va boshqalar tinglaydi).
   static final ValueNotifier<int> catalogRevision = ValueNotifier<int>(0);
+  static String? _lastCatalogContentKey;
+
+  static String _catalogContentKey() {
+    final parts = <String>[];
+    for (final c in _courses) {
+      final lessonCount = c.sections.fold<int>(0, (sum, s) => sum + s.lessons.length);
+      parts.add('${c.id}:$lessonCount:${c.titleUz}');
+    }
+    return parts.join('|');
+  }
+
+  static void _bumpCatalogRevision({bool force = false}) {
+    final key = _catalogContentKey();
+    if (!force && key == _lastCatalogContentKey) return;
+    _lastCatalogContentKey = key;
+    catalogRevision.value++;
+  }
 
   static bool get isRefreshingDetails => _detailsRefreshInFlight != null;
 
@@ -152,10 +169,6 @@ class CatalogService {
     } finally {
       _bumpCatalogRevision();
     }
-  }
-
-  static void _bumpCatalogRevision() {
-    catalogRevision.value++;
   }
 
   static Future<void> bootstrap({

@@ -122,21 +122,21 @@ class HttpBooksRepository implements BooksRepository {
   }
 
   @override
-  Stream<List<BookItemModel>> watchBooks({Duration pollInterval = const Duration(seconds: 45)}) {
+  Stream<List<BookItemModel>> watchBooks({Duration pollInterval = const Duration(minutes: 3)}) {
     final controller = StreamController<List<BookItemModel>>();
     RealtimeChannel? channel;
     Timer? poller;
     var disposed = false;
 
-    Future<void> push() async {
+    Future<void> push({bool forceRefresh = false}) async {
       if (disposed) return;
-      final items = await fetchBooks(forceRefresh: true);
+      final items = await fetchBooks(forceRefresh: forceRefresh);
       if (disposed || controller.isClosed) return;
       controller.add(items);
     }
 
     Future<void> boot() async {
-      await push();
+      await push(forceRefresh: true);
       final client = realtimeClient;
       if (client != null) {
         channel = client
@@ -145,7 +145,7 @@ class HttpBooksRepository implements BooksRepository {
               event: PostgresChangeEvent.all,
               schema: 'public',
               table: 'book_items',
-              callback: (_) => unawaited(push()),
+              callback: (_) => unawaited(push(forceRefresh: true)),
             )
             .subscribe();
       }

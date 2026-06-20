@@ -66,6 +66,8 @@ class NeuroscienceApp extends ConsumerStatefulWidget {
 class _NeuroscienceAppState extends ConsumerState<NeuroscienceApp>
     with WidgetsBindingObserver {
   Timer? _notificationsFeedRefreshDebounce;
+  DateTime? _lastResumeRehydrateAt;
+  static const _resumeRehydrateMinInterval = Duration(seconds: 45);
 
   void _scheduleNotificationsFeedRefresh() {
     _notificationsFeedRefreshDebounce?.cancel();
@@ -105,6 +107,12 @@ class _NeuroscienceAppState extends ConsumerState<NeuroscienceApp>
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
       _scheduleNotificationsFeedRefresh();
+      final now = DateTime.now();
+      final last = _lastResumeRehydrateAt;
+      if (last != null && now.difference(last) < _resumeRehydrateMinInterval) {
+        return;
+      }
+      _lastResumeRehydrateAt = now;
       unawaited(() async {
         await ref.read(authControllerProvider.notifier).rehydrateFromStorage();
         await trySyncDeviceTokenNow();

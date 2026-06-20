@@ -62,7 +62,7 @@ class HttpLessonAssetsRepository implements LessonAssetsRepository {
   @override
   Stream<List<LessonAssetModel>> watchAssets({
     required String lessonId,
-    Duration pollInterval = const Duration(seconds: 90),
+    Duration pollInterval = const Duration(minutes: 3),
   }) {
     if (lessonId.isEmpty) return Stream.value(const []);
     final controller = StreamController<List<LessonAssetModel>>();
@@ -70,14 +70,14 @@ class HttpLessonAssetsRepository implements LessonAssetsRepository {
     Timer? poller;
     var disposed = false;
 
-    Future<void> push() async {
+    Future<void> push({bool force = false}) async {
       if (disposed) return;
-      _cache.invalidate(lessonId);
+      if (force) _cache.invalidate(lessonId);
       controller.add(await fetchAssets(lessonId: lessonId));
     }
 
     Future<void> boot() async {
-      await push();
+      await push(force: true);
       final client = realtimeClient;
       if (client != null) {
         channel = client
@@ -91,7 +91,7 @@ class HttpLessonAssetsRepository implements LessonAssetsRepository {
                 column: 'lesson_id',
                 value: lessonId,
               ),
-              callback: (_) => unawaited(push()),
+              callback: (_) => unawaited(push(force: true)),
             )
             .subscribe();
       }

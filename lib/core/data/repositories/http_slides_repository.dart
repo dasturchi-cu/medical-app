@@ -133,7 +133,7 @@ class HttpSlidesRepository implements SlidesRepository {
 
   @override
   Stream<List<HomeSlideItem>> watchSlides({
-    Duration pollInterval = const Duration(seconds: 120),
+    Duration pollInterval = const Duration(minutes: 3),
   }) {
     final controller = StreamController<List<HomeSlideItem>>();
     RealtimeChannel? channel;
@@ -141,11 +141,11 @@ class HttpSlidesRepository implements SlidesRepository {
     var disposed = false;
     var pushInFlight = false;
 
-    Future<void> push() async {
+    Future<void> push({bool forceRefresh = false}) async {
       if (disposed || pushInFlight) return;
       pushInFlight = true;
       try {
-        final items = await fetchSlides(forceRefresh: true);
+        final items = await fetchSlides(forceRefresh: forceRefresh);
         if (!disposed && !controller.isClosed) {
           controller.add(items);
         }
@@ -155,7 +155,7 @@ class HttpSlidesRepository implements SlidesRepository {
     }
 
     Future<void> boot() async {
-      await push();
+      await push(forceRefresh: true);
       final client = realtimeClient;
       if (client != null) {
         channel = client
@@ -164,7 +164,7 @@ class HttpSlidesRepository implements SlidesRepository {
               event: PostgresChangeEvent.all,
               schema: 'public',
               table: 'home_slides',
-              callback: (_) => unawaited(push()),
+              callback: (_) => unawaited(push(forceRefresh: true)),
             )
             .subscribe();
       }

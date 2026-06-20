@@ -98,18 +98,60 @@ class _AssetViewPageState extends ConsumerState<AssetViewPage> {
     if (comma <= 0) return const Center(child: Text("PDF formati noto'g'ri."));
     try {
       final bytes = base64Decode(dataUrl.substring(comma + 1).replaceAll(RegExp(r'\s'), ''));
-      return SfPdfViewer.memory(
-        bytes,
-        onDocumentLoaded: (details) => _totalPages = details.document.pages.count,
-        onPageChanged: (details) {
-          _lastPage = details.newPageNumber;
-          _debounce?.cancel();
-          _debounce = Timer(const Duration(seconds: 2), _saveProgress);
-        },
-      );
+      return _buildPdfViewer(bytes);
     } catch (_) {
       return const Center(child: Text("PDF ni o'qib bo'lmadi."));
     }
+  }
+
+  Widget _buildPdfViewer(Uint8List bytes) {
+    return Stack(
+      fit: StackFit.expand,
+      children: [
+        SfPdfViewer.memory(
+          bytes,
+          onDocumentLoaded: (details) {
+            setState(() => _totalPages = details.document.pages.count);
+          },
+          onPageChanged: (details) {
+            setState(() => _lastPage = details.newPageNumber);
+            _debounce?.cancel();
+            _debounce = Timer(const Duration(seconds: 2), _saveProgress);
+          },
+        ),
+        if (_totalPages > 0)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: SafeArea(
+              top: false,
+              child: Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: Center(child: _pageCounterChip()),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _pageCounterChip() {
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 5),
+      decoration: BoxDecoration(
+        color: Colors.black.withValues(alpha: 0.55),
+        borderRadius: BorderRadius.circular(999),
+      ),
+      child: Text(
+        '$_lastPage / $_totalPages',
+        style: const TextStyle(
+          color: Colors.white,
+          fontWeight: FontWeight.w700,
+          fontSize: 12,
+        ),
+      ),
+    );
   }
 
   Widget _buildPdfNetwork(String url) {
@@ -130,15 +172,7 @@ class _AssetViewPageState extends ConsumerState<AssetViewPage> {
             ),
           );
         }
-        return SfPdfViewer.memory(
-          snapshot.data!,
-          onDocumentLoaded: (details) => _totalPages = details.document.pages.count,
-          onPageChanged: (details) {
-            _lastPage = details.newPageNumber;
-            _debounce?.cancel();
-            _debounce = Timer(const Duration(seconds: 2), _saveProgress);
-          },
-        );
+        return _buildPdfViewer(snapshot.data!);
       },
     );
   }
