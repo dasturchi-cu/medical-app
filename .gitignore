@@ -50,7 +50,7 @@ app.*.map.json
 .env.local
 .env.*.local
 backend/fastapi/.env
-admin_panel/.env.local
+backend/admin_panel/.env.local
 scripts/backup.env
 scripts/neon.env
 scripts/r2.env
