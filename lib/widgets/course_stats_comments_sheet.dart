@@ -149,17 +149,28 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       userId: userId,
       useFeedbackApi: widget.useFeedbackApi,
     );
+    final cachedMyRating = CourseStatsCache.peekMyRating(
+      key: widget.courseId,
+      userId: userId,
+      useFeedbackApi: widget.useFeedbackApi,
+    );
     if (cached != null && mounted) {
       setState(() {
         _commentsCount = cached.commentsCount;
         _commentersCount = cached.commentersCount;
         _ratingAvg = cached.ratingAvg;
         _ratingCount = cached.ratingCount;
+        if (cachedMyRating != null) {
+          _myRating = cachedMyRating.clamp(0, 5);
+        }
         _statsLoading = false;
         _statsError = null;
       });
     } else if (mounted) {
       setState(() {
+        if (cachedMyRating != null) {
+          _myRating = cachedMyRating.clamp(0, 5);
+        }
         _statsLoading = true;
         _statsError = null;
       });
@@ -198,12 +209,21 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
           if (!widget.useFeedbackApi) {
             fetchedEnrolled = int.tryParse((body['enrolled_count'] ?? '0').toString()) ?? 0;
           }
-          return CourseCardStats(
+          final stats = CourseCardStats(
             ratingAvg: double.tryParse((body['rating_avg'] ?? '0').toString()) ?? 0,
             ratingCount: int.tryParse((body['rating_count'] ?? '0').toString()) ?? 0,
             commentsCount: int.tryParse((body['comments_count'] ?? '0').toString()) ?? 0,
             commentersCount: int.tryParse((body['commenters_count'] ?? '0').toString()) ?? 0,
           );
+          if (fetchedMyRating != null) {
+            CourseStatsCache.putMyRating(
+              key: widget.courseId,
+              userId: userId,
+              myRating: fetchedMyRating!,
+              useFeedbackApi: widget.useFeedbackApi,
+            );
+          }
+          return stats;
         },
       );
       if (!mounted) return;
@@ -254,6 +274,12 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       _ratingCount = optimisticCount;
       _ratingAvg = optimisticAvg.clamp(0, 5).toDouble();
     });
+    CourseStatsCache.putMyRating(
+      key: widget.courseId,
+      userId: userId,
+      myRating: stars,
+      useFeedbackApi: widget.useFeedbackApi,
+    );
     _setCardStatsOverride(
       ratingAvg: optimisticAvg,
       ratingCount: optimisticCount,
@@ -299,6 +325,12 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
         _ratingCount = prevCount;
         _ratingAvg = prevAvg;
       });
+      CourseStatsCache.putMyRating(
+        key: widget.courseId,
+        userId: userId,
+        myRating: prevMy,
+        useFeedbackApi: widget.useFeedbackApi,
+      );
       _setCardStatsOverride(
         ratingAvg: prevAvg,
         ratingCount: prevCount,
@@ -434,7 +466,9 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                 const SizedBox(width: 8),
                 for (var i = 1; i <= 5; i++)
                   IconButton(
-                    onPressed: _ratingLoading || _feedbackApiMissing ? null : () => _submitRating(i),
+                    onPressed: _ratingLoading || _feedbackApiMissing || _statsLoading
+                        ? null
+                        : () => _submitRating(i),
                     icon: Icon(
                       i <= _myRating ? Icons.star : Icons.star_border,
                       color: i <= _myRating ? Colors.amber.shade700 : Colors.amber,

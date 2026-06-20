@@ -8,6 +8,9 @@ class CourseStatsCache {
   static final MemoryTtlCache<CourseCardStats> _stats = MemoryTtlCache<CourseCardStats>(
     ttl: const Duration(minutes: 3),
   );
+  static final MemoryTtlCache<int> _myRatings = MemoryTtlCache<int>(
+    ttl: const Duration(minutes: 3),
+  );
   static final MemoryTtlCache<Map<String, CourseCardStats>> _homeBatch = MemoryTtlCache<Map<String, CourseCardStats>>(
     ttl: const Duration(minutes: 3),
   );
@@ -36,6 +39,22 @@ class CourseStatsCache {
     bool useFeedbackApi = false,
   }) {
     _stats.put(_statsKey(key: key, userId: userId, useFeedbackApi: useFeedbackApi), stats);
+  }
+
+  static int? peekMyRating({
+    required String key,
+    required String userId,
+    bool useFeedbackApi = false,
+  }) =>
+      _myRatings.peek(_statsKey(key: key, userId: userId, useFeedbackApi: useFeedbackApi));
+
+  static void putMyRating({
+    required String key,
+    required String userId,
+    required int myRating,
+    bool useFeedbackApi = false,
+  }) {
+    _myRatings.put(_statsKey(key: key, userId: userId, useFeedbackApi: useFeedbackApi), myRating);
   }
 
   static Future<CourseCardStats> statsOrFetch({
@@ -75,6 +94,8 @@ class CourseStatsCache {
   static void invalidateKey(String key) {
     _stats.invalidatePrefix('course|$key|');
     _stats.invalidatePrefix('fb|$key|');
+    _myRatings.invalidatePrefix('course|$key|');
+    _myRatings.invalidatePrefix('fb|$key|');
     _homeBatch.clear();
   }
 }
