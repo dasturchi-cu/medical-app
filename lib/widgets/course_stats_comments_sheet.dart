@@ -13,6 +13,7 @@ import '../core/di/providers.dart';
 import '../core/state/comments_state.dart';
 import '../core/state/course_stats_state.dart';
 import '../core/state/progress_controller.dart';
+import '../core/widgets/quick_tap.dart';
 
 class CourseStatsCommentsSheet extends ConsumerStatefulWidget {
   const CourseStatsCommentsSheet({
@@ -42,16 +43,13 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   double _ratingAvg = 0;
   int _ratingCount = 0;
   int _myRating = 0;
-  bool _sending = false;
-  bool _ratingLoading = false;
   bool _feedbackApiMissing = false;
   String? _replyToCommentId;
   bool _statsLoading = true;
   String? _statsError;
-  final Set<String> _pendingLikeCommentIds = <String>{};
+  List<AppCommentItem>? _commentsSnapshot;
   final Map<String, bool> _optimisticLikedByMe = <String, bool>{};
   final Map<String, int> _optimisticLikesCount = <String, int>{};
-  List<AppCommentItem>? _commentsSnapshot;
 
   void _setCardStatsOverride({
     required double ratingAvg,
@@ -255,42 +253,22 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
     }
   }
 
-  Future<void> _submitRating(int stars) async {
+  Future<void> _onStarTap(int stars) async {
+    if (_feedbackApiMissing) return;
     final auth = ref.read(authControllerProvider);
     final userId = (auth.userId ?? '').trim();
     final baseUrl = getApiBaseUrl();
     if (userId.isEmpty || baseUrl.isEmpty || widget.courseId.trim().isEmpty) return;
+
     final prevMy = _myRating;
     final prevCount = _ratingCount;
     final prevAvg = _ratingAvg;
-    final isNewVote = prevMy == 0;
-    final optimisticCount = isNewVote ? prevCount + 1 : prevCount;
-    final optimisticAvg = optimisticCount == 0
-        ? stars.toDouble()
-        : (((prevAvg * prevCount) - prevMy + stars) / optimisticCount);
-    setState(() {
-      _ratingLoading = true;
-      _myRating = stars;
-      _ratingCount = optimisticCount;
-      _ratingAvg = optimisticAvg.clamp(0, 5).toDouble();
-    });
-    CourseStatsCache.putMyRating(
-      key: widget.courseId,
-      userId: userId,
-      myRating: stars,
-      useFeedbackApi: widget.useFeedbackApi,
-    );
-    _setCardStatsOverride(
-      ratingAvg: optimisticAvg,
-      ratingCount: optimisticCount,
-      commentsCount: _commentsCount,
-      commentersCount: _commentersCount,
-    );
+    _applyRatingOptimistic(stars, userId: userId);
+
     try {
       final ratePath = widget.useFeedbackApi
           ? '/api/v1/feedback/${widget.courseId}/rate'
           : '/api/v1/courses/${widget.courseId}/rate';
-      debugPrint('[API][courses.rate][request] path=$ratePath userId=$userId stars=$stars');
       final response = await http
           .post(
             Uri.parse('$baseUrl$ratePath'),
@@ -298,7 +276,6 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             body: jsonEncode({'user_id': userId, 'stars': stars}),
           )
           .timeout(const Duration(seconds: 12));
-      debugPrint('[API][courses.rate][response] status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) {
         if (widget.useFeedbackApi && response.statusCode == 404) {
           throw Exception('Feedback API hali backendda yoq. Backendni yangilang.');
@@ -310,38 +287,152 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
         } catch (_) {}
         throw Exception(msg);
       }
+    } catch (e) {
       if (!mounted) return;
-      await _loadCourseStats();
-      if (!mounted) return;
-      setState(() {
-        if (_myRating == 0 && stars >= 1 && stars <= 5) {
-          _myRating = stars;
-        }
-      });
+      _applyRatingOptimistic(prevMy, userId: userId, count: prevCount, avg: prevAvg);
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
+    }
+  }
+
+  void _applyRatingOptimistic(
+    int stars, {
+    required String userId,
+    int? count,
+    double? avg,
+  }) {
+    final int nextCount;
+    final double nextAvg;
+    if (count != null && avg != null) {
+      nextCount = count;
+      nextAvg = avg;
+    } else {
+      final prevMy = _myRating;
+      final prevCount = _ratingCount;
+      final prevAvg = _ratingAvg;
+      final isNewVote = prevMy == 0 && stars > 0;
+      nextCount = isNewVote ? prevCount + 1 : prevCount;
+      nextAvg = nextCount == 0
+          ? stars.toDouble()
+          : (((prevAvg * prevCount) - prevMy + stars) / nextCount);
+    }
+
+    setState(() {
+      _myRating = stars;
+      _ratingCount = nextCount;
+      _ratingAvg = nextAvg.clamp(0, 5).toDouble();
+    });
+    CourseStatsCache.putMyRating(
+      key: widget.courseId,
+      userId: userId,
+      myRating: stars,
+      useFeedbackApi: widget.useFeedbackApi,
+    );
+    _setCardStatsOverride(
+      ratingAvg: nextAvg,
+      ratingCount: nextCount,
+      commentsCount: _commentsCount,
+      commentersCount: _commentersCount,
+    );
+  }
+
+  Future<void> _toggleLike({
+    required AppCommentItem comment,
+    required String userId,
+    required bool likedByMe,
+    required int likesCount,
+  }) async {
+    final nextLiked = !likedByMe;
+    final nextCount = nextLiked ? likesCount + 1 : (likesCount > 0 ? likesCount - 1 : 0);
+    setState(() {
+      _optimisticLikedByMe[comment.id] = nextLiked;
+      _optimisticLikesCount[comment.id] = nextCount;
+    });
+    try {
+      await ref.read(commentsRepositoryProvider).toggleLike(
+            commentId: comment.id,
+            userId: userId,
+            courseKey: widget.courseId,
+            likedByMe: nextLiked,
+            likesCount: nextCount,
+          );
     } catch (e) {
       if (!mounted) return;
       setState(() {
-        _myRating = prevMy;
-        _ratingCount = prevCount;
-        _ratingAvg = prevAvg;
+        _optimisticLikedByMe.remove(comment.id);
+        _optimisticLikesCount.remove(comment.id);
       });
-      CourseStatsCache.putMyRating(
-        key: widget.courseId,
-        userId: userId,
-        myRating: prevMy,
-        useFeedbackApi: widget.useFeedbackApi,
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            e.toString().contains('SocketException') ||
+                    e.toString().contains('ClientException') ||
+                    e.toString().contains('TimeoutException')
+                ? 'Like saqlanmadi. Internet ulanishini tekshiring.'
+                : 'Like saqlanmadi: ${e.toString()}',
+          ),
+        ),
       );
+    }
+  }
+
+  Future<void> _sendComment({
+    required String text,
+    required String userId,
+    required String authorName,
+  }) async {
+    try {
+      await ref.read(commentsRepositoryProvider).addComment(
+            courseKey: widget.courseId,
+            userId: userId,
+            authorName: authorName,
+            text: text,
+          );
+      await _refreshCommentsNow(userId);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _commentsCount = (_commentsCount - 1).clamp(0, 1 << 30));
       _setCardStatsOverride(
-        ratingAvg: prevAvg,
-        ratingCount: prevCount,
+        ratingAvg: _ratingAvg,
+        ratingCount: _ratingCount,
         commentsCount: _commentsCount,
         commentersCount: _commentersCount,
       );
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(content: Text(e.toString())),
       );
-    } finally {
-      if (mounted) setState(() => _ratingLoading = false);
+    }
+  }
+
+  Future<void> _sendReply({
+    required AppCommentItem comment,
+    required String text,
+    required String userId,
+    required String authorName,
+  }) async {
+    _replyController.clear();
+    if (mounted) setState(() => _replyToCommentId = null);
+    try {
+      await ref.read(commentsRepositoryProvider).addReply(
+            commentId: comment.id,
+            userId: userId,
+            authorName: authorName,
+            text: text,
+          );
+      await _refreshCommentsNow(userId);
+    } catch (e) {
+      if (!mounted) return;
+      setState(() => _commentsCount = (_commentsCount - 1).clamp(0, 1 << 30));
+      _setCardStatsOverride(
+        ratingAvg: _ratingAvg,
+        ratingCount: _ratingCount,
+        commentsCount: _commentsCount,
+        commentersCount: _commentersCount,
+      );
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.toString())),
+      );
     }
   }
 
@@ -465,16 +556,17 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                 ),
                 const SizedBox(width: 8),
                 for (var i = 1; i <= 5; i++)
-                  IconButton(
-                    onPressed: _ratingLoading || _feedbackApiMissing || _statsLoading
-                        ? null
-                        : () => _submitRating(i),
-                    icon: Icon(
-                      i <= _myRating ? Icons.star : Icons.star_border,
-                      color: i <= _myRating ? Colors.amber.shade700 : Colors.amber,
-                      size: i <= _myRating ? 26 : 24,
+                  QuickTap(
+                    enabled: !_feedbackApiMissing,
+                    minSize: 40,
+                    splashColor: Colors.amber.withValues(alpha: 0.18),
+                    highlightColor: Colors.amber.withValues(alpha: 0.1),
+                    onTap: () => unawaited(_onStarTap(i)),
+                    child: Icon(
+                      i <= _myRating ? Icons.star_rounded : Icons.star_border_rounded,
+                      color: i <= _myRating ? Colors.amber.shade700 : Colors.amber.shade600,
+                      size: 24,
                     ),
-                    visualDensity: VisualDensity.compact,
                   ),
                 const SizedBox(width: 4),
                 Text(
@@ -539,7 +631,6 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                       final showReplyInput = _replyToCommentId == c.id;
                       final likedByMe = _optimisticLikedByMe[c.id] ?? c.likedByMe;
                       final likesCount = _optimisticLikesCount[c.id] ?? c.likesCount;
-                      final likePending = _pendingLikeCommentIds.contains(c.id);
                       return Card(
                         margin: EdgeInsets.zero,
                         child: Padding(
@@ -561,63 +652,23 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                               const SizedBox(height: 8),
                               Row(
                                 children: [
-                                  IconButton(
-                                    onPressed: userId.isEmpty || likePending
-                                        ? null
-                                        : () async {
-                                            final nextLiked = !likedByMe;
-                                            final nextCount = nextLiked
-                                                ? likesCount + 1
-                                                : (likesCount > 0 ? likesCount - 1 : 0);
-                                            setState(() {
-                                              _pendingLikeCommentIds.add(c.id);
-                                              _optimisticLikedByMe[c.id] = nextLiked;
-                                              _optimisticLikesCount[c.id] = nextCount;
-                                            });
-                                            try {
-                                              await ref.read(commentsRepositoryProvider).toggleLike(
-                                                    commentId: c.id,
-                                                    userId: userId,
-                                                    courseKey: widget.courseId,
-                                                    likedByMe: nextLiked,
-                                                    likesCount: nextCount,
-                                                  );
-                                            } catch (e) {
-                                              if (mounted) {
-                                                setState(() {
-                                                  _optimisticLikedByMe.remove(c.id);
-                                                  _optimisticLikesCount.remove(c.id);
-                                                });
-                                                ScaffoldMessenger.of(context).showSnackBar(
-                                                  SnackBar(
-                                                    content: Text(
-                                                      e.toString().contains('SocketException') ||
-                                                              e.toString().contains('ClientException') ||
-                                                              e.toString().contains('TimeoutException')
-                                                          ? "Like saqlanmadi. Internet ulanishini tekshiring."
-                                                          : "Like saqlanmadi: ${e.toString()}",
-                                                    ),
-                                                  ),
-                                                );
-                                              } else {
-                                                _optimisticLikedByMe.remove(c.id);
-                                                _optimisticLikesCount.remove(c.id);
-                                              }
-                                            } finally {
-                                              if (mounted) {
-                                                setState(() => _pendingLikeCommentIds.remove(c.id));
-                                              } else {
-                                                _pendingLikeCommentIds.remove(c.id);
-                                              }
-                                            }
-                                          },
-                                    icon: Icon(
+                                  QuickTap(
+                                    enabled: userId.isNotEmpty,
+                                    minSize: 40,
+                                    splashColor: Colors.red.withValues(alpha: 0.12),
+                                    onTap: () => unawaited(
+                                      _toggleLike(
+                                        comment: c,
+                                        userId: userId,
+                                        likedByMe: likedByMe,
+                                        likesCount: likesCount,
+                                      ),
+                                    ),
+                                    child: Icon(
                                       likedByMe ? Icons.favorite : Icons.favorite_border,
                                       size: 20,
                                       color: likedByMe ? Colors.red.shade600 : Colors.black45,
                                     ),
-                                    visualDensity: VisualDensity.compact,
-                                    padding: EdgeInsets.zero,
                                   ),
                                   const SizedBox(width: 4),
                                   Text('$likesCount'),
@@ -667,35 +718,30 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                     ),
                                     const SizedBox(width: 8),
                                     FilledButton(
-                                      onPressed: () async {
-                                        final text = _replyController.text.trim();
-                                        if (text.isEmpty || userId.isEmpty) return;
-                                        try {
-                                          await ref.read(commentsRepositoryProvider).addReply(
-                                                commentId: c.id,
-                                                userId: userId,
-                                                authorName: auth.name.trim().isEmpty
-                                                    ? 'Foydalanuvchi'
-                                                    : auth.name.trim(),
-                                                text: text,
+                                      onPressed: userId.isEmpty
+                                          ? null
+                                          : () {
+                                              final text = _replyController.text.trim();
+                                              if (text.isEmpty) return;
+                                              final authorName = auth.name.trim().isEmpty
+                                                  ? 'Foydalanuvchi'
+                                                  : auth.name.trim();
+                                              setState(() => _commentsCount += 1);
+                                              _setCardStatsOverride(
+                                                ratingAvg: _ratingAvg,
+                                                ratingCount: _ratingCount,
+                                                commentsCount: _commentsCount,
+                                                commentersCount: _commentersCount,
                                               );
-                                          _replyController.clear();
-                                          setState(() => _replyToCommentId = null);
-                                          await _refreshCommentsNow(userId);
-                                          if (mounted) setState(() => _commentsCount += 1);
-                                          _setCardStatsOverride(
-                                            ratingAvg: _ratingAvg,
-                                            ratingCount: _ratingCount,
-                                            commentsCount: _commentsCount,
-                                            commentersCount: _commentersCount,
-                                          );
-                                        } catch (e) {
-                                          if (!mounted) return;
-                                          ScaffoldMessenger.of(context).showSnackBar(
-                                            SnackBar(content: Text(e.toString())),
-                                          );
-                                        }
-                                      },
+                                              unawaited(
+                                                _sendReply(
+                                                  comment: c,
+                                                  text: text,
+                                                  userId: userId,
+                                                  authorName: authorName,
+                                                ),
+                                              );
+                                            },
                                       child: const Text('Javob'),
                                     ),
                                   ],
@@ -772,39 +818,30 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                         borderRadius: BorderRadius.circular(14),
                       ),
                     ),
-                    onPressed: _sending
+                    onPressed: userId.isEmpty
                         ? null
-                        : () async {
-                      final text = _controller.text.trim();
-                      if (text.isEmpty || userId.isEmpty) return;
-                      setState(() => _sending = true);
-                      try {
-                        await ref.read(commentsRepositoryProvider).addComment(
-                              courseKey: widget.courseId,
-                              userId: userId,
-                              authorName: auth.name.trim().isEmpty
-                                  ? 'Foydalanuvchi'
-                                  : auth.name.trim(),
-                              text: text,
+                        : () {
+                            final text = _controller.text.trim();
+                            if (text.isEmpty) return;
+                            final authorName = auth.name.trim().isEmpty
+                                ? 'Foydalanuvchi'
+                                : auth.name.trim();
+                            _controller.clear();
+                            setState(() => _commentsCount += 1);
+                            _setCardStatsOverride(
+                              ratingAvg: _ratingAvg,
+                              ratingCount: _ratingCount,
+                              commentsCount: _commentsCount,
+                              commentersCount: _commentersCount,
                             );
-                        _controller.clear();
-                        if (mounted) setState(() => _commentsCount += 1);
-                        _setCardStatsOverride(
-                          ratingAvg: _ratingAvg,
-                          ratingCount: _ratingCount,
-                          commentsCount: _commentsCount,
-                          commentersCount: _commentersCount,
-                        );
-                        await _refreshCommentsNow(userId);
-                      } catch (e) {
-                        if (!mounted) return;
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(e.toString())),
-                        );
-                      } finally {
-                        if (mounted) setState(() => _sending = false);
-                      }
-                    },
+                            unawaited(
+                              _sendComment(
+                                text: text,
+                                userId: userId,
+                                authorName: authorName,
+                              ),
+                            );
+                          },
                     child: const Text(
                       'Yuborish',
                       style: TextStyle(fontWeight: FontWeight.w900),
