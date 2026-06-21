@@ -1,5 +1,6 @@
 import '../state/course_stats_state.dart';
 import 'memory_ttl_cache.dart';
+import 'my_rating_local_store.dart';
 
 /// Kurs/banner statistikasi — barcha sahifalar bir xil keshdan o'qiydi.
 class CourseStatsCache {
@@ -55,7 +56,26 @@ class CourseStatsCache {
     bool useFeedbackApi = false,
   }) {
     _myRatings.put(_statsKey(key: key, userId: userId, useFeedbackApi: useFeedbackApi), myRating);
+    if (myRating >= 1 && myRating <= 5) {
+      MyRatingLocalStore.write(
+        courseKey: key,
+        userId: userId,
+        stars: myRating,
+        useFeedbackApi: useFeedbackApi,
+      );
+    }
   }
+
+  static Future<int?> readPersistedMyRating({
+    required String key,
+    required String userId,
+    bool useFeedbackApi = false,
+  }) =>
+      MyRatingLocalStore.read(
+        courseKey: key,
+        userId: userId,
+        useFeedbackApi: useFeedbackApi,
+      );
 
   static Future<CourseCardStats> statsOrFetch({
     required String key,

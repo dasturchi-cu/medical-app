@@ -97,7 +97,32 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   @override
   void initState() {
     super.initState();
+    unawaited(_hydrateMyRating());
     _loadCourseStats();
+  }
+
+  Future<void> _hydrateMyRating() async {
+    final userId = (ref.read(authControllerProvider).userId ?? '').trim();
+    if (userId.isEmpty || widget.courseId.trim().isEmpty) return;
+    final memory = CourseStatsCache.peekMyRating(
+      key: widget.courseId,
+      userId: userId,
+      useFeedbackApi: widget.useFeedbackApi,
+    );
+    final persisted = memory ??
+        await CourseStatsCache.readPersistedMyRating(
+          key: widget.courseId,
+          userId: userId,
+          useFeedbackApi: widget.useFeedbackApi,
+        );
+    if (persisted == null || persisted < 1 || persisted > 5 || !mounted) return;
+    setState(() => _myRating = persisted);
+    CourseStatsCache.putMyRating(
+      key: widget.courseId,
+      userId: userId,
+      myRating: persisted,
+      useFeedbackApi: widget.useFeedbackApi,
+    );
   }
 
   @override
@@ -203,7 +228,12 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             throw Exception("Statistika JSON emas.");
           }
           final rawMy = body['my_rating'] ?? body['myRating'];
-          fetchedMyRating = rawMy == null ? 0 : (int.tryParse(rawMy.toString()) ?? 0);
+          if (rawMy != null) {
+            final parsed = int.tryParse(rawMy.toString());
+            if (parsed != null && parsed >= 1 && parsed <= 5) {
+              fetchedMyRating = parsed;
+            }
+          }
           if (!widget.useFeedbackApi) {
             fetchedEnrolled = int.tryParse((body['enrolled_count'] ?? '0').toString()) ?? 0;
           }
@@ -225,12 +255,26 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
         },
       );
       if (!mounted) return;
+      var resolvedMyRating = _myRating;
+      if (fetchedMyRating != null && fetchedMyRating! >= 1) {
+        resolvedMyRating = fetchedMyRating!;
+      } else if (resolvedMyRating < 1) {
+        final persisted = await CourseStatsCache.readPersistedMyRating(
+          key: widget.courseId,
+          userId: userId,
+          useFeedbackApi: widget.useFeedbackApi,
+        );
+        if (persisted != null && persisted >= 1) {
+          resolvedMyRating = persisted;
+        }
+      }
+      if (!mounted) return;
       setState(() {
         _commentsCount = stats.commentsCount;
         _commentersCount = stats.commentersCount;
         _ratingAvg = stats.ratingAvg;
         _ratingCount = stats.ratingCount;
-        if (fetchedMyRating != null) _myRating = fetchedMyRating!;
+        _myRating = resolvedMyRating;
         if (fetchedEnrolled != null) _enrolledCount = fetchedEnrolled!;
         _statsLoading = false;
         _statsError = null;
