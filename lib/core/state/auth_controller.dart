@@ -51,8 +51,10 @@ class AuthController extends Notifier<AuthState> {
   String? _hydratedUserId;
   DateTime? _lastRehydrateAt;
   DateTime? _lastProfileSyncAt;
+  DateTime? _lastTrackAppOpenAt;
   static const _rehydrateMinInterval = Duration(seconds: 45);
   static const _profileSyncMinInterval = Duration(minutes: 2);
+  static const _trackAppOpenMinInterval = Duration(seconds: 45);
   /// Ketma-ket muvaffaqiyatli javoblarda `session_active: false` — tarmoq xatosida nolga qaytaramiz.
   int _inactiveSessionStreak = 0;
 
@@ -65,6 +67,7 @@ class AuthController extends Notifier<AuthState> {
     _accessTimer?.cancel();
     Future.microtask(() async {
       ref.read(purchaseControllerProvider.notifier).bindRealtime(userId);
+      await _trackAppOpenIfNeeded(userId);
       await _verifyUserAccess(userId);
     });
     _startAccessTimer(userId);
@@ -112,6 +115,7 @@ class AuthController extends Notifier<AuthState> {
     }
     state = _fromUser(user);
     _ensureSessionMonitoring(user.id);
+    await _trackAppOpenIfNeeded(user.id, force: force);
 
     final shouldSyncProfile = force ||
         _lastProfileSyncAt == null ||
@@ -151,6 +155,7 @@ class AuthController extends Notifier<AuthState> {
     }
     if (status.sessionActive) {
       _inactiveSessionStreak = 0;
+      await _trackAppOpenIfNeeded(userId);
       final now = DateTime.now();
       final shouldSyncProfile = _lastProfileSyncAt == null ||
           now.difference(_lastProfileSyncAt!) >= _profileSyncMinInterval;
@@ -188,6 +193,18 @@ class AuthController extends Notifier<AuthState> {
     );
   }
 
+  Future<void> _trackAppOpenIfNeeded(String userId, {bool force = false}) async {
+    if (userId.trim().isEmpty) return;
+    final now = DateTime.now();
+    if (!force &&
+        _lastTrackAppOpenAt != null &&
+        now.difference(_lastTrackAppOpenAt!) < _trackAppOpenMinInterval) {
+      return;
+    }
+    _lastTrackAppOpenAt = now;
+    await ref.read(authServiceProvider).trackAppOpen();
+  }
+
   AuthState _fromUser(LocalAuthUser user) {
     final guessedName = user.name.trim().isEmpty ? 'Ism yozmagansiz' : user.name;
     return AuthState(
@@ -219,6 +236,7 @@ class AuthController extends Notifier<AuthState> {
       _inactiveSessionStreak = 0;
       state = _fromUser(user);
       _ensureSessionMonitoring(user.id);
+      await _trackAppOpenIfNeeded(user.id, force: true);
       return null;
     } on AuthServiceError catch (error) {
       if (error.message.toLowerCase().contains('blok')) {

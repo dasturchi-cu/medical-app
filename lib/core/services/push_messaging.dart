@@ -13,9 +13,7 @@ import 'package:shared_preferences/shared_preferences.dart';
 import '../../firebase_options.dart';
 import '../config/api_config.dart';
 import '../router/app_routes.dart';
-
-/// Same key as [AuthService] session persistence — avoid importing AuthService (cycles).
-const _authPrefsKey = 'auth_user_v1';
+import 'secure_credential_store.dart';
 
 final FlutterLocalNotificationsPlugin _local = FlutterLocalNotificationsPlugin();
 
@@ -294,13 +292,23 @@ void _handleLocalNotificationPayload(String? payload) {
   onNotificationsFeedShouldRefresh?.call();
 }
 
-Future<void> _reportPushClick(String notificationId) async {
+Future<Map<String, dynamic>?> _readStoredAuth() async {
+  final secure = await SecureCredentialStore.readAuthJson();
+  if (secure != null) return secure;
   try {
     final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_authPrefsKey);
-    if (raw == null || raw.isEmpty) return;
+    final raw = prefs.getString('auth_user_v1');
+    if (raw == null || raw.isEmpty) return null;
     final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) return;
+    if (decoded is Map<String, dynamic>) return decoded;
+  } catch (_) {}
+  return null;
+}
+
+Future<void> _reportPushClick(String notificationId) async {
+  try {
+    final decoded = await _readStoredAuth();
+    if (decoded == null) return;
     final userId = decoded['id']?.toString();
     if (userId == null || userId.isEmpty) return;
     final base = getApiBaseUrl();
@@ -353,11 +361,8 @@ Future<void> _syncTokenToBackend(String token) async {
     return;
   }
   try {
-    final prefs = await SharedPreferences.getInstance();
-    final raw = prefs.getString(_authPrefsKey);
-    if (raw == null || raw.isEmpty) return;
-    final decoded = jsonDecode(raw);
-    if (decoded is! Map<String, dynamic>) return;
+    final decoded = await _readStoredAuth();
+    if (decoded == null) return;
     final userId = decoded['id']?.toString() ?? '';
     final sessionToken = decoded['session_token']?.toString() ?? '';
     if (userId.isEmpty || sessionToken.length < 8) return;

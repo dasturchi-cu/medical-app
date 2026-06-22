@@ -166,6 +166,28 @@ class AuthService {
     return _currentUser;
   }
 
+  /// Sessiya diskdan tiklanganda ham admin panelda ochilish / o‘rnatish qayd etiladi.
+  Future<void> trackAppOpen() async {
+    final current = _currentUser;
+    final baseUrl = getApiBaseUrl();
+    if (current == null || baseUrl.isEmpty) return;
+    final uid = current.id.trim();
+    final tok = current.sessionToken.trim();
+    if (uid.isEmpty || tok.length < 8) return;
+    try {
+      await http
+          .post(
+            Uri.parse('$baseUrl/api/v1/auth/track-app-open'),
+            headers: const {'Content-Type': 'application/json'},
+            body: jsonEncode({
+              'user_id': uid,
+              'session_token': tok,
+            }),
+          )
+          .timeout(const Duration(seconds: 8));
+    } catch (_) {}
+  }
+
   Future<UserAccessStatus?> checkUserAccess(String userId) async {
     final baseUrl = getApiBaseUrl();
     if (baseUrl.isEmpty || userId.trim().isEmpty) return null;
