@@ -28,6 +28,20 @@ services:
     networks:
       - backend_net
 
+  admin_panel:
+    build:
+      context: ./backend/admin_panel
+      dockerfile: Dockerfile
+    container_name: neuroscience_admin
+    restart: always
+    env_file:
+      - .env.production
+    networks:
+      - backend_net
+      - frontend_net
+    depends_on:
+      - fastapi
+
   nginx:
     image: nginx:1.26-alpine
     container_name: neuroscience_nginx
@@ -44,6 +58,7 @@ services:
       - backend_net
     depends_on:
       - fastapi
+      - admin_panel
 
 networks:
   frontend_net:
