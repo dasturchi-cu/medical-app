@@ -23,6 +23,7 @@ import '../../../../core/state/auth_controller.dart';
 import '../../../../core/state/lesson_assets_state.dart';
 import '../../../../core/state/lesson_slides_state.dart';
 import '../../../../core/data/repositories/course_repository.dart';
+import '../../../../core/data/repositories/ranking_repository.dart';
 import '../../../../core/state/progress_controller.dart';
 import '../../../../widgets/video_player_box.dart';
 
@@ -650,6 +651,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     bool force = false,
   }) async {
     if (_lessonDisposed || !mounted) return;
+    _cacheWatchDependencies();
     final userId = _cachedUserId ?? '';
     final baseUrl =
         _cachedBaseUrl.isNotEmpty ? _cachedBaseUrl : getApiBaseUrl();
@@ -703,6 +705,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
       );
       if (response.statusCode >= 200 && response.statusCode < 300) {
         debugPrint('[VIDEO_PROGRESS] save success status=${response.statusCode}');
+        ref.read(rankingRepositoryProvider).invalidateVideoRankingCache();
       } else {
         debugPrint(
           '[VIDEO_PROGRESS] save failed status=${response.statusCode} body=${response.body}',

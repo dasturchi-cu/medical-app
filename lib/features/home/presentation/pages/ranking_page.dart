@@ -282,9 +282,6 @@ class _RankingPageState extends ConsumerState<RankingPage>
         setState(() => _daily = const _TabLeaderboard(top: []));
       }
     }
-    if (!force && _lastDailyLocalDate == today && _daily.hasAnyActivity) {
-      return;
-    }
     final currentUserId = ref.read(authControllerProvider).userId;
     final repo = ref.read(rankingRepositoryProvider);
     try {
