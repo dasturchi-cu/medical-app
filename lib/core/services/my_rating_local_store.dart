@@ -20,17 +20,54 @@ class MyRatingLocalStore {
     required String courseKey,
     required String userId,
     bool useFeedbackApi = false,
+    String? phone,
   }) async {
     final uid = userId.trim();
     final key = courseKey.trim();
-    if (uid.isEmpty || key.isEmpty) return null;
+    if (key.isEmpty) return null;
+
+    if (uid.isNotEmpty) {
+      final byUser = await _readRaw(
+        courseKey: key,
+        userId: uid,
+        useFeedbackApi: useFeedbackApi,
+      );
+      if (byUser != null) return byUser;
+    }
+
+    final normalizedPhone = _normalizePhone(phone);
+    if (normalizedPhone.isNotEmpty) {
+      return _readRaw(
+        courseKey: key,
+        userId: normalizedPhone,
+        useFeedbackApi: useFeedbackApi,
+        phoneKey: true,
+      );
+    }
+    return null;
+  }
+
+  static String _normalizePhone(String? phone) =>
+      (phone ?? '').replaceAll(RegExp(r'\D'), '');
+
+  static Future<int?> _readRaw({
+    required String courseKey,
+    required String userId,
+    required bool useFeedbackApi,
+    bool phoneKey = false,
+  }) async {
+    final uid = userId.trim();
+    if (uid.isEmpty) return null;
     try {
       final prefs = await SharedPreferences.getInstance();
       final raw = prefs.getString(_prefsKey);
       if (raw == null || raw.isEmpty) return null;
       final body = jsonDecode(raw);
       if (body is! Map<String, dynamic>) return null;
-      final stars = int.tryParse((body[_entryKey(courseKey: key, userId: uid, useFeedbackApi: useFeedbackApi)] ?? '').toString());
+      final entry = phoneKey
+          ? _phoneEntryKey(courseKey: courseKey, phone: uid, useFeedbackApi: useFeedbackApi)
+          : _entryKey(courseKey: courseKey, userId: uid, useFeedbackApi: useFeedbackApi);
+      final stars = int.tryParse((body[entry] ?? '').toString());
       if (stars == null || stars < 1 || stars > 5) return null;
       return stars;
     } catch (e, st) {
@@ -39,15 +76,23 @@ class MyRatingLocalStore {
     }
   }
 
+  static String _phoneEntryKey({
+    required String courseKey,
+    required String phone,
+    required bool useFeedbackApi,
+  }) =>
+      '${useFeedbackApi ? 'fb' : 'c'}|p|$courseKey|${_normalizePhone(phone)}';
+
   static Future<void> write({
     required String courseKey,
     required String userId,
     required int stars,
     bool useFeedbackApi = false,
+    String? phone,
   }) async {
     final uid = userId.trim();
     final key = courseKey.trim();
-    if (uid.isEmpty || key.isEmpty) return;
+    if (key.isEmpty) return;
     final safe = stars.clamp(1, 5);
     try {
       final prefs = await SharedPreferences.getInstance();
@@ -55,7 +100,13 @@ class MyRatingLocalStore {
       final body = raw == null || raw.isEmpty
           ? <String, dynamic>{}
           : (jsonDecode(raw) is Map<String, dynamic> ? Map<String, dynamic>.from(jsonDecode(raw) as Map) : <String, dynamic>{});
-      body[_entryKey(courseKey: key, userId: uid, useFeedbackApi: useFeedbackApi)] = safe;
+      if (uid.isNotEmpty) {
+        body[_entryKey(courseKey: key, userId: uid, useFeedbackApi: useFeedbackApi)] = safe;
+      }
+      final normalizedPhone = _normalizePhone(phone);
+      if (normalizedPhone.isNotEmpty) {
+        body[_phoneEntryKey(courseKey: key, phone: normalizedPhone, useFeedbackApi: useFeedbackApi)] = safe;
+      }
       await prefs.setString(_prefsKey, jsonEncode(body));
     } catch (e, st) {
       debugPrint('[MyRatingLocalStore.write][error] $e\n$st');

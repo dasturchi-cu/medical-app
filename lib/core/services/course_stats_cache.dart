@@ -54,6 +54,7 @@ class CourseStatsCache {
     required String userId,
     required int myRating,
     bool useFeedbackApi = false,
+    String? phone,
   }) {
     _myRatings.put(_statsKey(key: key, userId: userId, useFeedbackApi: useFeedbackApi), myRating);
     if (myRating >= 1 && myRating <= 5) {
@@ -62,6 +63,7 @@ class CourseStatsCache {
         userId: userId,
         stars: myRating,
         useFeedbackApi: useFeedbackApi,
+        phone: phone,
       );
     }
   }
@@ -70,11 +72,13 @@ class CourseStatsCache {
     required String key,
     required String userId,
     bool useFeedbackApi = false,
+    String? phone,
   }) =>
       MyRatingLocalStore.read(
         courseKey: key,
         userId: userId,
         useFeedbackApi: useFeedbackApi,
+        phone: phone,
       );
 
   static Future<CourseCardStats> statsOrFetch({

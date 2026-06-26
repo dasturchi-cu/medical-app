@@ -43,6 +43,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   double _ratingAvg = 0;
   int _ratingCount = 0;
   int _myRating = 0;
+  String? _statsUserId;
   bool _feedbackApiMissing = false;
   String? _replyToCommentId;
   bool _statsLoading = true;
@@ -97,8 +98,44 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   @override
   void initState() {
     super.initState();
-    unawaited(_hydrateMyRating());
-    _loadCourseStats();
+    Future.microtask(() => _bootstrapForCurrentUser(forceRefresh: true));
+  }
+
+  String _ratingPhone() => (ref.read(authControllerProvider).email ?? '').trim();
+
+  Future<int> _resolveMyRating({
+    required String userId,
+    int? fromServer,
+  }) async {
+    if (fromServer != null && fromServer >= 1 && fromServer <= 5) {
+      return fromServer;
+    }
+    final memory = CourseStatsCache.peekMyRating(
+      key: widget.courseId,
+      userId: userId,
+      useFeedbackApi: widget.useFeedbackApi,
+    );
+    if (memory != null && memory >= 1) return memory;
+    final persisted = await CourseStatsCache.readPersistedMyRating(
+      key: widget.courseId,
+      userId: userId,
+      useFeedbackApi: widget.useFeedbackApi,
+      phone: _ratingPhone(),
+    );
+    if (persisted != null && persisted >= 1) return persisted;
+    if (_myRating >= 1) return _myRating;
+    return 0;
+  }
+
+  Future<void> _bootstrapForCurrentUser({bool forceRefresh = false}) async {
+    final userId = (ref.read(authControllerProvider).userId ?? '').trim();
+    if (!forceRefresh && _statsUserId == userId && !_statsLoading) {
+      await _hydrateMyRating();
+      return;
+    }
+    _statsUserId = userId;
+    await _hydrateMyRating();
+    await _loadCourseStats(forceRefresh: forceRefresh);
   }
 
   Future<void> _hydrateMyRating() async {
@@ -114,6 +151,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
           key: widget.courseId,
           userId: userId,
           useFeedbackApi: widget.useFeedbackApi,
+          phone: _ratingPhone(),
         );
     if (persisted == null || persisted < 1 || persisted > 5 || !mounted) return;
     setState(() => _myRating = persisted);
@@ -122,6 +160,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       userId: userId,
       myRating: persisted,
       useFeedbackApi: widget.useFeedbackApi,
+      phone: _ratingPhone(),
     );
   }
 
@@ -130,7 +169,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
     super.didUpdateWidget(oldWidget);
     if (oldWidget.courseId != widget.courseId) {
       _commentsSnapshot = null;
-      _loadCourseStats();
+      unawaited(_bootstrapForCurrentUser(forceRefresh: true));
     }
   }
 
@@ -159,7 +198,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
     } catch (_) {}
   }
 
-  Future<void> _loadCourseStats() async {
+  Future<void> _loadCourseStats({bool forceRefresh = false}) async {
     final baseUrl = getApiBaseUrl();
     final userId = (ref.read(authControllerProvider).userId ?? '').trim();
     if (baseUrl.isEmpty || widget.courseId.trim().isEmpty) {
@@ -183,20 +222,26 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
         _commentersCount = cached.commentersCount;
         _ratingAvg = cached.ratingAvg;
         _ratingCount = cached.ratingCount;
-        if (cachedMyRating != null) {
-          _myRating = cachedMyRating.clamp(0, 5);
+        if (cachedMyRating != null && cachedMyRating >= 1) {
+          _myRating = cachedMyRating.clamp(1, 5);
         }
         _statsLoading = false;
         _statsError = null;
       });
+      if (cachedMyRating == null && userId.isNotEmpty) {
+        unawaited(_hydrateMyRating());
+      }
     } else if (mounted) {
       setState(() {
-        if (cachedMyRating != null) {
-          _myRating = cachedMyRating.clamp(0, 5);
+        if (cachedMyRating != null && cachedMyRating >= 1) {
+          _myRating = cachedMyRating.clamp(1, 5);
         }
         _statsLoading = true;
         _statsError = null;
       });
+      if (cachedMyRating == null && userId.isNotEmpty) {
+        unawaited(_hydrateMyRating());
+      }
     }
 
     try {
@@ -206,6 +251,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
         key: widget.courseId,
         userId: userId,
         useFeedbackApi: widget.useFeedbackApi,
+        forceRefresh: forceRefresh,
         fetch: () async {
           final statsUri = widget.useFeedbackApi
               ? Uri.parse('$baseUrl/api/v1/feedback/${widget.courseId}/stats').replace(
@@ -249,25 +295,16 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
               userId: userId,
               myRating: fetchedMyRating!,
               useFeedbackApi: widget.useFeedbackApi,
+              phone: _ratingPhone(),
             );
           }
           return stats;
         },
       );
       if (!mounted) return;
-      var resolvedMyRating = _myRating;
-      if (fetchedMyRating != null && fetchedMyRating! >= 1) {
-        resolvedMyRating = fetchedMyRating!;
-      } else if (resolvedMyRating < 1) {
-        final persisted = await CourseStatsCache.readPersistedMyRating(
-          key: widget.courseId,
-          userId: userId,
-          useFeedbackApi: widget.useFeedbackApi,
-        );
-        if (persisted != null && persisted >= 1) {
-          resolvedMyRating = persisted;
-        }
-      }
+      final resolvedMyRating = userId.isEmpty
+          ? 0
+          : await _resolveMyRating(userId: userId, fromServer: fetchedMyRating);
       if (!mounted) return;
       setState(() {
         _commentsCount = stats.commentsCount;
@@ -372,6 +409,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       userId: userId,
       myRating: stars,
       useFeedbackApi: widget.useFeedbackApi,
+      phone: _ratingPhone(),
     );
     _setCardStatsOverride(
       ratingAvg: nextAvg,
@@ -482,6 +520,18 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
 
   @override
   Widget build(BuildContext context) {
+    ref.listen<AuthState>(authControllerProvider, (prev, next) {
+      final prevId = (prev?.userId ?? '').trim();
+      final nextId = (next.userId ?? '').trim();
+      if (prevId == nextId) return;
+      if (nextId.isEmpty) {
+        if (mounted) setState(() => _myRating = 0);
+        _statsUserId = null;
+        return;
+      }
+      unawaited(_bootstrapForCurrentUser(forceRefresh: true));
+    });
+
     final auth = ref.watch(authControllerProvider);
     final userId = auth.userId ?? '';
     final hasCourseId = widget.courseId.trim().isNotEmpty;
@@ -593,7 +643,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             Row(
               children: [
                 Text(
-                  'Baholash:',
+                  _myRating > 0 ? 'Sizning bahongiz:' : 'Baholash:',
                   style: Theme.of(context).textTheme.titleSmall?.copyWith(
                         fontWeight: FontWeight.w800,
                       ),
