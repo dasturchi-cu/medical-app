@@ -49,6 +49,7 @@ app.*.map.json
 # Environment secrets (never commit real keys)
 .env
 .env.local
+.env.production
 .env.*.local
 backend/fastapi/.env
 backend/admin_panel/.env.local
