@@ -6,6 +6,9 @@
 
 set -e
 
+# Navigate to the repository root directory (where docker-compose.yml lives)
+cd "$(dirname "$0")/.."
+
 echo "=== Starting Hardened Contabo VPS Deployment Setup ==="
 
 # 1. Update and install core packages
@@ -98,13 +101,19 @@ echo "Creating SSL Folders..."
 sudo mkdir -p /etc/ssl/certs
 sudo mkdir -p /etc/ssl/private
 
-# Prompt user for certificates if not exists
+# Generate self-signed certificate if none exist, so Nginx doesn't crash on start
 if [ ! -f /etc/ssl/certs/neuroscience_server.crt ] || [ ! -f /etc/ssl/private/neuroscience_server.key ]; then
     echo "====================================================================="
     echo "WARNING: SSL Certificate or Key not found in /etc/ssl/!"
-    echo "Please place your SSL certificate at: /etc/ssl/certs/neuroscience_server.crt"
-    echo "Please place your Private key at: /etc/ssl/private/neuroscience_server.key"
-    echo "Then run this script again."
+    echo "Generating temporary self-signed certificate to prevent Nginx crash..."
+    sudo openssl req -x509 -nodes -days 365 -newkey rsa:2048 \
+      -keyout /etc/ssl/private/neuroscience_server.key \
+      -out /etc/ssl/certs/neuroscience_server.crt \
+      -subj "/C=US/ST=State/L=City/O=Organization/OU=Unit/CN=localhost"
+    echo "Temporary certificate generated."
+    echo "Please replace /etc/ssl/certs/neuroscience_server.crt and /etc/ssl/private/neuroscience_server.key"
+    echo "with your Cloudflare Origin Certificate and Private Key later, then run:"
+    echo "  docker compose restart nginx"
     echo "====================================================================="
 fi
 
