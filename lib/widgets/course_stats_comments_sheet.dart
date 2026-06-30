@@ -48,9 +48,9 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   String? _replyToCommentId;
   bool _statsLoading = true;
   String? _statsError;
-  List<AppCommentItem>? _commentsSnapshot;
   final Map<String, bool> _optimisticLikedByMe = <String, bool>{};
   final Map<String, int> _optimisticLikesCount = <String, int>{};
+  final List<AppCommentItem> _optimisticComments = [];
 
   void _setCardStatsOverride({
     required double ratingAvg,
@@ -168,35 +168,10 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   void didUpdateWidget(covariant CourseStatsCommentsSheet oldWidget) {
     super.didUpdateWidget(oldWidget);
     if (oldWidget.courseId != widget.courseId) {
-      _commentsSnapshot = null;
       unawaited(_bootstrapForCurrentUser(forceRefresh: true));
     }
   }
 
-  Future<void> _refreshCommentsNow(String userId) async {
-    try {
-      final latest = await ref.read(commentsRepositoryProvider).fetchComments(
-            courseKey: widget.courseId,
-            userId: userId,
-            forceRefresh: true,
-          );
-      if (!mounted) return;
-      final root = latest.where((item) => item.parentId == null || item.parentId!.isEmpty);
-      final commenters = {
-        for (final item in root) item.userId.trim(),
-      }.where((id) => id.isNotEmpty).length;
-      setState(() {
-        _commentsSnapshot = latest;
-        _commentersCount = commenters;
-      });
-      _setCardStatsOverride(
-        ratingAvg: _ratingAvg,
-        ratingCount: _ratingCount,
-        commentsCount: _commentsCount,
-        commentersCount: _commentersCount,
-      );
-    } catch (_) {}
-  }
 
   Future<void> _loadCourseStats({bool forceRefresh = false}) async {
     final baseUrl = getApiBaseUrl();
@@ -471,10 +446,17 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             authorName: authorName,
             text: text,
           );
-      await _refreshCommentsNow(userId);
+      // Optimistic komenti endi serverdan kelgan ma'lumot bilan almashtiriladi
+      if (mounted) {
+        setState(() => _optimisticComments.clear());
+      }
+      ref.invalidate(courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _commentsCount = (_commentsCount - 1).clamp(0, 1 << 30));
+      setState(() {
+        _commentsCount = (_commentsCount - 1).clamp(0, 1 << 30);
+        _optimisticComments.clear();
+      });
       _setCardStatsOverride(
         ratingAvg: _ratingAvg,
         ratingCount: _ratingCount,
@@ -502,10 +484,16 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             authorName: authorName,
             text: text,
           );
-      await _refreshCommentsNow(userId);
+      if (mounted) {
+        setState(() => _optimisticComments.removeWhere((c) => c.parentId == comment.id));
+      }
+      ref.invalidate(courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)));
     } catch (e) {
       if (!mounted) return;
-      setState(() => _commentsCount = (_commentsCount - 1).clamp(0, 1 << 30));
+      setState(() {
+        _commentsCount = (_commentsCount - 1).clamp(0, 1 << 30);
+        _optimisticComments.removeWhere((c) => c.parentId == comment.id);
+      });
       _setCardStatsOverride(
         ratingAvg: _ratingAvg,
         ratingCount: _ratingCount,
@@ -569,10 +557,12 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
           top: 12,
           bottom: 16 + MediaQuery.viewInsetsOf(context).bottom,
         ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
+        child: SingleChildScrollView(
+          physics: const ClampingScrollPhysics(),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
             Center(
               child: Container(
                 width: 44,
@@ -640,7 +630,10 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                 ],
               ),
             const SizedBox(height: 10),
-            Row(
+            Wrap(
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 8,
+              runSpacing: 4,
               children: [
                 Text(
                   _myRating > 0 ? 'Sizning bahongiz:' : 'Baholash:',
@@ -648,27 +641,31 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                         fontWeight: FontWeight.w800,
                       ),
                 ),
-                const SizedBox(width: 8),
-                for (var i = 1; i <= 5; i++)
-                  QuickTap(
-                    enabled: !_feedbackApiMissing,
-                    minSize: 40,
-                    splashColor: Colors.amber.withValues(alpha: 0.18),
-                    highlightColor: Colors.amber.withValues(alpha: 0.1),
-                    onTap: () => unawaited(_onStarTap(i)),
-                    child: Icon(
-                      i <= _myRating ? Icons.star_rounded : Icons.star_border_rounded,
-                      color: i <= _myRating ? Colors.amber.shade700 : Colors.amber.shade600,
-                      size: 24,
-                    ),
-                  ),
-                const SizedBox(width: 4),
-                Text(
-                  '${_ratingAvg.toStringAsFixed(1)} ($_ratingCount)',
-                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                        color: Colors.black54,
-                        fontWeight: FontWeight.w700,
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    for (var i = 1; i <= 5; i++)
+                      QuickTap(
+                        enabled: !_feedbackApiMissing,
+                        minSize: 32,
+                        splashColor: Colors.amber.withValues(alpha: 0.18),
+                        highlightColor: Colors.amber.withValues(alpha: 0.1),
+                        onTap: () => unawaited(_onStarTap(i)),
+                        child: Icon(
+                          i <= _myRating ? Icons.star_rounded : Icons.star_border_rounded,
+                          color: i <= _myRating ? Colors.amber.shade700 : Colors.amber.shade600,
+                          size: 24,
+                        ),
                       ),
+                    const SizedBox(width: 4),
+                    Text(
+                      '${_ratingAvg.toStringAsFixed(1)} ($_ratingCount)',
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                            color: Colors.black54,
+                            fontWeight: FontWeight.w700,
+                          ),
+                    ),
+                  ],
                 ),
               ],
             ),
@@ -697,7 +694,13 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                 loading: () => const Center(child: CircularProgressIndicator()),
                 error: (_, _) => const Center(child: Text('Izohlarni yuklashda xatolik.')),
                 data: (comments) {
-                  final visibleComments = _commentsSnapshot ?? comments;
+                  // Optimistic komentilarni server ro'yxatiga qo'shish (dublikatsiz)
+                  final serverIds = {for (final c in comments) c.id};
+                  final merged = [
+                    ...comments,
+                    ..._optimisticComments.where((c) => !serverIds.contains(c.id)),
+                  ];
+                  final visibleComments = merged;
                   final rootComments = visibleComments.where((item) => item.parentId == null || item.parentId!.isEmpty).toList(growable: true)
                     ..sort((a, b) => b.createdAt.compareTo(a.createdAt));
                   final repliesByParent = <String, List<AppCommentItem>>{};
@@ -820,7 +823,24 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                               final authorName = auth.name.trim().isEmpty
                                                   ? 'Foydalanuvchi'
                                                   : auth.name.trim();
-                                              setState(() => _commentsCount += 1);
+                                              // Optimistic UI: javob darhol ko'rsatish
+                                              final replyOptId = 'opt_${DateTime.now().millisecondsSinceEpoch}';
+                                              setState(() {
+                                                _commentsCount += 1;
+                                                _optimisticComments.add(AppCommentItem(
+                                                  id: replyOptId,
+                                                  courseKey: widget.courseId,
+                                                  userId: userId,
+                                                  authorName: authorName,
+                                                  text: text,
+                                                  parentId: c.id,
+                                                  repliesCount: 0,
+                                                  likesCount: 0,
+                                                  likedByMe: false,
+                                                  likedByAdmin: false,
+                                                  createdAt: DateTime.now(),
+                                                ));
+                                              });
                                               _setCardStatsOverride(
                                                 ratingAvg: _ratingAvg,
                                                 ratingCount: _ratingCount,
@@ -921,7 +941,24 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                                 ? 'Foydalanuvchi'
                                 : auth.name.trim();
                             _controller.clear();
-                            setState(() => _commentsCount += 1);
+                            // Optimistic UI: komenti darhol ko'rsatish
+                            final optimisticId = 'opt_${DateTime.now().millisecondsSinceEpoch}';
+                            setState(() {
+                              _commentsCount += 1;
+                              _optimisticComments.add(AppCommentItem(
+                                id: optimisticId,
+                                courseKey: widget.courseId,
+                                userId: userId,
+                                authorName: authorName,
+                                text: text,
+                                parentId: null,
+                                repliesCount: 0,
+                                likesCount: 0,
+                                likedByMe: false,
+                                likedByAdmin: false,
+                                createdAt: DateTime.now(),
+                              ));
+                            });
                             _setCardStatsOverride(
                               ratingAvg: _ratingAvg,
                               ratingCount: _ratingCount,
@@ -943,11 +980,12 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                   ),
                 ),
               ],
-            ),
-          ],
-        ),
-      ),
-    );
+            ),   // Row end
+          ],     // Column.children end
+        ),       // Column end
+      ),         // SingleChildScrollView end
+    ),           // Padding end
+  );             // SafeArea end
   }
 }
 
