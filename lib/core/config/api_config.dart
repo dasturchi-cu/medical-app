@@ -6,9 +6,9 @@ String getApiBaseUrl() {
   const defaultProd =
       String.fromEnvironment(
         'API_BASE_URL_DEFAULT',
-        defaultValue: 'https://neuroscience-appbackend-production.up.railway.app',
+        defaultValue: 'http://84.46.243.149',
       );
-  // Android: avvalo `API_BASE_URL_LAN` (masalan lokal LAN yoki Railway), bo‘lmasa xavfsiz production fallback.
+  // Android: avvalo `API_BASE_URL_LAN` (masalan lokal LAN), bo‘lmasa VPS production fallback.
   if (Platform.isAndroid) {
     const lanDefault = String.fromEnvironment('API_BASE_URL_LAN', defaultValue: '');
     final lan = lanDefault.trim();

@@ -24,6 +24,7 @@ import '../../../../core/state/books_state.dart';
 import '../../../../core/state/course_stats_state.dart';
 import '../../../../core/state/notifications_state.dart';
 import '../../../../core/state/progress_controller.dart';
+import '../../../../core/state/purchase_controller.dart';
 import '../../../../core/state/slides_state.dart';
 import '../../../../core/theme/app_palette.dart';
 import '../../../../core/theme/design_system.dart';
@@ -185,6 +186,17 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         return;
       }
       _lastResumeSyncAt = now;
+      
+      final authState = ref.read(authControllerProvider);
+      if (authState.userId != null) {
+        unawaited(
+          ref
+              .read(purchaseControllerProvider.notifier)
+              .syncFromBackend(authState.userId!, force: true)
+              .catchError((_) {}),
+        );
+      }
+
       unawaited(
         _syncRemoteVideoProgress().then((_) {
           if (mounted) setState(() {});
@@ -194,6 +206,16 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
   }
 
   Future<void> _refreshCatalog() async {
+    final authState = ref.read(authControllerProvider);
+    if (authState.userId != null) {
+      unawaited(
+        ref
+            .read(purchaseControllerProvider.notifier)
+            .syncFromBackend(authState.userId!, force: true)
+            .catchError((_) {}),
+      );
+    }
+
     if (HomeAggregateConfig.enabled) {
       final ok = await HomeAggregateService.tryFetchAndSeed(ref);
       if (ok) {

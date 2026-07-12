@@ -61,3 +61,7 @@ scripts/railway-admin.env
 scripts/tools/
 backups/
 !**/.env.example
+
+# Temporary and local tool directories
+scratch/
+.cursor/

@@ -30,8 +30,8 @@ services:
 
   admin_panel:
     build:
-      context: ./backend/admin_panel
-      dockerfile: Dockerfile
+      context: ./
+      dockerfile: backend/admin_panel/Dockerfile
     container_name: neuroscience_admin
     restart: always
     env_file:
@@ -47,8 +47,7 @@ services:
     container_name: neuroscience_nginx
     restart: always
     ports:
-      - "80:80"
-      - "443:443"
+      - "8080:80"
     volumes:
       - ./nginx.conf:/etc/nginx/nginx.conf:ro
       - /etc/ssl/certs:/etc/ssl/certs:ro

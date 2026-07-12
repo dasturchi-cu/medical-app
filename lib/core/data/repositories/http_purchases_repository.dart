@@ -7,6 +7,7 @@ import 'package:supabase/supabase.dart';
 
 import '../../http_request_timeouts.dart';
 import '../models/purchase_models.dart';
+import '../../services/mobile_api_auth.dart';
 import 'purchases_repository.dart';
 
 class HttpPurchasesRepository implements PurchasesRepository {
@@ -99,11 +100,17 @@ class HttpPurchasesRepository implements PurchasesRepository {
   }
 
   Future<List<UserEntitlementItem>> _fetchUserEntitlementsOnce(String userId) async {
-    final uri = Uri.parse('$baseUrl/api/v1/purchases/user?user_id=$userId');
+    final token = MobileApiAuth.storedUser?.sessionToken.trim() ?? '';
+    final uri = Uri.parse('$baseUrl/api/v1/purchases/user').replace(
+      queryParameters: {
+        'user_id': userId,
+        if (token.isNotEmpty) 'session_token': token,
+      },
+    );
     debugPrint('[API][purchases.entitlements][request] $uri');
     try {
       final response = await _client
-          .get(uri, headers: const {'Accept': 'application/json'})
+          .get(uri, headers: MobileApiAuth.headers(extra: const {'Accept': 'application/json'}))
           .timeout(purchasesFetchTimeoutForBaseUrl(baseUrl));
       debugPrint('[API][purchases.entitlements][response] status=${response.statusCode}');
       if (response.statusCode < 200 || response.statusCode >= 300) {

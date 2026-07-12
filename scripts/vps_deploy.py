@@ -4,8 +4,8 @@ import paramiko
 
 vps_ip = "84.46.243.149"
 vps_user = "root"
-vps_pass = "Neuroscience_vps_2026!"
-local_root = r"c:\Users\User\medical_app"
+vps_pass = "muhammad9085"
+local_root = os.path.dirname(os.path.dirname(os.path.abspath(__file__)))
 remote_root = "/app/neuroscience"
 
 print(f"Connecting to {vps_user}@{vps_ip}...")
@@ -35,6 +35,7 @@ remote_mkdir(sftp, remote_root)
 remote_mkdir(sftp, f"{remote_root}/scripts")
 remote_mkdir(sftp, f"{remote_root}/backend")
 remote_mkdir(sftp, f"{remote_root}/backend/fastapi")
+remote_mkdir(sftp, f"{remote_root}/backend/admin_panel")
 
 # Files to upload from the root
 root_files = ["docker-compose.yml", "nginx.conf", "redis.conf", ".env.production"]
@@ -57,8 +58,8 @@ def upload_dir(local_dir, remote_dir):
     remote_mkdir(sftp, remote_dir)
     for entry in os.scandir(local_dir):
         if entry.is_dir():
-            # Skip python virtual environments, cache, and git folders
-            if entry.name in {".freshvenv", ".testvenv", "__pycache__", ".git"}:
+            # Skip python virtual environments, cache, node_modules, and git folders
+            if entry.name in {".freshvenv", ".testvenv", "__pycache__", ".git", "node_modules", ".next", "build", ".dart_tool"}:
                 continue
             upload_dir(entry.path, f"{remote_dir}/{entry.name}")
         elif entry.is_file():
@@ -67,7 +68,7 @@ def upload_dir(local_dir, remote_dir):
                 continue
             # Skip local env files except requirements.txt or config if needed
             # (we already uploaded .env.production)
-            if entry.name == ".env":
+            if entry.name == ".env" or entry.name == ".env.local":
                 continue
             
             local_file_path = entry.path
@@ -78,21 +79,34 @@ def upload_dir(local_dir, remote_dir):
 print("Uploading FastAPI backend codebase...")
 upload_dir(os.path.join(local_root, "backend", "fastapi"), f"{remote_root}/backend/fastapi")
 
+print("Uploading Next.js admin_panel codebase...")
+upload_dir(os.path.join(local_root, "backend", "admin_panel"), f"{remote_root}/backend/admin_panel")
+
 sftp.close()
 print("All files uploaded successfully!")
 
 # Run deploy.sh remotely
 print("Executing deploy.sh on the VPS...")
-ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(f"chmod +x {remote_root}/scripts/deploy.sh && {remote_root}/scripts/deploy.sh")
+ssh_stdin, ssh_stdout, ssh_stderr = ssh.exec_command(f"sed -i -e 's/\\r$//' {remote_root}/scripts/*.sh && chmod +x {remote_root}/scripts/deploy.sh && {remote_root}/scripts/deploy.sh")
 
 # Stream output in real-time
 for line in ssh_stdout:
-    print(f"[VPS] {line.strip()}")
+    try:
+        encoding = sys.stdout.encoding or 'utf-8'
+        safe_line = line.encode(encoding, errors='replace').decode(encoding, errors='replace')
+        print(f"[VPS] {safe_line.strip()}")
+    except Exception:
+        print(f"[VPS] {line.encode('ascii', 'ignore').decode('ascii').strip()}")
 
 # Print errors if any
-err = ssh_stderr.read().decode().strip()
-if err:
-    print(f"[VPS ERROR] {err}")
+try:
+    err = ssh_stderr.read().decode('utf-8', errors='replace').strip()
+    if err:
+        encoding = sys.stdout.encoding or 'utf-8'
+        safe_err = err.encode(encoding, errors='replace').decode(encoding, errors='replace')
+        print(f"[VPS ERROR] {safe_err}")
+except Exception as e:
+    print(f"Failed to read stderr: {e}")
 
 ssh.close()
 print("Deployment process finished!")
