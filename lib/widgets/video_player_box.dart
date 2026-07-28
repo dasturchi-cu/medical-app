@@ -375,10 +375,24 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       await _controller!.setPlaybackSpeed(_speed);
       final dur = _controller!.value.duration.inSeconds;
       _markPlayerReady(durationSec: dur);
-      await _applyResumePosition(_pendingInitialSeekSec ?? 0);
+
+      int seekSec = _pendingInitialSeekSec ?? 0;
+      if (seekSec <= 0) {
+        final key = widget.positionStorageKey?.trim() ?? '';
+        if (key.isNotEmpty) {
+          seekSec = await VideoLessonPositionStore.load(key);
+        }
+      }
+      if (seekSec <= 0 && widget.initialWatchedSec > 0) {
+        seekSec = widget.initialWatchedSec;
+      }
+      if (seekSec > 0 && dur > 0 && seekSec < dur - 3) {
+        await _applyResumePosition(seekSec);
+      }
       _pendingInitialSeekSec = null;
       _nativeInitFailed = false;
     } catch (e) {
+
       _nativeInitFailed = true;
       _isInitialLoading = false;
       _VideoLog.error(e);

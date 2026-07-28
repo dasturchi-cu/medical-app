@@ -240,6 +240,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
       'watched_sec': sec,
       'completed': false,
       'playback_delta_sec': pendingDelta,
+      'local_date': TashkentTime.localDateKey(),
     });
 
     debugPrint(
@@ -701,6 +702,7 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
           'watched_sec': sec,
           'completed': completed,
           'playback_delta_sec': pendingDelta,
+          'local_date': TashkentTime.localDateKey(),
         }),
       );
       if (response.statusCode >= 200 && response.statusCode < 300) {
@@ -710,9 +712,11 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
         debugPrint(
           '[VIDEO_PROGRESS] save failed status=${response.statusCode} body=${response.body}',
         );
+        _pendingPlaybackDeltaSec += pendingDelta;
       }
     } catch (error) {
       debugPrint('[VIDEO_PROGRESS] save failed $error');
+      _pendingPlaybackDeltaSec += pendingDelta;
     } finally {
       _syncingWatch = false;
     }

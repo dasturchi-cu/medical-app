@@ -10,6 +10,22 @@ services:
         value: production
       - key: FRONTEND_ORIGIN
         sync: false
+      - key: CORS_ALLOW_ORIGINS
+        sync: false
+      - key: DATABASE_URL
+        sync: false
+      - key: R2_ACCOUNT_ID
+        sync: false
+      - key: R2_BUCKET_NAME
+        sync: false
+      - key: R2_ENDPOINT
+        sync: false
+      - key: R2_PUBLIC_BASE_URL
+        sync: false
+      - key: R2_ACCESS_KEY_ID
+        sync: false
+      - key: R2_SECRET_ACCESS_KEY
+        sync: false
       - key: SUPABASE_URL
         sync: false
       - key: SUPABASE_SERVICE_ROLE_KEY
@@ -20,3 +36,4 @@ services:
         sync: false
       - key: ADMIN_CONTACT_TELEGRAM
         sync: false
+
