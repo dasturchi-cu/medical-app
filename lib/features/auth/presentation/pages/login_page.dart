@@ -45,9 +45,12 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() => _loading = true);
 
     final auth = ref.read(authControllerProvider.notifier);
-    final name = _nameController.text;
-    final phone = _phoneController.text;
-    final password = _passwordController.text;
+    final name = _nameController.text.trim();
+    var phone = _phoneController.text.replaceAll(RegExp(r'\D'), '');
+    if (phone.length == 9) {
+      phone = '998$phone';
+    }
+    final password = _passwordController.text.trim();
     final error = await auth.login(
       phone: phone,
       password: password,
@@ -58,11 +61,21 @@ class _LoginPageState extends ConsumerState<LoginPage> {
     setState(() => _loading = false);
 
     if (error != null) {
-      ScaffoldMessenger.of(context).showSnackBar(SnackBar(content: Text(error)));
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(error),
+          backgroundColor: Colors.red,
+        ),
+      );
       return;
     }
-    context.pop();
+    if (context.canPop()) {
+      context.pop();
+    } else {
+      context.go(AppRoutes.home);
+    }
   }
+
 
   @override
   Widget build(BuildContext context) {
@@ -150,12 +163,16 @@ class _LoginPageState extends ConsumerState<LoginPage> {
                         prefixIcon: Icon(Icons.phone_outlined),
                       ),
                       validator: (value) {
-                        final digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
+                        var digits = (value ?? '').replaceAll(RegExp(r'\D'), '');
+                        if (digits.length == 9) {
+                          digits = '998$digits';
+                        }
                         if (digits.length != 12 || !digits.startsWith('998')) {
                           return 'Telefon raqamni to‘g‘ri kiriting';
                         }
                         return null;
                       },
+
                     ),
                     const SizedBox(height: 12),
                     TextFormField(
