@@ -313,10 +313,16 @@ class CatalogService {
         }
         return;
       } catch (e) {
-        lastLoadError = e is TimeoutException
-            ? 'Server javob bermadi (vaqt tugadi). Hosting uxlagan bo\'lishi yoki tarmoq sekin — ilovani qayta ishga tushiring yoki Wi‑Fi tekshiring.'
-            : e.toString();
+        if (_courses.isNotEmpty) {
+          lastLoadOk = true;
+          lastLoadError = null;
+        } else {
+          lastLoadError = e is TimeoutException
+              ? 'Server javob bermadi (vaqt tugadi). Hosting uxlagan bo\'lishi yoki tarmoq sekin — ilovani qayta ishga tushiring yoki Wi‑Fi tekshiring.'
+              : e.toString();
+        }
         debugPrint('[API][mobile.courses][error] $e');
+
         final seeded = await _tryBootstrapFromHomeBundle(baseUrl);
         if (seeded) return;
         if (i == attempts - 1) {

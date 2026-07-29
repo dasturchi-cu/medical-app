@@ -474,9 +474,12 @@ Future<String?> getFcmTokenForLogin() async {
     if (settings.authorizationStatus == AuthorizationStatus.denied) {
       return null;
     }
-    return FirebaseMessaging.instance.getToken();
+    return await FirebaseMessaging.instance
+        .getToken()
+        .timeout(const Duration(milliseconds: 1500), onTimeout: () => null);
   } catch (e) {
     debugPrint('getFcmTokenForLogin: $e');
     return null;
   }
 }
+
