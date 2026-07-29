@@ -190,9 +190,9 @@ class HttpCommentsRepository implements CommentsRepository {
         .timeout(_timeout);
     debugPrint('[API][comments.like][response] status=${response.statusCode}');
     if (response.statusCode < 200 || response.statusCode >= 300) {
-      _invalidateCourseComments(courseKey);
       throw Exception(_errorMessage('Like amalida xatolik (${response.statusCode}).', response.body));
     }
+
   }
 
   @override
