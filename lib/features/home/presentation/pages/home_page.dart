@@ -248,9 +248,21 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
       ref.read(progressControllerProvider.notifier).hydrateFromLocal(cached);
       setState(() {});
     }
+    final authState = ref.read(authControllerProvider);
+    final uid = authState.userId;
+    if (uid != null && uid.isNotEmpty) {
+      unawaited(
+        ref
+            .read(purchaseControllerProvider.notifier)
+            .syncFromBackend(uid, force: true)
+            .catchError((_) {}),
+      );
+      ref.read(purchaseControllerProvider.notifier).bindRealtime(uid);
+    }
     await _syncRemoteVideoProgress();
     if (mounted) setState(() {});
   }
+
 
   Future<void> _warmHomeData() async {
     if (!mounted) return;
