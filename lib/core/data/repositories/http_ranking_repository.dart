@@ -161,6 +161,9 @@ class HttpRankingRepository implements RankingRepository {
       'limit': '$limit',
       'period': period,
     };
+    if (scope == RankingScope.daily) {
+      query['local_date'] = TashkentTime.localDateKey();
+    }
     final uid = (currentUserId ?? '').trim();
     if (uid.isNotEmpty) {
       query['user_id'] = uid;
@@ -213,7 +216,10 @@ class HttpRankingRepository implements RankingRepository {
     if (baseUrl.isEmpty) {
       throw Exception('API manzili topilmadi (pomodoro ranking).');
     }
-    final query = <String, String>{'limit': '$limit'};
+    final query = <String, String>{
+      'limit': '$limit',
+      'local_date': TashkentTime.localDateKey(),
+    };
     final uid = (currentUserId ?? '').trim();
     if (uid.isNotEmpty) {
       query['user_id'] = uid;

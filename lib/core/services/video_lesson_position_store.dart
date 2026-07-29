@@ -23,9 +23,15 @@ class VideoLessonPositionStore {
     if (storageKey.trim().isEmpty || sec <= 0) return;
     try {
       final prefs = await SharedPreferences.getInstance();
-      await prefs.setInt('$_prefix|$storageKey', sec);
+      final fullKey = '$_prefix|$storageKey';
+      final existing = prefs.getInt(fullKey) ?? 0;
+      // Agar avval saqlangan joy 10 soniyadan ko'p bo'lsa va yangi sec < 5 bo'lsa,
+      // video endi boshlangandagi 1-2 soniya eski o'rnini o'chirib yubormasin!
+      if (sec < 5 && existing > 10) return;
+      await prefs.setInt(fullKey, sec);
     } catch (e, st) {
       debugPrint('[VideoLessonPositionStore.save] $e\n$st');
     }
   }
 }
+

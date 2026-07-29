@@ -15,6 +15,19 @@ class TashkentTime {
   /// Keyingi mahalliy 00:00 gacha qolgan vaqt.
   static Duration untilNextMidnight([DateTime? at]) {
     final t = at ?? now();
+    final next = DateTime.utc(t.year, t.month, t.day + 1);
+    return next.difference(t);
+  }
+
+  /// Device local date key `YYYY-MM-DD`.
+  static String localDateKey([DateTime? at]) {
+    final t = at ?? DateTime.now();
+    return '${t.year}-${t.month.toString().padLeft(2, '0')}-${t.day.toString().padLeft(2, '0')}';
+  }
+
+  /// Device local next midnight delay.
+  static Duration localUntilNextMidnight([DateTime? at]) {
+    final t = at ?? DateTime.now();
     final next = DateTime(t.year, t.month, t.day + 1);
     return next.difference(t);
   }

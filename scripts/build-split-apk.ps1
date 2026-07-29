@@ -6,7 +6,8 @@
 
 $ErrorActionPreference = "Stop"
 $Root = Split-Path $PSScriptRoot -Parent
-$ApiBaseUrl = if ($env:API_BASE_URL) { $env:API_BASE_URL } else { "http://84.46.243.149" }
+$ApiBaseUrl = if ($env:API_BASE_URL) { $env:API_BASE_URL } else { "https://medical-app-backend-10jh.onrender.com" }
+
 
 Set-Location $Root
 Write-Host "Building split APKs in $Root ..." -ForegroundColor Cyan

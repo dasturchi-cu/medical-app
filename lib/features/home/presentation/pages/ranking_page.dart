@@ -130,7 +130,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
   void _scheduleMidnightRefresh() {
     _midnightRefreshTimer?.cancel();
     if (!mounted) return;
-    final wait = TashkentTime.untilNextMidnight();
+    final wait = TashkentTime.localUntilNextMidnight();
     _midnightRefreshTimer = Timer(wait, () {
       if (!mounted || _realtimeDisposed) return;
       ref.read(rankingRepositoryProvider).invalidateVideoRankingCache();
@@ -221,7 +221,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
-      final today = TashkentTime.dateKey();
+      final today = TashkentTime.localDateKey();
       if (_lastDailyLocalDate != null && _lastDailyLocalDate != today) {
         ref.read(rankingRepositoryProvider).invalidateVideoRankingCache(scope: RankingScope.daily);
         ref.read(rankingRepositoryProvider).invalidatePomodoroRankingCache();
@@ -272,7 +272,7 @@ class _RankingPageState extends ConsumerState<RankingPage>
         .subscribe();
   }
 
-  String _todayLocalDateKey() => TashkentTime.dateKey();
+  String _todayLocalDateKey() => TashkentTime.localDateKey();
 
   Future<void> _loadDaily({bool force = false}) async {
     final today = _todayLocalDateKey();

@@ -1004,6 +1004,9 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       if (yc.value.playerState == PlayerState.playing) {
         yc.pause();
         _pendingPlay = false;
+        _snapshotPlayback();
+        _persistLocalPosition();
+        _emitProgressFromCurrent(force: true);
         if (mounted) setState(() {});
         return;
       }
@@ -1016,6 +1019,9 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     if (c == null || !c.value.isInitialized) return;
     if (c.value.isPlaying) {
       c.pause();
+      _snapshotPlayback();
+      _persistLocalPosition();
+      _emitProgressFromCurrent(force: true);
       if (mounted) setState(() {});
       return;
     }
