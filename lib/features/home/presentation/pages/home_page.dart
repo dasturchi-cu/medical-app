@@ -19,7 +19,9 @@ import '../../../../core/services/course_progress_remote_sync.dart';
 import '../../../../core/services/home_feeds_disk_cache.dart';
 import '../../../../core/services/home_aggregate_service.dart';
 import '../../../../core/state/app_state_providers.dart';
+import '../../../../core/state/auth_controller.dart';
 import '../../../../core/state/banners_state.dart';
+
 import '../../../../core/state/books_state.dart';
 import '../../../../core/state/course_stats_state.dart';
 import '../../../../core/state/notifications_state.dart';

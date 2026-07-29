@@ -14,7 +14,16 @@ pluginManagement {
         google()
         mavenCentral()
         gradlePluginPortal()
+        maven {
+            url = uri("http://plugins.gradle.org/m2/")
+            isAllowInsecureProtocol = true
+        }
+        maven {
+            url = uri("http://repo.maven.apache.org/maven2/")
+            isAllowInsecureProtocol = true
+        }
     }
+
 }
 
 plugins {

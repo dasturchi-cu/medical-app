@@ -20,6 +20,8 @@ import '../../../../core/services/video_lesson_position_store.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/app_state_providers.dart';
 import '../../../../core/state/auth_controller.dart';
+import '../../../../core/utils/tashkent_time.dart';
+
 import '../../../../core/state/lesson_assets_state.dart';
 import '../../../../core/state/lesson_slides_state.dart';
 import '../../../../core/data/repositories/course_repository.dart';
@@ -111,11 +113,13 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     _videoImmersiveCtrl?.state = immersive;
   }
 
-  String? _positionStorageKey() {
-    final userId = (_cachedUserId ?? '').trim();
-    if (userId.isEmpty) return null;
-    return '$userId|${widget.lessonId}';
+  String _positionStorageKey() {
+    final authState = ref.read(authControllerProvider);
+    final userId = (authState.userId ?? _cachedUserId ?? '').trim();
+    final uid = userId.isNotEmpty ? userId : 'guest';
+    return '$uid|${widget.lessonId}';
   }
+
 
   Widget _pinnedVideoPlayer({
     required double height,
@@ -230,8 +234,13 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     if (courseId == null) return;
 
     final sec = _liveWatchSec > 0 ? _liveWatchSec : _initialWatchedSec;
+    final storageKey = _positionStorageKey();
+    if (sec > 0) {
+      unawaited(VideoLessonPositionStore.save(storageKey, sec));
+    }
     final delta = _pendingPlaybackDeltaSec > 0 ? _pendingPlaybackDeltaSec : (sec > 0 ? 1 : 0);
     if (sec <= 0 && delta <= 0) return;
+
 
     final pendingDelta = delta;
     final body = jsonEncode({
