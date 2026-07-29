@@ -6,8 +6,9 @@ String getApiBaseUrl() {
   const defaultProd =
       String.fromEnvironment(
         'API_BASE_URL_DEFAULT',
-        defaultValue: 'http://84.46.243.149',
+        defaultValue: 'https://medical-app-backend-10jh.onrender.com',
       );
+
   // Android: avvalo `API_BASE_URL_LAN` (masalan lokal LAN), bo‘lmasa VPS production fallback.
   if (Platform.isAndroid) {
     const lanDefault = String.fromEnvironment('API_BASE_URL_LAN', defaultValue: '');
