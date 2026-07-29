@@ -45,33 +45,28 @@ class TelegramService {
     if (recipient.isEmpty) recipient = _adminUsername;
 
     final encoded = Uri.encodeComponent(message);
-    final appUri = Uri.parse('tg://resolve?domain=$recipient&text=$encoded');
-    final webUri = Uri.parse('https://t.me/$recipient?text=$encoded');
+    final tmeUri = Uri.parse('https://t.me/$recipient?text=$encoded');
+    final tgUri = Uri.parse('tg://msg?text=$encoded&to=@$recipient');
 
     try {
-      if (await launchUrl(appUri, mode: LaunchMode.externalApplication)) {
+      if (await launchUrl(tmeUri, mode: LaunchMode.externalApplication)) {
         return true;
       }
     } catch (_) {}
 
     try {
-      if (await launchUrl(appUri, mode: LaunchMode.platformDefault)) {
+      if (await launchUrl(tgUri, mode: LaunchMode.externalNonBrowserApplication)) {
         return true;
       }
     } catch (_) {}
 
     try {
-      if (await launchUrl(webUri, mode: LaunchMode.externalApplication)) {
-        return true;
-      }
-    } catch (_) {}
-
-    try {
-      return await launchUrl(webUri, mode: LaunchMode.platformDefault);
+      return await launchUrl(tmeUri, mode: LaunchMode.platformDefault);
     } catch (_) {
       return false;
     }
   }
+
 
   Future<bool> _launchExternalHttpUrl(Uri uri) async {
     try {
