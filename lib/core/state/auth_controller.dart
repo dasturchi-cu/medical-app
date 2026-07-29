@@ -141,43 +141,29 @@ class AuthController extends Notifier<AuthState> {
 
   Future<void> _verifyUserAccess(String userId) async {
     final status = await ref.read(authServiceProvider).checkUserAccess(userId);
-    if (status == null) {
-      _inactiveSessionStreak = 0;
-      return;
-    }
+    if (status == null) return;
+
     if (status.isBlocked) {
-      _inactiveSessionStreak = 0;
       await _applyForcedLogout(
         isBlocked: true,
         blockReason: "Siz admin tomonidan bloklangansiz. Admin: @${status.adminContact}",
       );
       return;
     }
-    if (status.sessionActive) {
-      _inactiveSessionStreak = 0;
-      await _trackAppOpenIfNeeded(userId);
-      final now = DateTime.now();
-      final shouldSyncProfile = _lastProfileSyncAt == null ||
-          now.difference(_lastProfileSyncAt!) >= _profileSyncMinInterval;
-      if (!shouldSyncProfile) return;
 
-      final synced = await ref.read(authServiceProvider).refreshProfileFromServer();
-      _lastProfileSyncAt = DateTime.now();
-      if (synced != null) {
-        state = _fromUser(synced);
-      }
-      return;
+    await _trackAppOpenIfNeeded(userId);
+    final now = DateTime.now();
+    final shouldSyncProfile = _lastProfileSyncAt == null ||
+        now.difference(_lastProfileSyncAt!) >= _profileSyncMinInterval;
+    if (!shouldSyncProfile) return;
+
+    final synced = await ref.read(authServiceProvider).refreshProfileFromServer();
+    _lastProfileSyncAt = DateTime.now();
+    if (synced != null) {
+      state = _fromUser(synced);
     }
-    _inactiveSessionStreak++;
-    // Bir martalik server vaqtincha javobi uchun darhol chiqarib yubormaymiz.
-    if (_inactiveSessionStreak < 12) return;
-
-    _inactiveSessionStreak = 0;
-    await _applyForcedLogout(
-      isBlocked: false,
-      blockReason: "Sessiya tugatildi. Qaytadan tizimga kiring.",
-    );
   }
+
 
   Future<void> _applyForcedLogout({required bool isBlocked, required String blockReason}) async {
     await ref.read(authServiceProvider).signOut();
