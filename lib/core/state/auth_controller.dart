@@ -151,6 +151,14 @@ class AuthController extends Notifier<AuthState> {
       return;
     }
 
+    if (!status.sessionActive) {
+      await _applyForcedLogout(
+        isBlocked: false,
+        blockReason: "Ushbu hisob bilan boshqa telefondan kirildi. Bir hisobdan faqat 1 ta qurilmada foydalanish mumkin.",
+      );
+      return;
+    }
+
     await _trackAppOpenIfNeeded(userId);
     final now = DateTime.now();
     final shouldSyncProfile = _lastProfileSyncAt == null ||
@@ -163,6 +171,7 @@ class AuthController extends Notifier<AuthState> {
       state = _fromUser(synced);
     }
   }
+
 
 
   Future<void> _applyForcedLogout({required bool isBlocked, required String blockReason}) async {
