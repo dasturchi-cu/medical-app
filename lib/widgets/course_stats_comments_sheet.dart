@@ -521,8 +521,10 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
     });
 
     final auth = ref.watch(authControllerProvider);
-    final userId = auth.userId ?? '';
+    final rawUserId = (auth.userId ?? '').trim();
+    final userId = rawUserId.isNotEmpty ? rawUserId : 'guest_${widget.courseId}';
     final hasCourseId = widget.courseId.trim().isNotEmpty;
+
 
     if (!hasCourseId) {
       return SafeArea(
