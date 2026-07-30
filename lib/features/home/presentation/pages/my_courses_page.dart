@@ -42,8 +42,11 @@ class _MyCoursesPageState extends ConsumerState<MyCoursesPage> {
 
     final all = repo.getCourses();
     final enrolled = all.where((c) {
-      return purchased.isPurchased(c.id);
+      final p = progress.byCourseId[c.id];
+      return purchased.isPurchased(c.id) || (p?.enrolled ?? false) || c.progress > 0;
     }).toList();
+
+
 
     return SafeArea(
       child: CustomScrollView(

@@ -886,8 +886,11 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     }
     final watchedSec = c.value.position.inSeconds;
     if (!_userSeeking && _pendingInitialSeekSec == null) {
-      _lastKnownPositionSec = watchedSec;
+      if (watchedSec > 0 || _initialResumeDone) {
+        _lastKnownPositionSec = watchedSec;
+      }
     }
+
     if (watchedSec >= 1 && !_firstProgressReported) {
       _emitProgressFromCurrent(force: false);
     }

@@ -27,14 +27,14 @@ class VideoLessonPositionStore {
       final prefs = await SharedPreferences.getInstance();
       final fullKey = '$_prefix|$storageKey';
       final existing = prefs.getInt(fullKey) ?? 0;
-      if (sec < 5 && existing > 10) return;
+      if (sec <= 3 && existing > 5) return;
       await prefs.setInt(fullKey, sec);
 
       final lessonId = storageKey.contains('|') ? storageKey.split('|').last : storageKey;
       if (lessonId.isNotEmpty) {
         final fallbackKey = '$_prefix|$lessonId';
         final existingFallback = prefs.getInt(fallbackKey) ?? 0;
-        if (!(sec < 5 && existingFallback > 10)) {
+        if (!(sec <= 3 && existingFallback > 5)) {
           await prefs.setInt(fallbackKey, sec);
         }
       }
@@ -42,6 +42,7 @@ class VideoLessonPositionStore {
       debugPrint('[VideoLessonPositionStore.save] $e\n$st');
     }
   }
+
 
 }
 
