@@ -11,8 +11,10 @@ class VideoLessonPositionStore {
     if (storageKey.trim().isEmpty) return 0;
     try {
       final prefs = await SharedPreferences.getInstance();
-      final raw = prefs.getInt('$_prefix|$storageKey');
-      return raw ?? 0;
+      final userVal = prefs.getInt('$_prefix|$storageKey') ?? 0;
+      final lessonId = storageKey.contains('|') ? storageKey.split('|').last : storageKey;
+      final fallbackVal = prefs.getInt('$_prefix|$lessonId') ?? 0;
+      return userVal > fallbackVal ? userVal : fallbackVal;
     } catch (e, st) {
       debugPrint('[VideoLessonPositionStore.load] $e\n$st');
       return 0;
@@ -25,13 +27,21 @@ class VideoLessonPositionStore {
       final prefs = await SharedPreferences.getInstance();
       final fullKey = '$_prefix|$storageKey';
       final existing = prefs.getInt(fullKey) ?? 0;
-      // Agar avval saqlangan joy 10 soniyadan ko'p bo'lsa va yangi sec < 5 bo'lsa,
-      // video endi boshlangandagi 1-2 soniya eski o'rnini o'chirib yubormasin!
       if (sec < 5 && existing > 10) return;
       await prefs.setInt(fullKey, sec);
+
+      final lessonId = storageKey.contains('|') ? storageKey.split('|').last : storageKey;
+      if (lessonId.isNotEmpty) {
+        final fallbackKey = '$_prefix|$lessonId';
+        final existingFallback = prefs.getInt(fallbackKey) ?? 0;
+        if (!(sec < 5 && existingFallback > 10)) {
+          await prefs.setInt(fallbackKey, sec);
+        }
+      }
     } catch (e, st) {
       debugPrint('[VideoLessonPositionStore.save] $e\n$st');
     }
   }
+
 }
 

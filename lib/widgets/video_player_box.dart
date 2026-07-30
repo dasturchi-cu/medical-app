@@ -532,10 +532,12 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   void _persistLocalPosition() {
     final key = widget.positionStorageKey?.trim() ?? '';
     if (key.isEmpty) return;
-    final sec = _lastKnownPositionSec;
+    final current = _currentPositionSec();
+    final sec = current > 0 ? current : _lastKnownPositionSec;
     if (sec <= 0) return;
     unawaited(VideoLessonPositionStore.save(key, sec));
   }
+
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
