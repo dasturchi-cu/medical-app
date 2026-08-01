@@ -8,6 +8,7 @@ import 'package:http/http.dart' as http;
 import '../core/config/api_config.dart';
 import '../core/data/models/comment_models.dart';
 import '../core/services/course_stats_cache.dart';
+import '../core/services/guest_identity.dart';
 import '../core/state/auth_controller.dart';
 import '../core/di/providers.dart';
 import '../core/state/comments_state.dart';
@@ -103,6 +104,14 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
 
   String _ratingPhone() => (ref.read(authControllerProvider).email ?? '').trim();
 
+  /// Logged-in users use their real id; everyone else uses a stable
+  /// per-device guest id (never empty, never shared across devices/courses)
+  /// so ratings/comments/likes work — and stay consistent — without login.
+  String _effectiveUserId() {
+    final raw = (ref.read(authControllerProvider).userId ?? '').trim();
+    return raw.isNotEmpty ? raw : GuestIdentity.id;
+  }
+
   Future<int> _resolveMyRating({
     required String userId,
     int? fromServer,
@@ -128,7 +137,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   }
 
   Future<void> _bootstrapForCurrentUser({bool forceRefresh = false}) async {
-    final userId = (ref.read(authControllerProvider).userId ?? '').trim();
+    final userId = _effectiveUserId();
     if (!forceRefresh && _statsUserId == userId && !_statsLoading) {
       await _hydrateMyRating();
       return;
@@ -139,7 +148,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   }
 
   Future<void> _hydrateMyRating() async {
-    final userId = (ref.read(authControllerProvider).userId ?? '').trim();
+    final userId = _effectiveUserId();
     if (userId.isEmpty || widget.courseId.trim().isEmpty) return;
     final memory = CourseStatsCache.peekMyRating(
       key: widget.courseId,
@@ -175,7 +184,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
 
   Future<void> _loadCourseStats({bool forceRefresh = false}) async {
     final baseUrl = getApiBaseUrl();
-    final userId = (ref.read(authControllerProvider).userId ?? '').trim();
+    final userId = _effectiveUserId();
     if (baseUrl.isEmpty || widget.courseId.trim().isEmpty) {
       if (mounted) setState(() => _statsLoading = false);
       return;
@@ -311,10 +320,9 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
 
   Future<void> _onStarTap(int stars) async {
     if (_feedbackApiMissing) return;
-    final auth = ref.read(authControllerProvider);
-    final userId = (auth.userId ?? '').trim();
+    final userId = _effectiveUserId();
     final baseUrl = getApiBaseUrl();
-    if (userId.isEmpty || baseUrl.isEmpty || widget.courseId.trim().isEmpty) return;
+    if (baseUrl.isEmpty || widget.courseId.trim().isEmpty) return;
 
     final prevMy = _myRating;
     final prevCount = _ratingCount;
@@ -515,14 +523,13 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       if (nextId.isEmpty) {
         if (mounted) setState(() => _myRating = 0);
         _statsUserId = null;
-        return;
       }
       unawaited(_bootstrapForCurrentUser(forceRefresh: true));
     });
 
     final auth = ref.watch(authControllerProvider);
     final rawUserId = (auth.userId ?? '').trim();
-    final userId = rawUserId.isNotEmpty ? rawUserId : 'guest_${widget.courseId}';
+    final userId = rawUserId.isNotEmpty ? rawUserId : GuestIdentity.id;
     final hasCourseId = widget.courseId.trim().isNotEmpty;
 
 

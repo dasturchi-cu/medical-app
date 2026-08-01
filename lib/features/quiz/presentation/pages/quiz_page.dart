@@ -29,6 +29,7 @@ class _QuizPageState extends ConsumerState<QuizPage> {
   int _index = 0;
   final Map<String, int> _answers = {};
   final DateTime _startedAt = DateTime.now();
+  bool _submittingResult = false;
 
   @override
   void initState() {
@@ -43,31 +44,42 @@ class _QuizPageState extends ConsumerState<QuizPage> {
       return;
     }
 
-    final repo = ref.read(courseRepositoryProvider);
-    final relatedCourseId = repo.getCourseIdForLesson(widget.quizId);
+    try {
+      final repo = ref.read(courseRepositoryProvider);
+      final relatedCourseId = repo.getCourseIdForLesson(widget.quizId);
 
-    String? quizId = await _resolveQuizIdByLesson(widget.quizId);
-    quizId ??= await _resolveQuizIdByCourse(relatedCourseId ?? "");
-    quizId ??= await _resolveQuizIdDirect(widget.quizId);
-    if (quizId == null || quizId.isEmpty) {
+      String? quizId = await _resolveQuizIdByLesson(widget.quizId);
+      quizId ??= await _resolveQuizIdByCourse(relatedCourseId ?? "");
+      quizId ??= await _resolveQuizIdDirect(widget.quizId);
+      if (quizId == null || quizId.isEmpty) {
+        if (!mounted) return;
+        setState(() {
+          _emptyMessage = "Bu dars uchun test topilmadi";
+          _loading = false;
+        });
+        return;
+      }
+
+      final meta = await _fetchQuizMeta(quizId);
+      final questions = await _fetchQuestions(quizId);
       if (!mounted) return;
       setState(() {
-        _emptyMessage = "Bu dars uchun test topilmadi";
+        _resolvedQuizId = quizId!;
+        _quizTitle = meta?.title ?? "Test sahifasi";
+        _questions = questions;
+        _emptyMessage = questions.isEmpty ? "Test bor, lekin savollar qo'shilmagan" : "Test topilmadi";
         _loading = false;
       });
-      return;
+    } catch (_) {
+      // Network/timeout/parse failure — surface an empty state instead of an
+      // infinite spinner (previously any exception here left `_loading` stuck
+      // at true forever since nothing downstream reset it).
+      if (!mounted) return;
+      setState(() {
+        _emptyMessage = "Testni yuklab bo'lmadi. Internet aloqasini tekshirib, qayta urinib ko'ring.";
+        _loading = false;
+      });
     }
-
-    final meta = await _fetchQuizMeta(quizId);
-    final questions = await _fetchQuestions(quizId);
-    if (!mounted) return;
-    setState(() {
-      _resolvedQuizId = quizId!;
-      _quizTitle = meta?.title ?? "Test sahifasi";
-      _questions = questions;
-      _emptyMessage = questions.isEmpty ? "Test bor, lekin savollar qo'shilmagan" : "Test topilmadi";
-      _loading = false;
-    });
   }
 
   Future<String?> _resolveQuizIdByLesson(String lessonId) async {
@@ -220,27 +232,37 @@ class _QuizPageState extends ConsumerState<QuizPage> {
                     borderRadius: BorderRadius.circular(14),
                   ),
                 ),
-                onPressed: () {
-                  final isLast = _index == _questions.length - 1;
-                  if (!isLast) {
-                    setState(() => _index += 1);
-                    return;
-                  }
-                  var correct = 0;
-                  for (final item in _questions) {
-                    final picked = _answers[item.id];
-                    if (picked != null && picked == item.correctIndex) {
-                      correct += 1;
-                    }
-                  }
-                  final totalQuestions = _questions.length;
-                  final score = ((correct / totalQuestions) * 100).round();
-                  final seconds = DateTime.now().difference(_startedAt).inSeconds;
-                  final minutes = (seconds <= 0 ? 0.0 : seconds / 60).toStringAsFixed(2);
-                  context.push(
-                    '${AppRoutes.result}?score=$score&total=100&quizId=$_resolvedQuizId&correct=$correct&totalQuestions=$totalQuestions&durationMin=$minutes',
-                  );
-                },
+                onPressed: _submittingResult
+                    ? null
+                    : () {
+                        final isLast = _index == _questions.length - 1;
+                        if (!isLast) {
+                          setState(() => _index += 1);
+                          return;
+                        }
+                        // Guard against a double-tap pushing two ResultPage
+                        // instances (each would independently submit the
+                        // attempt to the backend, creating duplicate rows).
+                        setState(() => _submittingResult = true);
+                        var correct = 0;
+                        for (final item in _questions) {
+                          final picked = _answers[item.id];
+                          if (picked != null && picked == item.correctIndex) {
+                            correct += 1;
+                          }
+                        }
+                        final totalQuestions = _questions.length;
+                        final score = ((correct / totalQuestions) * 100).round();
+                        final seconds = DateTime.now().difference(_startedAt).inSeconds;
+                        final minutes = (seconds <= 0 ? 0.0 : seconds / 60).toStringAsFixed(2);
+                        context
+                            .push(
+                          '${AppRoutes.result}?score=$score&total=100&quizId=$_resolvedQuizId&correct=$correct&totalQuestions=$totalQuestions&durationMin=$minutes',
+                        )
+                            .whenComplete(() {
+                          if (mounted) setState(() => _submittingResult = false);
+                        });
+                      },
                 child: const Text(
                   'Javobni yuborish',
                   style: TextStyle(fontWeight: FontWeight.w900),

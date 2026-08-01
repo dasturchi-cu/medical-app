@@ -108,9 +108,56 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
   Widget? _pinnedLessonVideo;
   String? _pinnedLessonVideoKey;
 
+  // Paid-lesson playback: the public catalog never includes `video_url` for a
+  // locked (non-free) lesson (server-side paywall — see mobile_catalog.py), so
+  // if it's empty here we fetch the real URL from an entitlement-checked
+  // endpoint right before playback instead.
+  String? _resolvedPlaybackUrl;
+  String? _resolvedPlaybackUrlForLessonId;
+  bool _fetchingPlaybackUrl = false;
+
   void _onVideoImmersiveChanged(bool immersive) {
     if (!mounted) return;
     _videoImmersiveCtrl?.state = immersive;
+  }
+
+  Future<void> _ensurePlaybackUrl(String lessonId) async {
+    if (_fetchingPlaybackUrl) return;
+    if (_resolvedPlaybackUrlForLessonId == lessonId &&
+        (_resolvedPlaybackUrl ?? '').isNotEmpty) {
+      return;
+    }
+    final authState = ref.read(authControllerProvider);
+    final userId = (authState.userId ?? _cachedUserId ?? '').trim();
+    if (userId.isEmpty) return;
+    _fetchingPlaybackUrl = true;
+    try {
+      final baseUrl = getApiBaseUrl();
+      if (baseUrl.isEmpty) return;
+      final uri = Uri.parse(
+        '$baseUrl/api/v1/lessons/$lessonId/playback?user_id=${Uri.encodeQueryComponent(userId)}',
+      );
+      final response = await http.get(uri).timeout(const Duration(seconds: 10));
+      if (response.statusCode >= 200 && response.statusCode < 300) {
+        final decoded = jsonDecode(response.body);
+        final url = (decoded is Map ? decoded['video_url'] : null)?.toString() ?? '';
+        if (mounted && url.isNotEmpty) {
+          setState(() {
+            _resolvedPlaybackUrl = url;
+            _resolvedPlaybackUrlForLessonId = lessonId;
+          });
+        }
+      }
+      // Non-2xx (e.g. 403 = not entitled): leave playback URL empty; the
+      // catalog/paywall UI already prevents legitimate users from reaching
+      // this screen without an entitlement, so this is a defense-in-depth
+      // backstop, not the primary gate.
+    } catch (_) {
+      // Network/parse failure — silently keep the empty placeholder state;
+      // VideoPlayerBox already handles an empty URL without crashing.
+    } finally {
+      _fetchingPlaybackUrl = false;
+    }
   }
 
   String _positionStorageKey() {
@@ -310,6 +357,9 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     final lesson = repo.getLessonById(widget.lessonId);
     final lessonSlidesAsync = ref.watch(lessonSlidesProvider(widget.lessonId));
     final courseId = repo.getCourseIdForLesson(widget.lessonId);
+    if (lesson != null && lesson.videoUrl.trim().isEmpty) {
+      unawaited(_ensurePlaybackUrl(widget.lessonId));
+    }
     final size = MediaQuery.sizeOf(context);
     // 16:9 — balandlikni barqaror tutamiz (aylantirishda player remount bo‘lmasin).
     final mediaHeight = (size.shortestSide * 9 / 16).clamp(200.0, 420.0);
@@ -375,9 +425,14 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
     final videoImmersive = ref.watch(videoImmersiveProvider);
 
     Widget buildVideoSlot(double height) {
+      final effectiveVideoUrl =
+          _resolvedPlaybackUrlForLessonId == widget.lessonId &&
+                  (_resolvedPlaybackUrl ?? '').isNotEmpty
+              ? _resolvedPlaybackUrl!
+              : lesson.videoUrl;
       final player = _pinnedVideoPlayer(
         height: height,
-        videoUrl: lesson.videoUrl,
+        videoUrl: effectiveVideoUrl,
         catalogDurationLabel: lesson.durationUz,
         bootstrapSec: bootstrapSec,
         courseId: courseId,

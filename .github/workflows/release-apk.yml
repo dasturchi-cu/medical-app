@@ -1,0 +1,46 @@
+name: Build signed release APK
+
+# Manual trigger only — this does not run on every push. Its purpose is
+# twofold: (1) produce a release APK from a keystore stored as encrypted
+# GitHub secrets instead of only on one person's laptop, and (2) make that
+# keystore recoverable if the local copy is ever lost — which is exactly
+# what happened before (see KEYSTORE_CREDENTIALS_BACKUP_DO_NOT_COMMIT.txt),
+# forcing a keystore regeneration and breaking updates for every existing
+# install. As long as this workflow has run at least once since the keystore
+# was created, the signing key is safely recoverable from GitHub Secrets.
+on:
+  workflow_dispatch: {}
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: subosito/flutter-action@v2
+        with:
+          flutter-version-file: pubspec.yaml
+          channel: stable
+
+      - name: Decode keystore
+        run: echo "${{ secrets.ANDROID_KEYSTORE_BASE64 }}" | base64 -d > android/keystore/upload-keystore.jks
+
+      - name: Write key.properties
+        run: |
+          cat > android/key.properties <<EOF
+          storePassword=${{ secrets.ANDROID_KEYSTORE_PASSWORD }}
+          keyPassword=${{ secrets.ANDROID_KEY_PASSWORD }}
+          keyAlias=${{ secrets.ANDROID_KEY_ALIAS }}
+          storeFile=../keystore/upload-keystore.jks
+          EOF
+
+      - run: flutter pub get
+
+      - name: Build split-per-ABI release APKs
+        run: flutter build apk --release --split-per-abi
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: release-apks
+          path: build/app/outputs/flutter-apk/*.apk
+          retention-days: 90

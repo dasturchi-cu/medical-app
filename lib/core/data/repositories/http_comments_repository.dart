@@ -193,6 +193,27 @@ class HttpCommentsRepository implements CommentsRepository {
       throw Exception(_errorMessage('Like amalida xatolik (${response.statusCode}).', response.body));
     }
 
+    // Reconcile with server truth: the optimistic guess above can drift from
+    // what the backend actually recorded (e.g. after a stale/duplicate local
+    // state), so re-patch the cache using the authoritative response instead
+    // of trusting only the pre-request guess.
+    try {
+      final decoded = jsonDecode(response.body);
+      if (decoded is Map<String, dynamic>) {
+        final serverItem = AppCommentItem.fromJson(decoded);
+        if (serverItem.likedByMe != likedByMe || serverItem.likesCount != likesCount) {
+          _patchCachedLike(
+            courseKey: courseKey,
+            userId: userId,
+            commentId: commentId,
+            likedByMe: serverItem.likedByMe,
+            likesCount: serverItem.likesCount,
+          );
+        }
+      }
+    } catch (_) {
+      // Response shape unexpected — keep the optimistic value already cached.
+    }
   }
 
   @override

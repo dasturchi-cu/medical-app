@@ -237,8 +237,14 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     if ((now - target).abs() > 3) {
       await _applyResumePosition(target);
     }
-    _pendingInitialSeekSec = null;
-    _initialResumeDone = true;
+    // Only clear the pending marker once the seek actually landed. If the
+    // controller still isn't ready (slow network init), leave it set so
+    // `_handleVideoProgress`/`_handleYoutubeProgress` retry once it is —
+    // clearing it here unconditionally used to silently abandon the resume.
+    if ((_currentPositionSec() - target).abs() <= 3) {
+      _pendingInitialSeekSec = null;
+      _initialResumeDone = true;
+    }
     _commitPlaybackPosition(target);
   }
 
@@ -587,7 +593,15 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   Future<void> _applyResumePosition(int sec) async {
     if (sec <= 0) return;
     final c = _controller;
-    if (c != null && c.value.isInitialized) {
+    if (c != null) {
+      if (!c.value.isInitialized) {
+        // Native controller exists but hasn't finished loading yet (network
+        // video init is slower than the caller's timing assumptions) — queue
+        // it so `_handleVideoProgress` retries once the controller is ready,
+        // instead of silently dropping the seek like before.
+        _pendingInitialSeekSec = sec;
+        return;
+      }
       final maxSeek = (c.value.duration.inSeconds - 1).clamp(0, 1 << 30);
       final safe = sec.clamp(0, maxSeek).toInt();
       if (safe <= 0) return;
@@ -885,6 +899,20 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
       _markPlayerReady(durationSec: c.value.duration.inSeconds);
     }
     final watchedSec = c.value.position.inSeconds;
+    final durationSec = c.value.duration.inSeconds;
+    final pendingSeek = _pendingInitialSeekSec;
+    if (!_initialResumeDone &&
+        pendingSeek != null &&
+        durationSec > 0 &&
+        (watchedSec - pendingSeek).abs() > 3) {
+      // Controller just became initialized (or an earlier seek attempt was
+      // dropped because it ran too early) — retry now that we can actually
+      // seek. Mirrors the YouTube player's equivalent retry-on-tick logic.
+      unawaited(_applyResumePosition(pendingSeek));
+    } else if (pendingSeek != null && (watchedSec - pendingSeek).abs() <= 3) {
+      _pendingInitialSeekSec = null;
+      _initialResumeDone = true;
+    }
     if (!_userSeeking && _pendingInitialSeekSec == null) {
       if (watchedSec > 0 || _initialResumeDone) {
         _lastKnownPositionSec = watchedSec;

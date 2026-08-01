@@ -5,12 +5,14 @@ import 'package:firebase_messaging/firebase_messaging.dart';
 import 'package:flutter/material.dart';
 import 'package:flutter_localizations/flutter_localizations.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
+import 'package:sentry_flutter/sentry_flutter.dart';
 
 import 'core/router/app_router.dart';
 import 'core/localization/language_provider.dart';
 import 'core/services/auth_service.dart';
 import 'core/state/auth_controller.dart';
 import 'core/services/catalog_service.dart';
+import 'core/services/guest_identity.dart';
 import 'core/services/home_feeds_disk_cache.dart';
 import 'core/services/lesson_slides_bytes_cache.dart';
 import 'core/services/push_messaging.dart';
@@ -21,7 +23,29 @@ import 'core/theme/theme_mode_provider.dart';
 import 'core/widgets/startup_guard.dart';
 import 'firebase_background_handler.dart';
 
+// Build with `--dart-define=SENTRY_DSN=https://...` to enable crash/error
+// reporting. Left empty, Sentry stays fully disabled (no network calls) —
+// safe default for local/dev builds without a DSN.
+const _sentryDsn = String.fromEnvironment('SENTRY_DSN', defaultValue: '');
+
 Future<void> main() async {
+  if (_sentryDsn.isEmpty) {
+    await _runApp();
+    return;
+  }
+  await SentryFlutter.init(
+    (options) {
+      options.dsn = _sentryDsn;
+      options.tracesSampleRate = 0.2;
+      options.environment =
+          const String.fromEnvironment('SENTRY_ENV', defaultValue: 'production');
+      options.release = 'medical-app@1.0.3+8';
+    },
+    appRunner: _runApp,
+  );
+}
+
+Future<void> _runApp() async {
   WidgetsFlutterBinding.ensureInitialized();
 
   final firebaseOk = await ensureFirebaseCoreInitialized();
@@ -36,6 +60,7 @@ Future<void> main() async {
   }
 
   await AuthService.bootstrap();
+  await GuestIdentity.ensureLoaded();
   await CatalogService.preloadFromDisk();
   await HomeFeedsDiskCache.preloadFromDisk();
   await LessonSlidesBytesCache.ensureReady();
