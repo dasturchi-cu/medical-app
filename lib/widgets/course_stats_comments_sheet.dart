@@ -717,10 +717,9 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             const SizedBox(height: 8),
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 260),
-              child: commentsAsync.when(
-                loading: () => const Center(child: CircularProgressIndicator()),
-                error: (_, _) => const Center(child: Text('Izohlarni yuklashda xatolik.')),
-                data: (comments) {
+              child: commentsAsync.hasValue
+                  ? Builder(builder: (context) {
+                      final comments = commentsAsync.value!;
                   // Optimistic komentilarni server ro'yxatiga qo'shish (dublikatsiz)
                   final serverIds = {for (final c in comments) c.id};
                   final merged = [
@@ -934,8 +933,10 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
                       );
                     },
                   );
-                },
-              ),
+                    })
+                  : commentsAsync.hasError
+                      ? const Center(child: Text('Izohlarni yuklashda xatolik.'))
+                      : const Center(child: CircularProgressIndicator()),
             ),
             const SizedBox(height: 10),
             Row(
