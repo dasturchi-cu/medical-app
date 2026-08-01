@@ -372,6 +372,7 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
         )
         .toList(growable: false);
     final progress = ref.watch(progressControllerProvider);
+    final purchased = ref.watch(purchaseControllerProvider);
     final unreadNotifications = ref.watch(unreadNotificationsCountProvider);
 
     return ListenableBuilder(
@@ -872,7 +873,12 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                     ? 0.0
                     : (watched / totalLessons).toDouble().clamp(0.0, 1.0);
 
-                final buttonText = (p?.enrolled ?? false) || progressValue > 0
+                // Must reflect real ownership, not mere browsing: `p?.enrolled`
+                // and `progressValue` are also set just by opening/watching a
+                // course's single free preview lesson, which previously made
+                // every course a user had merely glanced at show "Davom et"
+                // (Continue) and list itself in "Kurslarim" as if purchased.
+                final buttonText = purchased.isPurchased(c.id)
                     ? 'Davom et'
                     : context.tr('btn_start');
                 const buttonColor = AppColors.primary;
@@ -920,7 +926,6 @@ class _HomePageState extends ConsumerState<HomePage> with WidgetsBindingObserver
                   },
                   onPressed: () {
                     ref.read(selectedCourseIdProvider.notifier).state = c.id;
-                    ref.read(progressControllerProvider.notifier).enroll(c.id);
 
                     if (buttonText == 'Davom et') {
                       final firstSection = c.sections.isNotEmpty

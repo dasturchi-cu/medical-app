@@ -41,10 +41,12 @@ class _MyCoursesPageState extends ConsumerState<MyCoursesPage> {
     final statsOverrides = ref.watch(courseCardStatsOverrideProvider);
 
     final all = repo.getCourses();
-    final enrolled = all.where((c) {
-      final p = progress.byCourseId[c.id];
-      return purchased.isPurchased(c.id) || (p?.enrolled ?? false) || c.progress > 0;
-    }).toList();
+    // "Kurslarim" is meant to be real ownership only. `progress.enrolled`/
+    // `c.progress` are set the moment a user opens/watches ANY lesson —
+    // including the single free preview lesson every course has — so using
+    // them here made merely previewing a course look identical to owning
+    // it (every course in the catalog ended up listed as "mine").
+    final enrolled = all.where((c) => purchased.isPurchased(c.id)).toList();
 
 
 

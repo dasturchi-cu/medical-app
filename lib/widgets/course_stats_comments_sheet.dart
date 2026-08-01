@@ -52,6 +52,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   final Map<String, bool> _optimisticLikedByMe = <String, bool>{};
   final Map<String, int> _optimisticLikesCount = <String, int>{};
   final List<AppCommentItem> _optimisticComments = [];
+  final Set<String> _likeTogglesInFlight = <String>{};
 
   void _setCardStatsOverride({
     required double ratingAvg,
@@ -408,6 +409,12 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
     required bool likedByMe,
     required int likesCount,
   }) async {
+    // Ignore taps while a previous toggle for this same comment is still
+    // in flight — without this, rapid double-tapping fired overlapping
+    // requests whose responses could land out of order and leave the
+    // like stuck showing the wrong (older) state.
+    if (_likeTogglesInFlight.contains(comment.id)) return;
+    _likeTogglesInFlight.add(comment.id);
     final nextLiked = !likedByMe;
     final nextCount = nextLiked ? likesCount + 1 : (likesCount > 0 ? likesCount - 1 : 0);
     setState(() {
@@ -439,6 +446,8 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
           ),
         ),
       );
+    } finally {
+      _likeTogglesInFlight.remove(comment.id);
     }
   }
 
@@ -454,11 +463,17 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             authorName: authorName,
             text: text,
           );
-      // Optimistic komenti endi serverdan kelgan ma'lumot bilan almashtiriladi
+      // Fetch the real list BEFORE dropping the optimistic bubble — clearing
+      // it first (then invalidating) left a gap where neither the optimistic
+      // nor the refreshed comment was on screen, so the just-posted comment
+      // visibly vanished for a moment (sometimes longer, on a slow network).
+      // ignore: unused_result — awaited purely for the refetch to complete.
+      await ref.refresh(
+        courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)).future,
+      );
       if (mounted) {
         setState(() => _optimisticComments.clear());
       }
-      ref.invalidate(courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)));
     } catch (e) {
       if (!mounted) return;
       setState(() {
@@ -492,10 +507,13 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             authorName: authorName,
             text: text,
           );
+      // ignore: unused_result — awaited purely for the refetch to complete.
+      await ref.refresh(
+        courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)).future,
+      );
       if (mounted) {
         setState(() => _optimisticComments.removeWhere((c) => c.parentId == comment.id));
       }
-      ref.invalidate(courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)));
     } catch (e) {
       if (!mounted) return;
       setState(() {
