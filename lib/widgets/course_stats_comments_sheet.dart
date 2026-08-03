@@ -500,13 +500,16 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
         courseCommentsFeedProvider((courseKey: widget.courseId, userId: userId)).future,
       );
       if (mounted) {
-        setState(() => _optimisticComments.clear());
+        // Drop only the optimistic root comments this call covers — clearing
+        // the whole list also wiped optimistic *replies* that were still being
+        // posted, making a just-written reply disappear.
+        setState(() => _optimisticComments.removeWhere((c) => c.parentId == null));
       }
     } catch (e) {
       if (!mounted) return;
       setState(() {
         _commentsCount = (_commentsCount - 1).clamp(0, 1 << 30);
-        _optimisticComments.clear();
+        _optimisticComments.removeWhere((c) => c.parentId == null);
       });
       _setCardStatsOverride(
         ratingAvg: _ratingAvg,

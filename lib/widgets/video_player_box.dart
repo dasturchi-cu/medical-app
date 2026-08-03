@@ -224,8 +224,8 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
   Future<void> restorePlaybackPosition([int? sec]) async {
     final target = sec ?? _lastKnownPositionSec;
     if (target <= 0) return;
-    final current = _currentPositionSec();
-    if ((current - target).abs() <= 3) {
+    final current = _actualPlayerPositionSec();
+    if (current != null && (current - target).abs() <= 3) {
       _commitPlaybackPosition(target);
       return;
     }
@@ -233,8 +233,8 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     await _applyResumePosition(target);
     await Future<void>.delayed(const Duration(milliseconds: 350));
     if (!mounted) return;
-    final now = _currentPositionSec();
-    if ((now - target).abs() > 3) {
+    final now = _actualPlayerPositionSec();
+    if (now == null || (now - target).abs() > 3) {
       await _applyResumePosition(target);
     }
     // Only commit once the seek actually landed. _commitPlaybackPosition()
@@ -243,7 +243,8 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     // unconditionally here meant that for YouTube (whose duration is still 0
     // this early, so the seek provably cannot have landed yet) the resume was
     // marked "done" before it ever happened, and the lesson restarted at 0.
-    if ((_currentPositionSec() - target).abs() <= 3) {
+    final landed = _actualPlayerPositionSec();
+    if (landed != null && (landed - target).abs() <= 3) {
       _commitPlaybackPosition(target);
       return;
     }
@@ -534,7 +535,8 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     if (!mounted || stored <= 0) return;
     final best = stored > widget.initialWatchedSec ? stored : widget.initialWatchedSec;
     if (best <= 0) return;
-    if (_currentPositionSec() >= best - 3) {
+    final actual = _actualPlayerPositionSec();
+    if (actual != null && actual >= best - 3) {
       _commitPlaybackPosition(best);
       return;
     }
@@ -590,6 +592,23 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     final yc = _ytController;
     if (yc != null) return yc.value.position.inSeconds;
     return _lastKnownPositionSec;
+  }
+
+  /// Position actually reported by a ready player, or null when none is ready.
+  ///
+  /// Unlike [_currentPositionSec] this never falls back to
+  /// [_lastKnownPositionSec]. That fallback is right for *saving* progress but
+  /// catastrophic in the "are we already at the target?" guards that skip the
+  /// resume seek: during initState `_lastKnownPositionSec` has already been
+  /// seeded with the position we want to resume to, so those guards compared
+  /// the target against itself, concluded playback was already there, marked
+  /// the resume done and never seeked — leaving the lesson playing from 0.
+  int? _actualPlayerPositionSec() {
+    final c = _controller;
+    if (c != null && c.value.isInitialized) return c.value.position.inSeconds;
+    final yc = _ytController;
+    if (yc != null && yc.value.isReady) return yc.value.position.inSeconds;
+    return null;
   }
 
   void _snapshotPlayback() {
@@ -2086,11 +2105,17 @@ class _BottomBarState extends State<_BottomBar> {
               setState(() => _dragValue = v * total);
             },
             onChangeEnd: (v) {
-              if (total <= 0) return;
-              final target = Duration(
-                milliseconds: (v * total).round().clamp(0, total.round()),
-              );
-              widget.onSeek(target);
+              // Always clear the drag state, even when the duration became
+              // unknown mid-drag. Returning early here left `_userSeeking`
+              // stuck true, which silently disabled progress saving, position
+              // tracking and the playback health check for the rest of the
+              // session.
+              if (total > 0) {
+                final target = Duration(
+                  milliseconds: (v * total).round().clamp(0, total.round()),
+                );
+                widget.onSeek(target);
+              }
               setState(() => _dragValue = null);
               widget.onSeekDragEnd?.call();
             },
