@@ -270,21 +270,29 @@ class _LessonViewPageState extends ConsumerState<LessonViewPage>
 
   /// dispose() da ref/mounted ishlatilmaydi.
   void _flushWatchProgressOnDispose() {
+    final lessonId = _cachedLessonId ?? widget.lessonId;
+    final sec = _liveWatchSec > 0 ? _liveWatchSec : _initialWatchedSec;
+
+    // Persist the resume position locally FIRST and unconditionally. This used
+    // to sit below the server-sync guards (empty userId / missing baseUrl /
+    // missing courseId), so a guest — or anyone whose courseId lookup failed —
+    // hit an early `return` and their position was never written to disk at
+    // all, which is why the video always restarted from 0 after leaving the
+    // screen. Local resume must not depend on being able to reach the server.
+    final storageKey = _positionStorageKey();
+    if (sec > 0) {
+      unawaited(VideoLessonPositionStore.save(storageKey, sec));
+    }
+
     final userId = _cachedUserId ?? '';
     final baseUrl = _cachedBaseUrl;
     final repo = _courseRepo;
-    final lessonId = _cachedLessonId ?? widget.lessonId;
     if (userId.isEmpty || baseUrl.isEmpty || repo == null) return;
 
     final courseId =
         _cachedCourseIdForFlush ?? repo.getCourseIdForLesson(lessonId);
     if (courseId == null) return;
 
-    final sec = _liveWatchSec > 0 ? _liveWatchSec : _initialWatchedSec;
-    final storageKey = _positionStorageKey();
-    if (sec > 0) {
-      unawaited(VideoLessonPositionStore.save(storageKey, sec));
-    }
     final delta = _pendingPlaybackDeltaSec > 0 ? _pendingPlaybackDeltaSec : (sec > 0 ? 1 : 0);
     if (sec <= 0 && delta <= 0) return;
 

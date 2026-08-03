@@ -53,6 +53,11 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   final Map<String, int> _optimisticLikesCount = <String, int>{};
   final List<AppCommentItem> _optimisticComments = [];
   final Set<String> _likeTogglesInFlight = <String>{};
+  /// Last comments list actually rendered. Survives provider rebuilds/refreshes
+  /// (including a full `refresh`, which restarts the stream with no value yet)
+  /// so the list never blanks out mid-session — the visible symptom of
+  /// comments and likes "disappearing and then coming back".
+  List<AppCommentItem>? _lastComments;
 
   void _setCardStatsOverride({
     required double ratingAvg,
@@ -506,6 +511,7 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             userId: userId,
             authorName: authorName,
             text: text,
+            courseKey: widget.courseId,
           );
       // ignore: unused_result — awaited purely for the refetch to complete.
       await ref.refresh(
@@ -717,9 +723,10 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
             const SizedBox(height: 8),
             ConstrainedBox(
               constraints: const BoxConstraints(maxHeight: 260),
-              child: commentsAsync.hasValue
+              child: (commentsAsync.value ?? _lastComments) != null
                   ? Builder(builder: (context) {
-                      final comments = commentsAsync.value!;
+                      final comments = commentsAsync.value ?? _lastComments!;
+                      if (commentsAsync.hasValue) _lastComments = comments;
                   // Optimistic komentilarni server ro'yxatiga qo'shish (dublikatsiz)
                   final serverIds = {for (final c in comments) c.id};
                   final merged = [

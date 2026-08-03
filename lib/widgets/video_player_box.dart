@@ -844,6 +844,13 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     final completed = _isVideoCompleted(watchedSec, durationSec);
     if (watchedSec <= 0) return;
 
+    // Write the resume position to disk on every tick, independently of the
+    // server-reporting gates below. It used to be persisted only after those
+    // gates (`shouldReport` / `delta <= 0`), so a paused or already-reported
+    // position never reached disk — the exact case of "pause, leave, come
+    // back" losing the position and restarting the lesson from 0.
+    _persistLocalPosition();
+
     final delta =
         watchedSec > _lastReportedSec ? watchedSec - _lastReportedSec : 0;
     final firstSave = !_firstProgressReported && watchedSec >= 1;

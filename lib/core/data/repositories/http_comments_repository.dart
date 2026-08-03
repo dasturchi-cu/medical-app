@@ -142,6 +142,7 @@ class HttpCommentsRepository implements CommentsRepository {
     required String userId,
     required String authorName,
     required String text,
+    String courseKey = '',
   }) async {
     if (baseUrl.isEmpty || commentId.isEmpty || userId.isEmpty) return;
     debugPrint('[API][comments.reply][request] commentId=$commentId userId=$userId');
@@ -161,6 +162,9 @@ class HttpCommentsRepository implements CommentsRepository {
     if (response.statusCode < 200 || response.statusCode >= 300) {
       throw Exception(_errorMessage('Javob yuborilmadi (${response.statusCode}).', response.body));
     }
+    // Unlike addComment, this never invalidated the cache, so the next read
+    // served a cached list without the reply and it appeared to vanish.
+    if (courseKey.isNotEmpty) _invalidateCourseComments(courseKey);
   }
 
   @override
@@ -249,7 +253,12 @@ class HttpCommentsRepository implements CommentsRepository {
         last = cached;
         controller.add(last);
       }
-      await push();
+      // Must bypass the 2-minute TTL cache. A fresh stream is created whenever
+      // the provider is refreshed — which is exactly what happens right after
+      // posting a comment/reply — and a non-forced fetch would just replay the
+      // pre-mutation cached list, making the item that was just posted vanish
+      // until the TTL expired and it "came back" minutes later.
+      await push(forceRefresh: true);
       final client = realtimeClient;
       if (client != null) {
         channel = client

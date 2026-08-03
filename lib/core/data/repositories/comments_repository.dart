@@ -19,6 +19,7 @@ abstract class CommentsRepository {
     required String userId,
     required String authorName,
     required String text,
+    String courseKey = '',
   });
 
   Future<void> toggleLike({
