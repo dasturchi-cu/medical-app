@@ -289,7 +289,14 @@ class HttpCommentsRepository implements CommentsRepository {
             .subscribe();
       }
       final pollMs = client != null ? pollInterval.inMilliseconds * 3 : pollInterval.inMilliseconds;
-      poller = Timer.periodic(Duration(milliseconds: pollMs.clamp(120000, 300000)), (_) => unawaited(push()));
+      // Force the network on each poll. A non-forced poll just re-read the
+      // 2-minute TTL cache, so when realtime is unavailable (client == null,
+      // the norm in release builds) this timer was the only refresh path and
+      // it could serve data up to twice the TTL old.
+      poller = Timer.periodic(
+        Duration(milliseconds: pollMs.clamp(120000, 300000)),
+        (_) => unawaited(push(forceRefresh: true)),
+      );
     }
 
     unawaited(boot());

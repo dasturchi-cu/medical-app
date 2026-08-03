@@ -105,7 +105,21 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
   @override
   void initState() {
     super.initState();
-    Future.microtask(() => _bootstrapForCurrentUser(forceRefresh: true));
+    Future.microtask(() {
+      if (!mounted) return;
+      // The comments provider is `keepAlive()`, so reopening this sheet reuses
+      // the existing stream and just replays its last value instead of
+      // refetching. Combined with realtime being disabled in release builds
+      // (no SUPABASE_URL/ANON_KEY dart-define, so getRealtimeSupabaseClient()
+      // returns null), the only refresh was a 2-minute poller reading a
+      // 2-minute TTL cache — so a like/comment made moments ago looked like it
+      // had vanished on reopen and only "came back" minutes later. Invalidating
+      // here forces the stream to rebuild and hit the network on every open.
+      ref.invalidate(courseCommentsFeedProvider(
+        (courseKey: widget.courseId, userId: _effectiveUserId()),
+      ));
+      _bootstrapForCurrentUser(forceRefresh: true);
+    });
   }
 
   String _ratingPhone() => (ref.read(authControllerProvider).email ?? '').trim();
