@@ -427,13 +427,22 @@ class _CourseStatsCommentsSheetState extends ConsumerState<CourseStatsCommentsSh
       _optimisticLikesCount[comment.id] = nextCount;
     });
     try {
-      await ref.read(commentsRepositoryProvider).toggleLike(
+      final serverItem = await ref.read(commentsRepositoryProvider).toggleLike(
             commentId: comment.id,
             userId: userId,
             courseKey: widget.courseId,
             likedByMe: nextLiked,
             likesCount: nextCount,
           );
+      // Adopt the server's truth instead of holding on to the pre-request
+      // guess forever, otherwise a disagreement only surfaced later as the
+      // like "disappearing" once this optimistic state went away.
+      if (serverItem != null && mounted) {
+        setState(() {
+          _optimisticLikedByMe[comment.id] = serverItem.likedByMe;
+          _optimisticLikesCount[comment.id] = serverItem.likesCount;
+        });
+      }
     } catch (e) {
       if (!mounted) return;
       setState(() {

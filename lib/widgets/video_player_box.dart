@@ -237,15 +237,21 @@ class VideoPlayerBoxState extends State<VideoPlayerBox>
     if ((now - target).abs() > 3) {
       await _applyResumePosition(target);
     }
-    // Only clear the pending marker once the seek actually landed. If the
-    // controller still isn't ready (slow network init), leave it set so
-    // `_handleVideoProgress`/`_handleYoutubeProgress` retry once it is —
-    // clearing it here unconditionally used to silently abandon the resume.
+    // Only commit once the seek actually landed. _commitPlaybackPosition()
+    // clears _pendingInitialSeekSec and sets _initialResumeDone, which is
+    // precisely what disables the retry-on-progress-tick path — calling it
+    // unconditionally here meant that for YouTube (whose duration is still 0
+    // this early, so the seek provably cannot have landed yet) the resume was
+    // marked "done" before it ever happened, and the lesson restarted at 0.
     if ((_currentPositionSec() - target).abs() <= 3) {
-      _pendingInitialSeekSec = null;
-      _initialResumeDone = true;
+      _commitPlaybackPosition(target);
+      return;
     }
-    _commitPlaybackPosition(target);
+    // Not landed yet: keep the pending target so _handleVideoProgress /
+    // _handleYoutubeProgress can finish the seek once the player reports a
+    // real duration, and remember the position so it still gets persisted.
+    _pendingInitialSeekSec = target;
+    if (target > _lastKnownPositionSec) _lastKnownPositionSec = target;
   }
 
   void _commitPlaybackPosition(int sec) {

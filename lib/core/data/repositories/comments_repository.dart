@@ -22,7 +22,7 @@ abstract class CommentsRepository {
     String courseKey = '',
   });
 
-  Future<void> toggleLike({
+  Future<AppCommentItem?> toggleLike({
     required String commentId,
     required String userId,
     String courseKey = '',

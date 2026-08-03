@@ -168,14 +168,14 @@ class HttpCommentsRepository implements CommentsRepository {
   }
 
   @override
-  Future<void> toggleLike({
+  Future<AppCommentItem?> toggleLike({
     required String commentId,
     required String userId,
     String courseKey = '',
     bool likedByMe = false,
     int likesCount = 0,
   }) async {
-    if (baseUrl.isEmpty || commentId.isEmpty || userId.isEmpty) return;
+    if (baseUrl.isEmpty || commentId.isEmpty || userId.isEmpty) return null;
     _patchCachedLike(
       courseKey: courseKey,
       userId: userId,
@@ -214,10 +214,16 @@ class HttpCommentsRepository implements CommentsRepository {
             likesCount: serverItem.likesCount,
           );
         }
+        // Hand the authoritative state back so the caller's optimistic UI can
+        // be corrected too. Patching only the cache left the widget showing
+        // its pre-request guess indefinitely, so if the server disagreed the
+        // like silently reverted the next time the sheet was rebuilt.
+        return serverItem;
       }
     } catch (_) {
       // Response shape unexpected — keep the optimistic value already cached.
     }
+    return null;
   }
 
   @override
