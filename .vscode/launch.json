@@ -7,7 +7,7 @@
       "type": "dart",
       "program": "lib/main.dart",
       "toolArgs": [
-        "--dart-define=API_BASE_URL=https://neuroscience-app.onrender.com"
+        "--dart-define=API_BASE_URL=https://medical-app-backend-10jh.onrender.com"
       ]
     }
   ]
