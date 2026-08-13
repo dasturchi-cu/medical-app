@@ -2,11 +2,8 @@ import 'package:flutter/material.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:go_router/go_router.dart';
 
-import '../../../../core/di/providers.dart';
 import '../../../../core/router/app_routes.dart';
 import '../../../../core/state/auth_controller.dart';
-import '../../../../core/state/progress_controller.dart';
-import '../../../../core/state/purchase_controller.dart';
 import '../../../../core/services/telegram_service.dart';
 
 /// Qaysi turdagi taklif ekanini bildiradi — snackbar matni shunga bog‘liq.
@@ -69,36 +66,6 @@ class _PurchaseModalContent extends ConsumerStatefulWidget {
 class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
   final TelegramService _telegramService = TelegramService();
   bool _loading = false;
-
-  ({String? courseId, String? sectionId}) _resolvePurchaseTarget(String? rawCourseId) {
-    final value = (rawCourseId ?? '').trim();
-    if (value.isEmpty) return (courseId: null, sectionId: null);
-    const marker = '_base_';
-    final markerIndex = value.indexOf(marker);
-    if (markerIndex > 0 && markerIndex + marker.length < value.length) {
-      final courseId = value.substring(0, markerIndex).trim();
-      final sectionId = value.substring(markerIndex + marker.length).trim();
-      if (courseId.isNotEmpty && sectionId.isNotEmpty) {
-        return (courseId: courseId, sectionId: sectionId);
-      }
-    }
-    return (courseId: value, sectionId: null);
-  }
-
-  String _userFacingError(Object e) {
-    final s = e.toString().trim();
-    if (s.startsWith('Exception: ')) return s.substring('Exception: '.length).trim();
-    return s.length > 160 ? '${s.substring(0, 157)}...' : s;
-  }
-
-  bool _isTransientPurchaseError(Object? error) {
-    if (error == null) return false;
-    final s = error.toString();
-    return s.contains('TimeoutException') ||
-        s.contains('SocketException') ||
-        s.contains('ClientException') ||
-        s.contains('Server ichki xatoligi');
-  }
 
   @override
   Widget build(BuildContext context) {
@@ -198,45 +165,11 @@ class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
                           }
 
                           setState(() => _loading = true);
-                          final target = _resolvePurchaseTarget(widget.courseId);
-                          final platformPurchase =
-                              widget.offerKind == PurchaseOfferKind.platformPaidCourse &&
-                              (target.courseId ?? '').trim().isNotEmpty;
 
-                          var purchaseRecorded = false;
-                          Object? purchaseError;
-
-                          if (platformPurchase) {
-                            try {
-                              await ref.read(purchasesRepositoryProvider).createPurchase(
-                                    userId: auth.userId!,
-                                    courseId: target.courseId,
-                                    sectionId: target.sectionId,
-                                  );
-                              purchaseRecorded = true;
-                              await ref
-                                  .read(purchaseControllerProvider.notifier)
-                                  .syncFromBackend(auth.userId!, force: true);
-                              if (target.sectionId != null && target.courseId != null) {
-                                ref
-                                    .read(purchaseControllerProvider.notifier)
-                                    .purchaseBase(target.courseId!, target.sectionId!);
-                                ref
-                                    .read(progressControllerProvider.notifier)
-                                    .enroll(target.courseId!);
-                              } else if (target.courseId != null) {
-                                ref
-                                    .read(purchaseControllerProvider.notifier)
-                                    .purchaseCourse(target.courseId!);
-                                ref
-                                    .read(progressControllerProvider.notifier)
-                                    .enroll(target.courseId!);
-                              }
-                            } catch (e) {
-                              purchaseError = e;
-                            }
-                          }
-
+                          // Kursni bu yerda ochmaymiz va serverga avtomatik
+                          // grant yozmaymiz. Faqat Telegram orqali adminga
+                          // so'rov yuboramiz; kurs admin tasdiqlagandan keyin
+                          // (entitlement sync orqali) ochiladi.
                           var opened = false;
                           try {
                             opened = await _telegramService.openTelegram(
@@ -271,40 +204,15 @@ class _PurchaseModalContentState extends ConsumerState<_PurchaseModalContent> {
                             return;
                           }
 
-                          if (!opened) {
-                            final err = purchaseError;
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  purchaseRecorded
-                                      ? 'So‘rov serverga yozildi, lekin Telegram ochilmadi — sozlamalarni tekshiring.'
-                                      : 'Telegram ochilmadi. ${err != null ? _userFacingError(err) : "Qayta urinib ko‘ring."}',
-                                ),
+                          messenger.showSnackBar(
+                            SnackBar(
+                              content: Text(
+                                opened
+                                    ? 'So‘rov yuborildi. Kurs admin tasdiqlagandan keyin ochiladi.'
+                                    : 'Telegram havolasini ochib bo‘lmadi. Qayta urinib ko‘ring.',
                               ),
-                            );
-                            return;
-                          }
-
-                          if (purchaseRecorded) {
-                            messenger.showSnackBar(
-                              const SnackBar(
-                                content: Text(
-                                  'Xarid so‘rovi qabul qilindi. To‘lov va kursni ochishni Telegramda admin bilan yakunlang.',
-                                ),
-                              ),
-                            );
-                          } else {
-                            final err = purchaseError;
-                            messenger.showSnackBar(
-                              SnackBar(
-                                content: Text(
-                                  _isTransientPurchaseError(err)
-                                      ? 'Telegram ochildi. So‘rov qabul qilish jarayoni boshlandi — admin tasdiqlaganda kurs ochiladi.'
-                                      : 'Telegram ochildi. So‘rov yozilmadi: ${err != null ? _userFacingError(err) : "noma’lum xato"}. Admin bilan tasdiqlang.',
-                                ),
-                              ),
-                            );
-                          }
+                            ),
+                          );
                         },
                   icon: _loading
                       ? const SizedBox(

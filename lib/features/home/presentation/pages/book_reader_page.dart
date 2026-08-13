@@ -172,7 +172,8 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
     _debounce?.cancel();
     unawaited(_flushProgressNow());
     WidgetsBinding.instance.removeObserver(this);
-    _clearScreenProtection();
+    // FLAG_SECURE butun ilova bo'ylab MainActivity'da o'rnatilgan,
+    // shuning uchun bu yerda tozalamaymiz.
     _pdfController.dispose();
     super.dispose();
   }
@@ -517,10 +518,4 @@ class _BookReaderPageState extends ConsumerState<BookReaderPage>
     } catch (_) {}
   }
 
-  Future<void> _clearScreenProtection() async {
-    if (kIsWeb || !Platform.isAndroid) return;
-    try {
-      await FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
-    } catch (_) {}
-  }
 }

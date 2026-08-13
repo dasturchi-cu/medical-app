@@ -21,13 +21,8 @@ class ScreenProtection {
   }
 
   static Future<void> disable() async {
-    if (!_enabled || kIsWeb) return;
-    if (!Platform.isAndroid) return;
-    try {
-      await FlutterWindowManager.clearFlags(FlutterWindowManager.FLAG_SECURE);
-      _enabled = false;
-    } catch (e) {
-      debugPrint('[screen_protection] disable failed: $e');
-    }
+    // FLAG_SECURE endi butun ilova bo'ylab MainActivity'da doimiy o'rnatilgan.
+    // Shuning uchun bu yerda olib tashlamaymiz — aks holda ilovaning qolgan
+    // qismida ekran himoyasi yo'qolib qoladi.
   }
 }
