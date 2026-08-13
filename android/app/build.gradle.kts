@@ -1,3 +1,6 @@
+import java.util.Properties
+import java.io.FileInputStream
+
 plugins {
     id("com.android.application")
     id("kotlin-android")
@@ -5,6 +8,16 @@ plugins {
     id("dev.flutter.flutter-gradle-plugin")
     // Apply last so Firebase / Play Services config merges correctly.
     id("com.google.gms.google-services")
+}
+
+// Release imzo kaliti. key.properties mavjud bo'lsa, doimiy release
+// keystore bilan imzolaymiz (foydalanuvchilar ilovani o'chirmasdan
+// ustiga update qila oladi). Fayl bo'lmasa, debug bilan build bo'ladi.
+val keystoreProperties = Properties()
+val keystorePropertiesFile = rootProject.file("key.properties")
+val hasReleaseKeystore = keystorePropertiesFile.exists()
+if (hasReleaseKeystore) {
+    keystoreProperties.load(FileInputStream(keystorePropertiesFile))
 }
 
 android {
@@ -33,11 +46,25 @@ android {
         versionName = flutter.versionName
     }
 
+    signingConfigs {
+        if (hasReleaseKeystore) {
+            create("release") {
+                keyAlias = keystoreProperties["keyAlias"] as String
+                keyPassword = keystoreProperties["keyPassword"] as String
+                storeFile = file(keystoreProperties["storeFile"] as String)
+                storePassword = keystoreProperties["storePassword"] as String
+            }
+        }
+    }
+
     buildTypes {
         release {
-            // TODO: Add your own signing config for the release build.
-            // Signing with the debug keys for now, so `flutter run --release` works.
-            signingConfig = signingConfigs.getByName("debug")
+            // Doimiy release keystore bilan imzolaymiz (mavjud bo'lsa),
+            // aks holda debug bilan (flutter run --release ishlashi uchun).
+            signingConfig = if (hasReleaseKeystore)
+                signingConfigs.getByName("release")
+            else
+                signingConfigs.getByName("debug")
             // Windows + Gradle 8.14: R8 may fail with "Could not stat usage.txt"
             // (proguardUsageOutput). Disable minify for stable local release APK builds.
             isMinifyEnabled = false
